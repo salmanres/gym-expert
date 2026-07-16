@@ -85,7 +85,7 @@ function LoginPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center pt-2">
+                    {/* <div className="flex items-center pt-2">
                         <input
                             id="remember-me"
                             type="checkbox"
@@ -94,7 +94,7 @@ function LoginPage() {
                         <label htmlFor="remember-me" className="ml-3 block text-sm text-gray-600">
                             Remember me for 30 days
                         </label>
-                    </div>
+                    </div> */}
 
                     <button
                         type="submit"
@@ -104,13 +104,13 @@ function LoginPage() {
                         {loading ? 'Signing in...' : 'Sign In'}
                     </button>
                 </form>
-
+{/* 
                 <div className="mt-10 text-center text-sm text-gray-500">
                     Don't have a gym account yet?{' '}
                     <Link to="/register" className="font-medium text-black hover:underline transition-all">
                         Register your Gym
                     </Link>
-                </div>
+                </div> */}
             </div>
         </div>
     );

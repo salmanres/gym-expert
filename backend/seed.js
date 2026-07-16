@@ -19,14 +19,14 @@ const seedSuperAdmin = async () => {
 
         await User.create({
             name: 'System Admin',
-            email: 'superadmin@gym.com',
-            password: 'superpassword123',
+            email: 'admin@gmail.com',
+            password: '123456',
             role: 'SUPERADMIN'
         });
 
         console.log('SuperAdmin credentials created successfully:');
-        console.log('Email: superadmin@gym.com');
-        console.log('Password: superpassword123');
+        console.log('Email: admin@gmail.com');
+        console.log('Password: 123456');
 
         process.exit(0);
     } catch (error) {

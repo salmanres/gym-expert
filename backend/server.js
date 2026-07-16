@@ -5,6 +5,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const gymRoutes = require('./routes/gymRoutes');
 const branchRoutes = require('./routes/branchRoutes');
+const enquiryRoutes = require('./routes/enquiryRoutes');
 
 const app = express();
 
@@ -24,6 +25,7 @@ mongoose.connect(process.env.MONGO_URI, {
 app.use('/api/auth', authRoutes);
 app.use('/api/gyms', gymRoutes);
 app.use('/api/branches', branchRoutes);
+app.use('/api/enquiries', enquiryRoutes);
 
 // Basic Route for testing
 app.get('/', (req, res) => {

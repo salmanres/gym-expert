@@ -21,7 +21,7 @@ function RegisterGymPage() {
 
     const handleRegister = async (e) => {
         e.preventDefault();
-        
+
         if (formData.password !== formData.confirmPassword) {
             return toast.error("Passwords do not match");
         }
@@ -61,15 +61,15 @@ function RegisterGymPage() {
 
     return (
         <div className="w-full h-full bg-white flex flex-col">
-            <div className="px-8 lg:px-12 py-8 border-b border-slate-200 flex flex-col items-start bg-white">
-                <h1 className="text-2xl font-bold text-slate-900 mb-1">Register Your Gym</h1>
-                <p className="text-slate-500 font-medium text-sm">Join our platform and elevate your gym management experience. Set up your business profile below.</p>
+            <div className="px-4 py-3 border-b border-slate-200 flex flex-col items-start bg-white shrink-0">
+                <h1 className="text-xl font-bold text-slate-900 mb-0.5">Register Your Gym</h1>
+                <p className="text-slate-500 font-medium text-xs">Join our platform and elevate your gym management experience. Set up your business profile below.</p>
             </div>
 
-            <div className="flex-1 w-full bg-white px-8 lg:px-12 py-8">
-                <div className="max-w-5xl">
-                    <form className="space-y-5" onSubmit={handleRegister}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="flex-1 w-full bg-white px-4 py-4">
+                <div className="w-full">
+                    <form className="space-y-3" onSubmit={handleRegister}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             {/* Gym Name */}
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="gymName">
@@ -141,7 +141,7 @@ function RegisterGymPage() {
                                     />
                                 </div>
                             </div>
-                            
+
                             {/* Password */}
                             <div>
                                 <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="password">
@@ -153,7 +153,7 @@ function RegisterGymPage() {
                                         type="password"
                                         value={formData.password}
                                         onChange={handleChange}
-                                        className="block w-full px-4 py-3.5 bg-indigo-50/50 border border-indigo-100 rounded-2xl focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 placeholder-slate-400 outline-none font-medium"
+                                        className="block w-full px-3 py-2 bg-indigo-50/50 border border-indigo-100 rounded focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 placeholder-slate-400 outline-none font-medium text-sm"
                                         placeholder="••••••••"
                                         required
                                     />
@@ -162,7 +162,7 @@ function RegisterGymPage() {
 
                             {/* Confirm Password */}
                             <div>
-                                <label className="block text-sm font-bold text-slate-700 mb-2" htmlFor="confirmPassword">
+                                <label className="block text-xs font-bold text-slate-700 mb-1" htmlFor="confirmPassword">
                                     Confirm Password
                                 </label>
                                 <div className="relative">
@@ -171,7 +171,7 @@ function RegisterGymPage() {
                                         type="password"
                                         value={formData.confirmPassword}
                                         onChange={handleChange}
-                                        className="block w-full px-4 py-3.5 bg-indigo-50/50 border border-indigo-100 rounded-2xl focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 placeholder-slate-400 outline-none font-medium"
+                                        className="block w-full px-3 py-2 bg-indigo-50/50 border border-indigo-100 rounded focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 placeholder-slate-400 outline-none font-medium text-sm"
                                         placeholder="••••••••"
                                         required
                                     />
@@ -181,7 +181,7 @@ function RegisterGymPage() {
 
                         {/* Address - Full width */}
                         <div>
-                            <label className="block text-sm font-bold text-slate-700 mb-2" htmlFor="address">
+                            <label className="block text-xs font-bold text-slate-700 mb-1" htmlFor="address">
                                 Gym Address
                             </label>
                             <div className="relative">
@@ -209,11 +209,11 @@ function RegisterGymPage() {
                             </label>
                         </div>
 
-                        <div className="pt-2 border-t border-slate-200 mt-6">
+                        <div className="pt-2 border-t border-slate-200 mt-4">
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full md:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm transition-all active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-50 text-sm"
+                                className="w-full md:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow-sm transition-all active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-50 text-xs"
                             >
                                 {loading ? 'Registering...' : 'Complete Registration'}
                             </button>
