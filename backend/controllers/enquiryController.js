@@ -7,6 +7,14 @@ exports.createEnquiry = async (req, res) => {
             return res.status(400).json({ message: 'User must belong to a gym to create an enquiry.' });
         }
         
+        const phoneRegex = /^[6-9]\d{9}$/;
+        if (req.body.contactNumber && !phoneRegex.test(req.body.contactNumber)) {
+            return res.status(400).json({ message: 'Invalid primary contact number format.' });
+        }
+        if (req.body.altContact && !phoneRegex.test(req.body.altContact)) {
+            return res.status(400).json({ message: 'Invalid alternate contact number format.' });
+        }
+        
         const enquiry = new Enquiry({
             gymId,
             ...req.body
@@ -37,6 +45,14 @@ exports.updateEnquiry = async (req, res) => {
 
         if (!enquiry) {
             return res.status(404).json({ message: 'Enquiry not found.' });
+        }
+
+        const phoneRegex = /^[6-9]\d{9}$/;
+        if (req.body.contactNumber && !phoneRegex.test(req.body.contactNumber)) {
+            return res.status(400).json({ message: 'Invalid primary contact number format.' });
+        }
+        if (req.body.altContact && !phoneRegex.test(req.body.altContact)) {
+            return res.status(400).json({ message: 'Invalid alternate contact number format.' });
         }
 
         Object.assign(enquiry, req.body);

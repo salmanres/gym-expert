@@ -196,12 +196,10 @@ function DashboardLayout() {
             {/* Main Content */}
             <main className="flex-1 flex flex-col overflow-hidden relative bg-white">
                 {/* Top Navbar */}
-                <header className="h-12 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-10 sticky top-0">
+                <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-10 sticky top-0">
                     <div className="flex items-center gap-4">
-                        <h1 className="text-xl font-bold text-slate-800 hidden sm:block capitalize">
-                            {location.pathname === '/dashboard/gyms' ? 'Overview' : 
-                             location.pathname.includes('/register-gym') ? 'New Registration' : 
-                             location.pathname.split('/').pop().replace('-', ' ')}
+                        <h1 className="text-xl font-bold text-slate-800 hidden sm:block">
+                            {user?.gym?.name || 'Emerald Gym Management'}
                         </h1>
                     </div>
                     <div className="flex items-center gap-3">

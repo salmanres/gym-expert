@@ -21,9 +21,10 @@ const enquirySchema = new mongoose.Schema({
     followUpDate: { type: Date, required: true },
     followUpTime: { type: String },
     trialDate: { type: Date },
+    trialEndDate: { type: Date },
     status: { 
         type: String, 
-        enum: ['Pending', 'Contacted', 'Converted', 'Lost'], 
+        enum: ['Pending', 'Lead', 'Contacted', 'Negotiation', 'Converted', 'Lost'], 
         default: 'Pending' 
     },
     attendedBy: { type: String, required: true },

@@ -11,6 +11,7 @@ import RegisterGymPage from './features/auth/RegisterGymPage';
 import DashboardLayout from './features/dashboard/DashboardLayout';
 import GymsList from './features/admin/GymsList';
 import Leads from './features/owner/Leads';
+import LeadForm from './features/owner/LeadForm';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -36,6 +37,8 @@ root.render(
             {/* Gym Owner Routes */}
             <Route path="owner" element={<div className="p-8 text-2xl font-bold text-slate-800">Welcome to Gym Owner Dashboard</div>} />
             <Route path="owner/leads" element={<Leads />} />
+            <Route path="owner/leads/add" element={<LeadForm />} />
+            <Route path="owner/leads/edit/:id" element={<LeadForm />} />
             <Route path="owner/branches" element={<div className="p-8 text-2xl font-bold text-slate-800">My Branches (Coming Soon)</div>} />
             <Route path="owner/staff" element={<div className="p-8 text-2xl font-bold text-slate-800">Staff Management (Coming Soon)</div>} />
         </Route>
