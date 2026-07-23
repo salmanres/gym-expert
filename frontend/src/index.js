@@ -12,6 +12,8 @@ import DashboardLayout from './features/dashboard/DashboardLayout';
 import GymsList from './features/admin/GymsList';
 import Leads from './features/owner/Leads';
 import LeadForm from './features/owner/LeadForm';
+import Members from './features/owner/Members';
+import MemberForm from './features/owner/MemberForm';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -39,6 +41,9 @@ root.render(
             <Route path="owner/leads" element={<Leads />} />
             <Route path="owner/leads/add" element={<LeadForm />} />
             <Route path="owner/leads/edit/:id" element={<LeadForm />} />
+            <Route path="owner/members" element={<Members />} />
+            <Route path="owner/members/add" element={<MemberForm />} />
+            <Route path="owner/members/edit/:id" element={<MemberForm />} />
             <Route path="owner/branches" element={<div className="p-8 text-2xl font-bold text-slate-800">My Branches (Coming Soon)</div>} />
             <Route path="owner/staff" element={<div className="p-8 text-2xl font-bold text-slate-800">Staff Management (Coming Soon)</div>} />
         </Route>

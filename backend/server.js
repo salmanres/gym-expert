@@ -6,6 +6,7 @@ const authRoutes = require('./routes/authRoutes');
 const gymRoutes = require('./routes/gymRoutes');
 const branchRoutes = require('./routes/branchRoutes');
 const enquiryRoutes = require('./routes/enquiryRoutes');
+const memberRoutes = require('./routes/memberRoutes');
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/gyms', gymRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/enquiries', enquiryRoutes);
+app.use('/api/members', memberRoutes);
 
 // Basic Route for testing
 app.get('/', (req, res) => {

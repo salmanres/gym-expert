@@ -95,14 +95,21 @@ export default function LeadForm() {
 
         setSubmitting(true);
         try {
+            let leadId = id;
             if (isEdit) {
                 await apiClient.put(`/enquiries/${id}`, formData);
                 toast.success("Lead updated successfully");
             } else {
-                await apiClient.post('/enquiries', formData);
+                const response = await apiClient.post('/enquiries', formData);
+                leadId = response.data._id;
                 toast.success("Lead added successfully");
             }
-            navigate('/dashboard/owner/leads');
+            
+            if (formData.status === 'Converted') {
+                navigate('/dashboard/owner/members/add', { state: { convertedLead: { ...formData, _id: leadId } } });
+            } else {
+                navigate('/dashboard/owner/leads');
+            }
         } catch (error) {
             toast.error(isEdit ? "Failed to update lead" : "Failed to add lead");
             setSubmitting(false);
@@ -116,8 +123,9 @@ export default function LeadForm() {
     return (
         <PageLayout>
             <PageHeader 
-                title={isEdit ? "Edit Record" : "Add New Record"}
-                subtitle={isEdit ? "Update details" : "Record new details"}
+                title={isEdit ? "Edit Enquiry" : "Add New Record"}
+                subtitle={isEdit ? "Update existing lead details" : "Record new details"}
+                showBack={true}
             />
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
@@ -161,7 +169,6 @@ export default function LeadForm() {
                             <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Contacted', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
                                 {formData.status === 'Lead' && <option value="Lead" className="hidden">Lead</option>}
                             </Select>
-                            <Select label="Attended By" name="attendedBy" value={formData.attendedBy || ''} onChange={handleChange} required options={['Admin', 'Staff']} error={errors.attendedBy} />
                             <Textarea containerClassName="sm:col-span-2 lg:col-span-3 xl:col-span-4" label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} required className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
                         </FormSection>
 
@@ -175,7 +182,7 @@ export default function LeadForm() {
                                     Cancel
                                 </Button>
                                 <Button type="submit" loading={submitting} className="w-full sm:w-auto">
-                                    {isEdit ? 'Update Enquiry' : 'Save Enquiry'}
+                                    {formData.status === 'Converted' ? 'Save & Convert to Member' : (isEdit ? 'Update Enquiry' : 'Save Enquiry')}
                                 </Button>
                             </div>
                         </div>

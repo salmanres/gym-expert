@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { FiPhone, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2 } from 'react-icons/fi';
+import { FiPhone, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2, FiUsers } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 // Import components
@@ -95,7 +95,7 @@ function Leads() {
         { label: 'Details' },
         { label: 'Follow Up' },
         { label: 'Status', className: 'text-center' },
-        { label: 'Actions', className: 'text-right' }
+        { label: 'Actions', className: 'text-center' }
     ];
 
     const renderRow = (lead, index) => (
@@ -166,7 +166,16 @@ function Leads() {
                 </select>
             </td>
             <td className="py-3 px-4">
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex items-center justify-center gap-2">
+                    {lead.status === 'Converted' && (
+                        <button 
+                            onClick={() => navigate('/dashboard/owner/members/add', { state: { convertedLead: lead } })}
+                            className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                            title="Convert to Member"
+                        >
+                            <FiUsers className="text-sm" />
+                        </button>
+                    )}
                     <a 
                         href={`https://wa.me/${(lead.contactNumber || lead.phone || '').toString().replace(/\D/g, '')}`}
                         target="_blank"

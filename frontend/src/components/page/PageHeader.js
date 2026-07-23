@@ -1,15 +1,23 @@
 import React from 'react';
-import { FiSearch, FiPlus } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
+import { FiSearch, FiPlus, FiArrowLeft } from 'react-icons/fi';
 import Button from '../form/Button';
 
-export default function PageHeader({ title, subtitle, searchTerm, onSearchChange, onAdd, addLabel }) {
+export default function PageHeader({ title, subtitle, searchTerm, onSearchChange, onAdd, addLabel, showBack }) {
+    const navigate = useNavigate();
+    
     return (
-        <div className="relative flex flex-col lg:flex-row justify-between items-start lg:items-center px-5 py-5 md:px-8 md:py-6 border-b border-slate-200 bg-gradient-to-r from-emerald-50/50 via-white to-slate-50/50 shrink-0 gap-5 overflow-hidden">
+        <div className="relative flex flex-col lg:flex-row justify-between items-start lg:items-center px-5 py-5 md:px-8 md:py-6 border-b border-slate-200 bg-gradient-to-r from-emerald-50/50 shrink-0 gap-5 overflow-hidden">
             {/* Subtle vibrant background glows */}
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-200 rounded-full mix-blend-multiply filter blur-[80px] opacity-20 -translate-y-1/2 translate-x-1/3 pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-72 h-72 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 translate-y-1/2 -translate-x-1/4 pointer-events-none" />
 
             <div className="w-full lg:w-auto relative z-10 flex items-center gap-3.5">
+                {showBack && (
+                    <button onClick={() => navigate(-1)} className="p-2 mr-1 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200 transition-all shadow-sm" title="Go Back">
+                        <FiArrowLeft size={18} />
+                    </button>
+                )}
                 <div className="hidden sm:block w-1.5 h-10 bg-emerald-500 rounded-full shadow-sm shadow-emerald-200"></div>
                 <div>
                     <h1 className="text-2xl md:text-[26px] font-extrabold text-slate-900 tracking-tight leading-none">{title}</h1>
