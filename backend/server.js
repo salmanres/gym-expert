@@ -7,8 +7,10 @@ const gymRoutes = require('./routes/gymRoutes');
 const branchRoutes = require('./routes/branchRoutes');
 const enquiryRoutes = require('./routes/enquiryRoutes');
 const memberRoutes = require('./routes/memberRoutes');
+const membershipRoutes = require('./routes/membershipRoutes');
 
 const app = express();
+
 
 // Middleware
 app.use(cors());
@@ -28,6 +30,7 @@ app.use('/api/gyms', gymRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/members', memberRoutes);
+app.use('/api/memberships', membershipRoutes);
 
 // Basic Route for testing
 app.get('/', (req, res) => {

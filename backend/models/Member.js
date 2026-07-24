@@ -35,7 +35,15 @@ const memberSchema = new mongoose.Schema({
     bmi: { type: Number },
     bodyFat: { type: Number }, // percentage
     dietPreference: { type: String, enum: ['', 'Veg', 'Non-Veg', 'Vegan', 'Eggitarian', 'Any'] },
-    medicalConditions: { type: String },
+    // Membership & Subscription
+    membershipPlan: { type: mongoose.Schema.Types.ObjectId, ref: 'Membership' },
+    planStartDate: { type: Date },
+    planEndDate: { type: Date },
+    totalSessions: { type: Number },
+    usedSessions: { type: Number, default: 0 },
+    paymentStatus: { type: String, enum: ['Paid', 'Pending', 'Partial'], default: 'Pending' },
+    amountPaid: { type: Number, default: 0 },
+    paidUntilDate: { type: Date }, // NEW: Date until which check-in is allowed based on amount paid
 
     joiningDate: { type: Date, required: true, default: Date.now },
     status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },

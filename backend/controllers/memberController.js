@@ -25,7 +25,7 @@ const createMember = async (req, res) => {
 const getMembers = async (req, res) => {
     try {
         const gymId = req.user.gymId;
-        const members = await Member.find({ gymId }).sort({ createdAt: -1 });
+        const members = await Member.find({ gymId }).populate('membershipPlan').sort({ createdAt: -1 });
         res.status(200).json(members);
     } catch (error) {
         console.error('Error fetching members:', error);

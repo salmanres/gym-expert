@@ -8,9 +8,10 @@ import Select from '../../components/form/Select';
 import Textarea from '../../components/form/Textarea';
 import Button from '../../components/form/Button';
 import Loader from '../../components/page/Loader';
-import { FiUser, FiMapPin, FiActivity, FiMessageSquare } from 'react-icons/fi';
+import { FiUser, FiMapPin, FiActivity, FiMessageSquare, FiCamera, FiUpload, FiX, FiTrash2 } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
+import Webcam from 'react-webcam';
 
 export default function MemberForm() {
     const { id } = useParams();
@@ -31,8 +32,49 @@ export default function MemberForm() {
         source: '--Select--', interest: '--Select--', followUpDate: '', followUpTime: '', convertibility: 'Warm',
         attendedBy: 'Admin', response: '',
         joiningDate: new Date().toISOString().split('T')[0], status: 'Active',
-        enquiryId: ''
+        enquiryId: '',
+        membershipPlan: '',
+        planStartDate: '',
+        planEndDate: '',
+        totalSessions: '',
+        paymentStatus: 'Pending',
+        amountPaid: '',
+        profilePhoto: ''
     });
+
+    const [memberships, setMemberships] = useState([]);
+    const [isCapturing, setIsCapturing] = useState(false);
+    const fileInputRef = React.useRef(null);
+    const webcamRef = React.useRef(null);
+
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setFormData(prev => ({ ...prev, profilePhoto: reader.result }));
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const capturePhoto = () => {
+        const imageSrc = webcamRef.current.getScreenshot();
+        setFormData(prev => ({ ...prev, profilePhoto: imageSrc }));
+        setIsCapturing(false);
+    };
+
+    useEffect(() => {
+        const fetchMemberships = async () => {
+            try {
+                const res = await apiClient.get('/memberships');
+                setMemberships(res.data.filter(m => m.isActive));
+            } catch (err) {
+                console.error("Failed to fetch memberships");
+            }
+        };
+        fetchMemberships();
+    }, []);
 
     // Auto-calculate BMI
     useEffect(() => {
@@ -82,7 +124,35 @@ export default function MemberForm() {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData({ ...formData, [name]: value });
+        
+        let updates = { [name]: value };
+        
+        // Auto calculate end date and pre-fill details when a plan is selected or start date changes
+        if (name === 'membershipPlan' || name === 'planStartDate') {
+            const planId = name === 'membershipPlan' ? value : formData.membershipPlan;
+            const startDateStr = name === 'planStartDate' ? value : formData.planStartDate;
+            
+            if (planId && startDateStr) {
+                const selectedPlan = memberships.find(m => m._id === planId);
+                if (selectedPlan) {
+                    const start = new Date(startDateStr);
+                    let end = new Date(start);
+                    
+                    if (selectedPlan.durationUnit === 'Days') end.setDate(end.getDate() + selectedPlan.duration);
+                    else if (selectedPlan.durationUnit === 'Weeks') end.setDate(end.getDate() + selectedPlan.duration * 7);
+                    else if (selectedPlan.durationUnit === 'Months') end.setMonth(end.getMonth() + selectedPlan.duration);
+                    else if (selectedPlan.durationUnit === 'Years') end.setFullYear(end.getFullYear() + selectedPlan.duration);
+                    
+                    updates.planEndDate = end.toISOString().split('T')[0];
+                    if (name === 'membershipPlan') {
+                        updates.totalSessions = selectedPlan.sessions || '';
+                        updates.amountPaid = selectedPlan.price || '';
+                    }
+                }
+            }
+        }
+        
+        setFormData(prev => ({ ...prev, ...updates }));
         if (errors[name]) setErrors({ ...errors, [name]: null });
     };
 
@@ -135,19 +205,62 @@ export default function MemberForm() {
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                 <div className="w-full">
-                    {/* Placeholder for Photo Upload */}
-                    <div className="flex items-center gap-6 mb-6 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
-                        <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center border-2 border-dashed border-slate-300 text-slate-400">
-                            <FiUser size={32} />
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
+                        <div className="w-24 h-24 shrink-0 rounded-full bg-slate-100 flex items-center justify-center border-2 border-dashed border-slate-300 text-slate-400 overflow-hidden relative group">
+                            {formData.profilePhoto ? (
+                                <>
+                                    <img src={formData.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center cursor-pointer transition-all" onClick={() => setFormData(prev => ({ ...prev, profilePhoto: '' }))}>
+                                        <FiTrash2 className="text-white" size={20} />
+                                    </div>
+                                </>
+                            ) : (
+                                <FiUser size={32} />
+                            )}
                         </div>
                         <div>
                             <h3 className="text-sm font-bold text-slate-800">Profile Photo</h3>
-                            <p className="text-xs text-slate-500 mt-1 mb-3">Upload a clear photo of the member for ID purposes.</p>
-                            <button type="button" className="px-4 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-xs font-bold transition-colors">
-                                Upload Image
-                            </button>
+                            <p className="text-xs text-slate-500 mt-1 mb-3">Upload a clear photo or take one using your camera.</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    className="hidden" 
+                                    ref={fileInputRef} 
+                                    onChange={handleFileUpload} 
+                                />
+                                <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors border border-slate-200 shadow-sm">
+                                    <FiUpload /> Upload Image
+                                </button>
+                                <button type="button" onClick={() => setIsCapturing(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition-colors border border-emerald-100 shadow-sm">
+                                    <FiCamera /> Take Photo
+                                </button>
+                            </div>
                         </div>
                     </div>
+
+                    {isCapturing && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+                            <div className="bg-white p-4 rounded-xl shadow-xl w-full max-w-md relative flex flex-col items-center">
+                                <button type="button" onClick={() => setIsCapturing(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 z-10 bg-white rounded-full p-1 shadow-sm">
+                                    <FiX size={20} />
+                                </button>
+                                <h3 className="text-sm font-bold text-slate-800 mb-4 self-start">Capture Photo</h3>
+                                <div className="w-full rounded-lg overflow-hidden border-2 border-slate-200 bg-black aspect-square flex items-center justify-center">
+                                    <Webcam
+                                        audio={false}
+                                        ref={webcamRef}
+                                        screenshotFormat="image/jpeg"
+                                        videoConstraints={{ width: 400, height: 400, facingMode: "user" }}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                                <Button type="button" onClick={capturePhoto} className="mt-4 w-full flex justify-center items-center gap-2">
+                                    <FiCamera /> Capture Image
+                                </Button>
+                            </div>
+                        </div>
+                    )}
 
                     <form onSubmit={handleSubmit} className="flex flex-col" noValidate>
                         <FormSection title="Personal Information" icon={<FiUser />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -176,10 +289,8 @@ export default function MemberForm() {
                             <Input containerClassName="sm:col-span-3" label="Medical Conditions / Injuries" name="medicalConditions" value={formData.medicalConditions || ''} onChange={handleChange} placeholder="Any prior injuries or health conditions to be aware of" error={errors.medicalConditions} />
                         </FormSection>
 
-                        <FormSection title="Membership & Feedback" icon={<FiMessageSquare />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            <Input type="date" label="Joining Date" name="joiningDate" value={formData.joiningDate || ''} onChange={handleChange} required error={errors.joiningDate} />
-                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required error={errors.status} options={['Active', 'Inactive']} />
-                            <Textarea containerClassName="sm:col-span-2 lg:col-span-3 xl:col-span-4" label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
+                        <FormSection title="Feedback & Notes" icon={<FiMessageSquare />} className="grid grid-cols-1 gap-4">
+                            <Textarea containerClassName="col-span-full" label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
                         </FormSection>
 
                         <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-4 pt-6 border-t border-slate-200">
