@@ -10,6 +10,7 @@ import LoginPage from './features/auth/LoginPage';
 import RegisterGymPage from './features/auth/RegisterGymPage';
 import DashboardLayout from './features/dashboard/DashboardLayout';
 import GymsList from './features/admin/GymsList';
+import OwnerDashboard from './features/owner/OwnerDashboard';
 import Leads from './features/owner/Leads';
 import LeadForm from './features/owner/LeadForm';
 import Members from './features/owner/Members';
@@ -18,6 +19,8 @@ import MembershipList from './features/owner/Membership';
 import MembershipForm from './features/owner/MembershipForm';
 import AssignMembershipForm from './features/owner/AssignMembershipForm';
 import Finance from './features/owner/Finance';
+import PaymentForm from './features/owner/PaymentForm';
+import FeeReceipt from './features/owner/FeeReceipt';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -41,7 +44,7 @@ root.render(
             <Route path="register-gym" element={<RegisterGymPage />} />
             
             {/* Gym Owner Routes */}
-            <Route path="owner" element={<div className="p-8 text-2xl font-bold text-slate-800">Welcome to Gym Owner Dashboard</div>} />
+            <Route path="owner" element={<OwnerDashboard />} />
             <Route path="owner/leads" element={<Leads />} />
             <Route path="owner/leads/add" element={<LeadForm />} />
             <Route path="owner/leads/edit/:id" element={<LeadForm />} />
@@ -53,6 +56,8 @@ root.render(
             <Route path="owner/membership/edit/:id" element={<MembershipForm />} />
             <Route path="owner/membership/assign" element={<AssignMembershipForm />} />
             <Route path="owner/finance" element={<Finance />} />
+            <Route path="owner/finance/collect" element={<PaymentForm />} />
+            <Route path="owner/finance/receipt/:id" element={<FeeReceipt />} />
             <Route path="owner/branches" element={<div className="p-8 text-2xl font-bold text-slate-800">My Branches (Coming Soon)</div>} />
             <Route path="owner/staff" element={<div className="p-8 text-2xl font-bold text-slate-800">Staff Management (Coming Soon)</div>} />
         </Route>

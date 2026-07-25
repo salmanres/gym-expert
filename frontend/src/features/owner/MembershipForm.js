@@ -35,7 +35,7 @@ function MembershipForm() {
     useEffect(() => {
         const fetchMembership = async () => {
             try {
-                const res = await apiClient.get(`/memberships/${id}`);
+                const res = await apiClient.get(`/membership-plans/${id}`);
                 setFormData(res.data);
             } catch (error) {
                 toast.error("Failed to fetch membership details");
@@ -73,10 +73,10 @@ function MembershipForm() {
 
         try {
             if (isEditMode) {
-                await apiClient.put(`/memberships/${id}`, formData);
+                await apiClient.put(`/membership-plans/${id}`, formData);
                 toast.success("Membership updated successfully");
             } else {
-                await apiClient.post('/memberships', formData);
+                await apiClient.post('/membership-plans', formData);
                 toast.success("Membership created successfully");
             }
             navigate('/dashboard/owner/membership');

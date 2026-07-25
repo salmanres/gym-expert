@@ -23,7 +23,7 @@ export default function LeadForm() {
     const [submitting, setSubmitting] = useState(false);
     
     const [formData, setFormData] = useState({
-        firstName: '', lastName: '', gender: 'Male', contactNumber: '', altContact: '', email: '',
+        firstName: '', lastName: '', gender: 'Male', dob: '', contactNumber: '', altContact: '', email: '',
         address: '', source: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
         convertibility: 'Warm', status: 'Pending', attendedBy: 'Admin',
         response: '', sendTextAndEmail: false, sendWhatsApp: false
@@ -71,7 +71,7 @@ export default function LeadForm() {
         let newErrors = {};
 
         // Validate mandatory text fields to prevent empty spaces
-        const requiredText = ['firstName', 'contactNumber', 'source', 'inquiryFor', 'followUpDate', 'response'];
+        const requiredText = ['firstName', 'dob', 'contactNumber'];
         for (let field of requiredText) {
             if (!formData[field] || String(formData[field]).trim() === '') {
                 newErrors[field] = 'This field is required';
@@ -136,7 +136,8 @@ export default function LeadForm() {
                         <FormSection title="Personal Details" icon={<FiUser />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             <Input label="First Name" name="firstName" value={formData.firstName || ''} onChange={handleChange} required placeholder="First Name" error={errors.firstName} />
                             <Input label="Last Name" name="lastName" value={formData.lastName || ''} onChange={handleChange} placeholder="Last Name" error={errors.lastName} />
-                            <Select label="Gender" name="gender" value={formData.gender || ''} onChange={handleChange} required options={['Male', 'Female', 'Other']} error={errors.gender} />
+                            <Select label="Gender" name="gender" value={formData.gender || ''} onChange={handleChange} options={['Male', 'Female', 'Other']} error={errors.gender} />
+                            <Input type="date" label="Date of Birth" name="dob" value={formData.dob || ''} onChange={handleChange} required error={errors.dob} />
                             <Input type="tel" label="Phone Number" name="contactNumber" value={formData.contactNumber || ''} onChange={handleChange} required placeholder="10-digit mobile" pattern="[6-9][0-9]{9}" maxLength={10} title="Please enter a valid 10-digit Indian mobile number starting with 6-9" error={errors.contactNumber} />
                             <Input type="tel" label="Alt. Phone" name="altContact" value={formData.altContact || ''} onChange={handleChange} placeholder="Secondary Phone" pattern="[6-9][0-9]{9}" maxLength={10} title="Please enter a valid 10-digit Indian mobile number starting with 6-9" error={errors.altContact} />
                             <Input type="email" label="Email Address" name="email" value={formData.email || ''} onChange={handleChange} placeholder="email@example.com" error={errors.email} />
@@ -144,14 +145,14 @@ export default function LeadForm() {
 
                         <FormSection title="Inquiry Details" icon={<FiMapPin />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             <Input containerClassName="sm:col-span-2 lg:col-span-3 xl:col-span-2" label="Residential Address" name="address" value={formData.address || ''} onChange={handleChange} placeholder="Street, Area, City" error={errors.address} />
-                            <Select label="Source" name="source" value={formData.source || ''} onChange={handleChange} required error={errors.source}>
+                            <Select label="Source" name="source" value={formData.source || ''} onChange={handleChange} error={errors.source}>
                                 <option value="">--Select--</option>
                                 <option value="Walk-in">Walk-in</option>
                                 <option value="Website">Website</option>
                                 <option value="Reference">Reference</option>
                                 <option value="Just Dial">Just Dial</option>
                             </Select>
-                            <Select label="Interest/For" name="inquiryFor" value={formData.inquiryFor || ''} onChange={handleChange} required error={errors.inquiryFor}>
+                            <Select label="Interest/For" name="inquiryFor" value={formData.inquiryFor || ''} onChange={handleChange} error={errors.inquiryFor}>
                                 <option value="">--Select--</option>
                                 <option value="Gym">Gym</option>
                                 <option value="Zumba">Zumba</option>

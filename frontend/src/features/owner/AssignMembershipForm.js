@@ -1,136 +1,216 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import apiClient from '../../api/apiClient';
-import { toast } from 'react-toastify';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import FormSection from '../../components/form/FormSection';
 import Input from '../../components/form/Input';
-import Select from '../../components/form/Select';
 import Button from '../../components/form/Button';
-import Loader from '../../components/page/Loader';
 import { FiActivity } from 'react-icons/fi';
+import apiClient from '../../api/apiClient';
+import { toast } from 'react-toastify';
+import Loader from '../../components/page/Loader';
+import ReactSelect from 'react-select';
 
 export default function AssignMembershipForm() {
     const navigate = useNavigate();
     const location = useLocation();
-    
-    // Check if we came from an 'Assign' button click which passes member details
-    const preSelectedMember = location.state?.member;
-    
+
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
-    
-    const [memberships, setMemberships] = useState([]);
     const [members, setMembers] = useState([]);
-    
+    const [memberships, setMemberships] = useState([]);
+
     const [formData, setFormData] = useState({
-        memberId: preSelectedMember?._id || '',
-        membershipPlan: '',
+        memberId: '',
+        membershipPlans: [],
         planStartDate: new Date().toISOString().split('T')[0],
         planEndDate: '',
         totalSessions: '',
-        paymentStatus: 'Pending',
-        amountPaid: ''
+        amountPaid: '',
+        paidUntilDate: ''
     });
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [memRes, memberRes] = await Promise.all([
-                    apiClient.get('/memberships'),
-                    apiClient.get('/members')
+                const [memRes, planRes] = await Promise.all([
+                    apiClient.get('/members'),
+                    apiClient.get('/membership-plans')
                 ]);
-                setMemberships(memRes.data.filter(m => m.isActive));
-                
-                // Only show members who don't have an active plan or all members if needed
-                setMembers(memberRes.data);
-                
-                setLoading(false);
-            } catch (err) {
-                toast.error("Failed to fetch necessary data");
+                setMembers(memRes.data);
+                setMemberships(planRes.data);
+
+                // Pre-fill if navigated from Member details
+                if (location.state?.member) {
+                    setFormData(prev => ({
+                        ...prev,
+                        memberId: location.state.member._id
+                    }));
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                toast.error("Failed to load members and plans");
+            } finally {
                 setLoading(false);
             }
         };
         fetchData();
-    }, []);
+    }, [location.state]);
+
+    // Auto-calculate plan end date based on selected plans and start date
+    useEffect(() => {
+        if (formData.membershipPlans.length > 0 && formData.planStartDate && memberships.length > 0) {
+            let maxEndDate = null;
+            let totalAmount = 0;
+            let totalSess = 0;
+            
+            formData.membershipPlans.forEach(planId => {
+                const plan = memberships.find(p => p._id === planId);
+                if (plan) {
+                    totalAmount += plan.price || 0;
+                    if (plan.sessions) totalSess += plan.sessions;
+                    
+                    const startDateObj = new Date(formData.planStartDate);
+                    let duration = parseInt(plan.duration) || 0;
+                    let unit = plan.durationUnit ? plan.durationUnit.toLowerCase() : 'months';
+                    
+                    if (unit.includes('month')) {
+                        startDateObj.setMonth(startDateObj.getMonth() + duration);
+                    } else if (unit.includes('day')) {
+                        startDateObj.setDate(startDateObj.getDate() + duration);
+                    } else if (unit.includes('year')) {
+                        startDateObj.setFullYear(startDateObj.getFullYear() + duration);
+                    } else if (unit.includes('week')) {
+                        startDateObj.setDate(startDateObj.getDate() + (duration * 7));
+                    }
+                    
+                    if (!maxEndDate || startDateObj > maxEndDate) {
+                        maxEndDate = startDateObj;
+                    }
+                }
+            });
+
+            if (maxEndDate) {
+                const maxEndDateStr = maxEndDate.toISOString().split('T')[0];
+                setFormData(prev => ({ 
+                    ...prev, 
+                    planEndDate: maxEndDateStr,
+                    amountPaid: prev.amountPaid || totalAmount, // Auto-fill amount if empty
+                    totalSessions: prev.totalSessions || totalSess, // Auto-fill sessions if empty
+                    paidUntilDate: prev.paidUntilDate || maxEndDateStr // Auto-fill paidUntilDate to match planEndDate
+                }));
+            }
+        }
+    }, [formData.membershipPlans, formData.planStartDate, memberships]);
+
+    // Proportionally calculate paidUntilDate when amountPaid changes
+    useEffect(() => {
+        if (formData.membershipPlans.length > 0 && formData.planStartDate && formData.planEndDate) {
+            let totalAmount = 0;
+            formData.membershipPlans.forEach(planId => {
+                const plan = memberships.find(p => p._id === planId);
+                if (plan) totalAmount += (plan.price || 0);
+            });
+
+            const paid = Number(formData.amountPaid) || 0;
+            
+            if (paid > 0 && totalAmount > 0) {
+                const start = new Date(formData.planStartDate);
+                const end = new Date(formData.planEndDate);
+                
+                // Calculate total days of the plan
+                const totalDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
+                
+                if (paid >= totalAmount) {
+                    // Full payment
+                    if (formData.paidUntilDate !== formData.planEndDate) {
+                        setFormData(prev => ({ ...prev, paidUntilDate: prev.planEndDate }));
+                    }
+                } else {
+                    // Partial payment - calculate proportional days
+                    const proportion = paid / totalAmount;
+                    const paidDays = Math.round(totalDays * proportion);
+                    
+                    const paidUntilObj = new Date(start);
+                    paidUntilObj.setDate(paidUntilObj.getDate() + paidDays);
+                    
+                    const calculatedDateStr = paidUntilObj.toISOString().split('T')[0];
+                    
+                    if (formData.paidUntilDate !== calculatedDateStr) {
+                        setFormData(prev => ({ ...prev, paidUntilDate: calculatedDateStr }));
+                    }
+                }
+            } else if (paid === 0) {
+                 if (formData.paidUntilDate !== '') {
+                     setFormData(prev => ({ ...prev, paidUntilDate: '' }));
+                 }
+            }
+        }
+    }, [formData.amountPaid, formData.planStartDate, formData.planEndDate, formData.membershipPlans, memberships]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        
-        let updates = { [name]: value };
-        
-        // Auto calculate end date and pre-fill details when a plan is selected or start date changes
-        if (name === 'membershipPlan' || name === 'planStartDate' || name === 'amountPaid') {
-            const planId = name === 'membershipPlan' ? value : formData.membershipPlan;
-            const startDateStr = name === 'planStartDate' ? value : formData.planStartDate;
-            const amt = name === 'amountPaid' ? value : formData.amountPaid;
-            
-            if (planId && startDateStr) {
-                const selectedPlan = memberships.find(m => m._id === planId);
-                if (selectedPlan) {
-                    const start = new Date(startDateStr);
-                    let end = new Date(start);
-                    
-                    let totalDurationDays = 0;
-                    if (selectedPlan.durationUnit === 'Days') totalDurationDays = selectedPlan.duration;
-                    else if (selectedPlan.durationUnit === 'Weeks') totalDurationDays = selectedPlan.duration * 7;
-                    else if (selectedPlan.durationUnit === 'Months') totalDurationDays = selectedPlan.duration * 30; // Approx
-                    else if (selectedPlan.durationUnit === 'Years') totalDurationDays = selectedPlan.duration * 365;
-                    
-                    end.setDate(end.getDate() + totalDurationDays);
-                    updates.planEndDate = end.toISOString().split('T')[0];
-                    
-                    if (name === 'membershipPlan') {
-                        updates.totalSessions = selectedPlan.sessions || '';
-                    }
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
 
-                    // Flexible Check-in Date Calculation based on payment
-                    const amountToUse = name === 'membershipPlan' ? selectedPlan.price : (amt || 0);
-                    if (name === 'membershipPlan') updates.amountPaid = amountToUse;
-                    
-                    if (selectedPlan.price > 0 && totalDurationDays > 0) {
-                        const pricePerDay = selectedPlan.price / totalDurationDays;
-                        const daysPaidFor = Math.floor(amountToUse / pricePerDay);
-                        
-                        let paidUntil = new Date(start);
-                        paidUntil.setDate(paidUntil.getDate() + daysPaidFor);
-                        updates.paidUntilDate = paidUntil.toISOString().split('T')[0];
-                    } else {
-                        // Free plan or error
-                        updates.paidUntilDate = updates.planEndDate;
-                    }
-                }
-            }
+    const handleSelectChange = (name, selectedOption) => {
+        if (Array.isArray(selectedOption)) {
+            setFormData(prev => ({ ...prev, [name]: selectedOption.map(opt => opt.value) }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: selectedOption ? selectedOption.value : '' }));
         }
-        
-        setFormData(prev => ({ ...prev, ...updates }));
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!formData.memberId || !formData.membershipPlan) {
-            toast.error("Please select a member and a membership plan.");
+        if (!formData.memberId || formData.membershipPlans.length === 0) {
+            toast.error("Please select a member and at least one membership plan.");
             return;
         }
 
         setSubmitting(true);
         try {
-            await apiClient.put(`/members/${formData.memberId}`, {
-                membershipPlan: formData.membershipPlan,
+            await apiClient.post('/member-memberships', {
+                memberId: formData.memberId,
+                membershipPlans: formData.membershipPlans,
                 planStartDate: formData.planStartDate,
                 planEndDate: formData.planEndDate,
                 totalSessions: formData.totalSessions,
-                paymentStatus: formData.paymentStatus,
-                amountPaid: formData.amountPaid
+                amountPaid: formData.amountPaid,
+                paidUntilDate: formData.paidUntilDate
             });
+            
             toast.success("Membership assigned successfully");
             navigate('/dashboard/owner/membership');
         } catch (error) {
-            toast.error("Failed to assign membership");
+            toast.error(error.response?.data?.message || "Failed to assign membership");
             setSubmitting(false);
         }
+    };
+
+    const customStyles = {
+        control: (provided) => ({
+            ...provided,
+            minHeight: '40px',
+            borderRadius: '0.5rem',
+            borderColor: '#e2e8f0',
+            backgroundColor: '#ffffff',
+            boxShadow: 'none',
+            '&:hover': { borderColor: '#10b981' },
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            color: '#1e293b'
+        }),
+        option: (provided, state) => ({
+            ...provided,
+            backgroundColor: state.isSelected ? '#10b981' : state.isFocused ? '#ecfdf5' : 'transparent',
+            color: state.isSelected ? 'white' : '#475569',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            cursor: 'pointer',
+            ':active': { backgroundColor: '#d1fae5' }
+        })
     };
 
     if (loading) return <Loader text="Loading assignment details..." />;
@@ -144,48 +224,52 @@ export default function AssignMembershipForm() {
             />
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full max-w-4xl mx-auto">
+                <div className="w-full">
                     <form onSubmit={handleSubmit} className="flex flex-col">
                         <FormSection title="Assignment Details" icon={<FiActivity />} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             
-                            <Select 
-                                label="Select Member" 
-                                name="memberId" 
-                                value={formData.memberId} 
-                                onChange={handleChange} 
-                                required
-                                options={[
-                                    { value: '', label: '-- Choose a Member --' },
-                                    ...members.map(m => ({
+                            <div className="col-span-1">
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Select Member <span className="text-rose-500">*</span></label>
+                                <ReactSelect
+                                    options={members.map(m => ({
                                         value: m._id,
-                                        label: `${m.firstName} ${m.lastName} (${m.contactNumber})`
-                                    }))
-                                ]}
-                            />
+                                        label: `${m.firstName} ${m.lastName || ''}`.trim() + ` (${m.contactNumber})`
+                                    }))}
+                                    value={formData.memberId ? { value: formData.memberId, label: members.find(m => m._id === formData.memberId) ? `${members.find(m => m._id === formData.memberId).firstName} ${members.find(m => m._id === formData.memberId).lastName || ''}`.trim() + ` (${members.find(m => m._id === formData.memberId).contactNumber})` : 'Select...' } : null}
+                                    onChange={(val) => handleSelectChange('memberId', val)}
+                                    styles={customStyles}
+                                    placeholder="Search Member..."
+                                />
+                            </div>
 
-                            <Select 
-                                label="Membership Plan" 
-                                name="membershipPlan" 
-                                value={formData.membershipPlan} 
-                                onChange={handleChange} 
-                                required
-                                options={[
-                                    { value: '', label: '-- Choose a Plan --' },
-                                    ...memberships.map(m => ({
+                            <div className="col-span-1">
+                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Membership Plans <span className="text-rose-500">*</span></label>
+                                <ReactSelect
+                                    isMulti
+                                    options={memberships.map(m => ({
                                         value: m._id,
                                         label: `${m.name} (₹${m.price} - ${m.duration} ${m.durationUnit})`
-                                    }))
-                                ]}
-                            />
+                                    }))}
+                                    value={formData.membershipPlans.map(id => {
+                                        const m = memberships.find(p => p._id === id);
+                                        return m ? { value: m._id, label: `${m.name} (₹${m.price})` } : null;
+                                    }).filter(Boolean)}
+                                    onChange={(val) => handleSelectChange('membershipPlans', val)}
+                                    styles={customStyles}
+                                    placeholder="Search and select plans..."
+                                />
+                            </div>
                             
                             <Input type="date" label="Plan Start Date" name="planStartDate" value={formData.planStartDate} onChange={handleChange} required />
-                            <Input type="date" label="Plan End Date" name="planEndDate" value={formData.planEndDate} onChange={handleChange} readOnly className="bg-slate-50 cursor-not-allowed" />
+                            <Input type="date" label="Plan End Date" name="planEndDate" value={formData.planEndDate} onChange={handleChange} required />
                             <Input type="number" label="Total Sessions (if applicable)" name="totalSessions" value={formData.totalSessions} onChange={handleChange} placeholder="e.g. 12" />
                             
-                            <Select label="Payment Status" name="paymentStatus" value={formData.paymentStatus} onChange={handleChange} options={['Paid', 'Pending', 'Partial']} />
+
                             <Input type="number" label="Amount Paid (₹)" name="amountPaid" value={formData.amountPaid} onChange={handleChange} placeholder="e.g. 15000" />
                             
-                            <Input containerClassName="sm:col-span-2" type="date" label="Valid Until (Check-in Allowed Till)" name="paidUntilDate" value={formData.paidUntilDate || ''} readOnly className="bg-emerald-50 text-emerald-800 font-bold border-emerald-200 cursor-not-allowed" />
+                            {Number(formData.amountPaid) > 0 && (
+                                <Input containerClassName="sm:col-span-2 animate-in fade-in slide-in-from-top-2 duration-300" type="date" label="Valid Until (Check-in Allowed Till)" name="paidUntilDate" value={formData.paidUntilDate || ''} onChange={handleChange} className="bg-emerald-50 font-bold border-emerald-200" />
+                            )}
                             
                         </FormSection>
 
@@ -194,7 +278,7 @@ export default function AssignMembershipForm() {
                                 Cancel
                             </Button>
                             <Button type="submit" loading={submitting}>
-                                Assign Plan
+                                {formData.amountPaid > 0 ? 'Assign Plan & Collect Payment' : 'Assign Plan'}
                             </Button>
                         </div>
                     </form>

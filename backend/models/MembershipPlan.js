@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const membershipSchema = new mongoose.Schema({
+const membershipPlanSchema = new mongoose.Schema({
     gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true },
     name: { type: String, required: true },
     planType: [{ type: String }],
@@ -14,4 +14,4 @@ const membershipSchema = new mongoose.Schema({
     timestamps: true
 });
 
-module.exports = mongoose.model('Membership', membershipSchema);
+module.exports = mongoose.model('MembershipPlan', membershipPlanSchema);

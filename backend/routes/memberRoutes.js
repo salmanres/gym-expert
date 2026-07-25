@@ -9,7 +9,11 @@ router.route('/')
     .post(gymOwnerOnly, memberController.createMember)
     .get(protect, memberController.getMembers);
 
+router.route('/transactions/all')
+    .get(protect, memberController.getTransactions);
+
 router.route('/:id')
+    .get(protect, memberController.getMemberById)
     .put(gymOwnerOnly, memberController.updateMember)
     .delete(gymOwnerOnly, memberController.deleteMember);
 

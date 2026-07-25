@@ -6,7 +6,7 @@ const {
     getMembershipById,
     updateMembership,
     deleteMembership
-} = require('../controllers/membershipController');
+} = require('../controllers/membershipPlanController');
 const { protect, gymOwnerOnly } = require('../middleware/authMiddleware');
 
 router.use(protect);

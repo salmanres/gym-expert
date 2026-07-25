@@ -167,7 +167,7 @@ function Leads() {
             </td>
             <td className="py-3 px-4">
                 <div className="flex items-center justify-center gap-2">
-                    {lead.status === 'Converted' && (
+                    {lead.status === 'Converted' && !lead.isMemberCreated && (
                         <button 
                             onClick={() => navigate('/dashboard/owner/members/add', { state: { convertedLead: lead } })}
                             className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors shadow-sm"

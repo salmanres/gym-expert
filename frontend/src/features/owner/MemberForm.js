@@ -67,7 +67,7 @@ export default function MemberForm() {
     useEffect(() => {
         const fetchMemberships = async () => {
             try {
-                const res = await apiClient.get('/memberships');
+                const res = await apiClient.get('/membership-plans');
                 setMemberships(res.data.filter(m => m.isActive));
             } catch (err) {
                 console.error("Failed to fetch memberships");
@@ -103,6 +103,7 @@ export default function MemberForm() {
                 firstName: lead.firstName || '',
                 lastName: lead.lastName || '',
                 gender: lead.gender || 'Male',
+                dob: lead.dob ? new Date(lead.dob).toISOString().split('T')[0] : '',
                 contactNumber: lead.contactNumber || '',
                 altContact: lead.altContact || '',
                 email: lead.email || '',
@@ -182,11 +183,13 @@ export default function MemberForm() {
             if (isEdit) {
                 await apiClient.put(`/members/${id}`, formData);
                 toast.success("Member updated successfully");
+                navigate('/dashboard/owner/members');
             } else {
-                await apiClient.post('/members', formData);
+                const res = await apiClient.post('/members', formData);
                 toast.success("Member registered successfully");
+                // Navigate seamlessly to Assign Plan step
+                navigate('/dashboard/owner/membership/assign', { state: { member: res.data } });
             }
-            navigate('/dashboard/owner/members');
         } catch (error) {
             toast.error(isEdit ? "Failed to update member" : "Failed to register member");
             setSubmitting(false);

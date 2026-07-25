@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { FiEdit2, FiTrash2, FiCheckCircle, FiXCircle, FiPlus, FiAlertCircle } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiCheckCircle, FiXCircle, FiPlus, FiAlertCircle, FiCreditCard } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import DataTable from '../../components/page/DataTable';
-import Tabs from '../../components/page/Tabs'; // assuming we have or will create a simple Tabs or just render them manually. We will render them manually to be safe.
+import Tabs from '../../components/page/Tabs';
+import FilterBar from '../../components/page/FilterBar';
 
 function Memberships() {
     const navigate = useNavigate();
@@ -15,16 +16,33 @@ function Memberships() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('Plans'); // 'Plans', 'Assign', 'Active', 'Expired', 'Renewals'
+    
+    // Filters
+    const [filterPaymentStatus, setFilterPaymentStatus] = useState('All');
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [memRes, memberRes] = await Promise.all([
-                apiClient.get('/memberships'),
-                apiClient.get('/members') // Assumes getMembers populates membershipPlan
+            const [memRes, memberRes, activeMembershipsRes] = await Promise.all([
+                apiClient.get('/membership-plans'),
+                apiClient.get('/members'),
+                apiClient.get('/member-memberships/active')
             ]);
+            
+            const activeMemberships = activeMembershipsRes.data;
+            const membersWithPlans = memberRes.data.map(member => {
+                const membership = activeMemberships.find(m => m.memberId?._id === member._id);
+                if (membership) {
+                    member.membershipPlan = membership.membershipPlanId;
+                    member.activeMembership = membership;
+                    member.planEndDate = membership.endDate;
+                    member.paymentStatus = membership.paymentStatus;
+                }
+                return member;
+            });
+            
             setMemberships(memRes.data);
-            setMembers(memberRes.data);
+            setMembers(membersWithPlans);
             setLoading(false);
         } catch (error) {
             toast.error("Failed to fetch data");
@@ -42,7 +60,7 @@ function Memberships() {
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this membership plan?')) return;
         try {
-            await apiClient.delete(`/memberships/${id}`);
+            await apiClient.delete(`/membership-plans/${id}`);
             toast.success("Membership deleted");
             fetchData();
         } catch (error) {
@@ -72,10 +90,15 @@ function Memberships() {
     };
 
     const filteredMemberships = memberships.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    const filteredMembers = getMembersByStatus().filter(m => 
-        (m.firstName + ' ' + m.lastName).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        m.contactNumber.includes(searchTerm)
-    );
+    const filteredMembers = getMembersByStatus().filter(m => {
+        // Payment Status Filter
+        if (filterPaymentStatus !== 'All' && (m.paymentStatus || 'Pending') !== filterPaymentStatus) return false;
+
+        return (
+            (m.firstName + ' ' + m.lastName).toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (m.contactNumber || '').includes(searchTerm)
+        );
+    });
 
     // Column Definitions
     const planColumns = [
@@ -140,8 +163,19 @@ function Memberships() {
         return (
             <tr key={m._id} className="hover:bg-slate-50 transition-colors">
                 <td className="py-3 px-4">
-                    <p className="font-bold text-slate-800 text-sm">{m.firstName} {m.lastName}</p>
-                    <p className="text-xs text-slate-500">{m.memberId}</p>
+                    <div className="flex items-center gap-3">
+                        {m.profilePhoto ? (
+                            <img src={m.profilePhoto} alt={m.firstName} className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-200 shrink-0" />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs shadow-sm border border-slate-200 shrink-0">
+                                {m.firstName.charAt(0).toUpperCase()}{m.lastName ? m.lastName.charAt(0).toUpperCase() : ''}
+                            </div>
+                        )}
+                        <div>
+                            <p className="font-bold text-slate-800 text-sm">{m.firstName} {m.lastName}</p>
+                            <p className="text-xs text-slate-500">{m.memberId}</p>
+                        </div>
+                    </div>
                 </td>
                 <td className="py-3 px-4 text-sm text-slate-600 font-medium">
                     {m.contactNumber}
@@ -172,9 +206,14 @@ function Memberships() {
                     )}
                 </td>
                 <td className="py-3 px-4">
-                    <div className="flex items-center justify-center">
-                        <button onClick={() => navigate(activeTab === 'Assign' ? `/dashboard/owner/membership/assign` : `/dashboard/owner/members/edit/${m._id}`, { state: { member: m } })} className="px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded text-xs font-bold transition-colors flex items-center gap-1">
-                            {activeTab === 'Assign' ? <><FiPlus /> Assign</> : 'Update'}
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                        {(m.paymentStatus === 'Pending' || m.paymentStatus === 'Partial') && m.membershipPlan && activeTab !== 'Assign' && (
+                            <button onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: m } })} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Collect Fee">
+                                <FiCreditCard className="text-sm" />
+                            </button>
+                        )}
+                        <button onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m } })} className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title={activeTab === 'Assign' ? 'Assign Plan' : 'Update Membership'}>
+                            {activeTab === 'Assign' ? <FiPlus className="text-sm" /> : <FiEdit2 className="text-sm" />}
                         </button>
                     </div>
                 </td>
@@ -189,8 +228,6 @@ function Memberships() {
             <PageHeader 
                 title="Membership Management" 
                 subtitle="Manage subscription packages and member assignments" 
-                searchTerm={searchTerm} 
-                onSearchChange={setSearchTerm} 
                 onAdd={activeTab === 'Plans' ? handleAddNew : null} 
                 addLabel={activeTab === 'Plans' ? "Add Plan" : ""} 
             />
@@ -198,8 +235,31 @@ function Memberships() {
             <Tabs 
                 tabs={tabs} 
                 activeTab={activeTab} 
-                onTabChange={(tab) => { setActiveTab(tab); setSearchTerm(''); }} 
+                onTabChange={(tab) => { 
+                    setActiveTab(tab); 
+                    setSearchTerm(''); 
+                    setFilterPaymentStatus('All');
+                }} 
             />
+
+            <FilterBar 
+                searchTerm={searchTerm} 
+                onSearchChange={setSearchTerm} 
+                searchPlaceholder={activeTab === 'Plans' ? "Search plans..." : "Search members..."}
+            >
+                {activeTab !== 'Plans' && (
+                    <select 
+                        value={filterPaymentStatus} 
+                        onChange={(e) => setFilterPaymentStatus(e.target.value)}
+                        className="w-full sm:w-auto h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm"
+                    >
+                        <option value="All">All Payment Statuses</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Partial">Partial</option>
+                        <option value="Pending">Pending</option>
+                    </select>
+                )}
+            </FilterBar>
 
             {activeTab === 'Plans' ? (
                 <DataTable 
