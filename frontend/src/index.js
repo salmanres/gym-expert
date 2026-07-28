@@ -21,6 +21,9 @@ import AssignMembershipForm from './features/owner/AssignMembershipForm';
 import Finance from './features/owner/Finance';
 import PaymentForm from './features/owner/PaymentForm';
 import FeeReceipt from './features/owner/FeeReceipt';
+import GymSettings from './features/owner/GymSettings';
+import Staff from './features/owner/Staff';
+import StaffForm from './features/owner/StaffForm';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -58,8 +61,11 @@ root.render(
             <Route path="owner/finance" element={<Finance />} />
             <Route path="owner/finance/collect" element={<PaymentForm />} />
             <Route path="owner/finance/receipt/:id" element={<FeeReceipt />} />
+            <Route path="owner/settings" element={<GymSettings />} />
+            <Route path="owner/staff" element={<Staff />} />
+            <Route path="owner/staff/add" element={<StaffForm />} />
+            <Route path="owner/staff/edit/:id" element={<StaffForm />} />
             <Route path="owner/branches" element={<div className="p-8 text-2xl font-bold text-slate-800">My Branches (Coming Soon)</div>} />
-            <Route path="owner/staff" element={<div className="p-8 text-2xl font-bold text-slate-800">Staff Management (Coming Soon)</div>} />
         </Route>
       </Routes>
       <ToastContainer theme="dark" position="bottom-right" />

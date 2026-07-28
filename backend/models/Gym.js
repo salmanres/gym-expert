@@ -28,6 +28,20 @@ const gymSchema = new mongoose.Schema({
     },
     contactPhone: {
         type: String
+    },
+    latitude: {
+        type: Number
+    },
+    longitude: {
+        type: Number
+    },
+    qrAttendanceEnabled: {
+        type: Boolean,
+        default: false
+    },
+    qrAttendanceRange: {
+        type: Number,
+        default: 50
     }
 }, { timestamps: true });
 

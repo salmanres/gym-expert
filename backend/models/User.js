@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['SUPERADMIN', 'GYM_OWNER', 'BRANCH_MANAGER', 'STAFF', 'MEMBER'],
+        enum: ['SUPERADMIN', 'GYM_OWNER', 'BRANCH_MANAGER', 'STAFF', 'MEMBER', 'TRAINER', 'ADMIN'],
         default: 'MEMBER'
     },
     gymId: {
@@ -36,7 +36,21 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Branch',
         default: null
-    }
+    },
+    // Additional Staff Fields
+    gender: { type: String, enum: ['Male', 'Female', 'Other'] },
+    dob: { type: Date },
+    address: { type: String },
+    emergencyContactName: { type: String },
+    emergencyContactNumber: { type: String },
+    joiningDate: { type: Date },
+    specialization: { type: String },
+    experienceYears: { type: Number },
+    salary: { type: Number },
+    shiftStart: { type: String },
+    shiftEnd: { type: String },
+    status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
+    profilePhoto: { type: String }
 }, { timestamps: true });
 
 // Hash password before saving
