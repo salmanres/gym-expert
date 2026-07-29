@@ -24,6 +24,9 @@ import FeeReceipt from './features/owner/FeeReceipt';
 import GymSettings from './features/owner/GymSettings';
 import Staff from './features/owner/Staff';
 import StaffForm from './features/owner/StaffForm';
+import AttendanceDashboard from './features/owner/AttendanceDashboard';
+import GymQRCode from './features/owner/GymQRCode';
+import SelfCheckIn from './features/owner/SelfCheckIn';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -38,6 +41,9 @@ root.render(
         
         {/* Backwards compatibility or alternative direct route */}
         <Route path="/register" element={<Navigate to="/dashboard/register-gym" replace />} />
+
+        {/* Public Routes */}
+        <Route path="/checkin/:gymId" element={<SelfCheckIn />} />
 
         {/* Dashboard Routes */}
         <Route path="/dashboard" element={<DashboardLayout />}>
@@ -61,7 +67,9 @@ root.render(
             <Route path="owner/finance" element={<Finance />} />
             <Route path="owner/finance/collect" element={<PaymentForm />} />
             <Route path="owner/finance/receipt/:id" element={<FeeReceipt />} />
+            <Route path="owner/attendance" element={<AttendanceDashboard />} />
             <Route path="owner/settings" element={<GymSettings />} />
+            <Route path="owner/settings/qr" element={<GymQRCode />} />
             <Route path="owner/staff" element={<Staff />} />
             <Route path="owner/staff/add" element={<StaffForm />} />
             <Route path="owner/staff/edit/:id" element={<StaffForm />} />

@@ -7,7 +7,8 @@ import Input from '../../components/form/Input';
 import Button from '../../components/form/Button';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
-import { FiSettings, FiMapPin, FiInfo } from 'react-icons/fi';
+import { FiSettings, FiMapPin, FiInfo, FiPrinter } from 'react-icons/fi';
+import { Link } from 'react-router-dom';
 
 export default function GymSettings() {
     const [loading, setLoading] = useState(true);
@@ -113,7 +114,12 @@ export default function GymSettings() {
                         </FormSection>
 
                         <FormSection title="QR Geofencing Settings" icon={<FiSettings />} className="grid grid-cols-1 gap-4">
-                            <p className="text-sm text-slate-500 -mt-2 mb-2">Enable QR attendance and ensure members can only mark attendance within your gym's physical range.</p>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 -mt-2 mb-2">
+                                <p className="text-sm text-slate-500">Enable QR attendance and ensure members can only mark attendance within your gym's physical range.</p>
+                                <Link to="/dashboard/owner/settings/qr" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-bold text-xs rounded transition-colors w-max">
+                                    <FiPrinter /> Print QR Code
+                                </Link>
+                            </div>
                             
                             <div className="flex items-center gap-3">
                                 <input 

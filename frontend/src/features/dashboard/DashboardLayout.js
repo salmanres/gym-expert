@@ -3,7 +3,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
     FiLogOut, FiList, FiPlusCircle, FiUser, FiHome, FiChevronDown, FiActivity,
     FiClipboard, FiUsers, FiCreditCard, FiUserCheck, FiHeart,
-    FiBox, FiDollarSign, FiBarChart2, FiSettings
+    FiBox, FiDollarSign, FiBarChart2, FiSettings, FiCheckSquare
 } from 'react-icons/fi';
 import { CgGym } from 'react-icons/cg';
 import { toast } from 'react-toastify';
@@ -155,6 +155,13 @@ function DashboardLayout() {
                                 >
                                     <FiBox className="text-base" />
                                     <span>Inventory</span>
+                                </Link>
+                                <Link 
+                                    to="/dashboard/owner/attendance" 
+                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/attendance') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
+                                >
+                                    <FiCheckSquare className="text-base" />
+                                    <span>Attendance</span>
                                 </Link>
                                 <Link 
                                     to="/dashboard/owner/finance" 

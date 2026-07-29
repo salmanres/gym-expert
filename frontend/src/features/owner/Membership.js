@@ -35,6 +35,7 @@ function Memberships() {
                 if (membership) {
                     member.membershipPlan = membership.membershipPlanId;
                     member.activeMembership = membership;
+                    member.planStartDate = membership.startDate;
                     member.planEndDate = membership.endDate;
                     member.paymentStatus = membership.paymentStatus;
                 }

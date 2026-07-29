@@ -10,6 +10,7 @@ const memberRoutes = require('./routes/memberRoutes');
 const membershipRoutes = require('./routes/membershipRoutes');
 const memberMembershipRoutes = require('./routes/memberMembershipRoutes');
 const staffRoutes = require('./routes/staffRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
 
 const app = express();
 
@@ -33,9 +34,10 @@ app.use('/api/gyms', gymRoutes);
 app.use('/api/branches', branchRoutes);
 app.use('/api/enquiries', enquiryRoutes);
 app.use('/api/members', memberRoutes);
-app.use('/api/membership-plans', membershipRoutes); // Updated to /api/membership-plans based on controller
+app.use('/api/membership-plans', membershipRoutes);
 app.use('/api/member-memberships', memberMembershipRoutes);
 app.use('/api/staff', staffRoutes);
+app.use('/api/attendance', attendanceRoutes);
 
 // Basic Route for testing
 app.get('/', (req, res) => {

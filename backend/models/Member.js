@@ -40,7 +40,11 @@ const memberSchema = new mongoose.Schema({
     joiningDate: { type: Date, required: true, default: Date.now },
     status: { type: String, enum: ['Active', 'Inactive', 'Frozen'], default: 'Active' },
     freezeDate: { type: Date },
-    profilePhoto: { type: String }
+    profilePhoto: { type: String },
+    
+    // Auth fields
+    otp: { type: String },
+    otpExpiry: { type: Date }
 }, {
     timestamps: true
 });
