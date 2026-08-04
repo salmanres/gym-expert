@@ -30,46 +30,54 @@ exports.markAttendance = async (req, res) => {
         
         let targetUserId = userId || req.user._id; 
         
-        // Find member to get gymId
-        const targetUser = await Member.findById(targetUserId);
+        let targetUser = await Member.findById(targetUserId);
+        let isStaff = false;
+        
+        if (!targetUser) {
+            targetUser = await User.findById(targetUserId);
+            isStaff = true;
+        }
+
         if (!targetUser || !targetUser.gymId) {
-            return res.status(404).json({ message: 'Member or gym association not found' });
+            return res.status(404).json({ message: 'Member/Staff or gym association not found' });
         }
         if (targetUser.status === 'Frozen') {
-            return res.status(403).json({ message: 'Member is currently Frozen. Attendance cannot be marked.' });
+            return res.status(403).json({ message: 'User is currently Frozen. Attendance cannot be marked.' });
         }
         if (targetUser.status !== 'Active') {
-            return res.status(403).json({ message: 'Member is not Active. Attendance cannot be marked.' });
+            return res.status(403).json({ message: 'User is not Active. Attendance cannot be marked.' });
         }
 
         const gymId = targetUser.gymId;
 
-        // Check if member has an active membership
-        const currentDate = new Date();
-        currentDate.setHours(0, 0, 0, 0);
-        
-        const activeMembership = await MemberMembership.findOne({
-            memberId: targetUserId,
-            membershipStatus: 'Active',
-            endDate: { $gte: currentDate }
-        });
+        if (!isStaff) {
+            // Check if member has an active membership
+            const currentDate = new Date();
+            currentDate.setHours(0, 0, 0, 0);
+            
+            const activeMembership = await MemberMembership.findOne({
+                memberId: targetUserId,
+                membershipStatus: 'Active',
+                endDate: { $gte: currentDate }
+            });
 
-        if (!activeMembership) {
-            // Check if member is on a valid trial period
-            let isValidTrial = false;
-            if (targetUser.enquiryId) {
-                const enquiry = await Enquiry.findById(targetUser.enquiryId);
-                if (enquiry && enquiry.trialEndDate) {
-                    const trialEndDate = new Date(enquiry.trialEndDate);
-                    trialEndDate.setHours(23, 59, 59, 999);
-                    if (currentDate <= trialEndDate) {
-                        isValidTrial = true;
+            if (!activeMembership) {
+                // Check if member is on a valid trial period
+                let isValidTrial = false;
+                if (targetUser.enquiryId) {
+                    const enquiry = await Enquiry.findById(targetUser.enquiryId);
+                    if (enquiry && enquiry.trialEndDate) {
+                        const trialEndDate = new Date(enquiry.trialEndDate);
+                        trialEndDate.setHours(23, 59, 59, 999);
+                        if (currentDate <= trialEndDate) {
+                            isValidTrial = true;
+                        }
                     }
                 }
-            }
 
-            if (!isValidTrial) {
-                return res.status(400).json({ message: 'No valid membership plan or active trial found. Attendance cannot be marked.' });
+                if (!isValidTrial) {
+                    return res.status(400).json({ message: 'No valid membership plan or active trial found. Attendance cannot be marked.' });
+                }
             }
         }
 
@@ -188,34 +196,52 @@ exports.getMyAttendance = async (req, res) => {
     }
 };
 
-// @desc    Get Daily Attendance Sheet (All members with their status)
+// @desc    Get Daily Attendance Sheet (All members/staff with their status)
 // @route   GET /api/attendance/daily-sheet
 // @access  Private (Gym Owner/Admin)
 exports.getDailySheet = async (req, res) => {
     try {
-        const { date } = req.query;
+        const { date, type = 'members' } = req.query;
         const queryDate = date ? new Date(date) : new Date();
         queryDate.setHours(0, 0, 0, 0);
 
-        const members = await Member.find({ 
-            gymId: req.user.gymId
-        }).select('firstName lastName contactNumber profilePhoto status');
+        let users = [];
+        if (type === 'staff') {
+            const staffMembers = await User.find({ 
+                gymId: req.user.gymId,
+                role: { $in: ['STAFF', 'TRAINER', 'BRANCH_MANAGER', 'ADMIN'] }
+            }).select('name phone profilePhoto status');
+            
+            users = staffMembers.map(u => ({
+                _id: u._id,
+                name: u.name,
+                phone: u.phone,
+                profilePhoto: u.profilePhoto,
+                status: u.status
+            }));
+        } else {
+            const members = await Member.find({ 
+                gymId: req.user.gymId
+            }).select('firstName lastName contactNumber profilePhoto status');
+            
+            users = members.map(m => ({
+                _id: m._id,
+                name: `${m.firstName} ${m.lastName || ''}`.trim(),
+                phone: m.contactNumber,
+                profilePhoto: m.profilePhoto,
+                status: m.status
+            }));
+        }
 
         const attendanceRecords = await Attendance.find({
             gymId: req.user.gymId,
             date: queryDate
         });
 
-        const sheet = members.map(member => {
-            const record = attendanceRecords.find(a => a.userId.toString() === member._id.toString());
+        const sheet = users.map(user => {
+            const record = attendanceRecords.find(a => a.userId.toString() === user._id.toString());
             return {
-                user: {
-                    _id: member._id,
-                    name: `${member.firstName} ${member.lastName || ''}`.trim(),
-                    phone: member.contactNumber,
-                    profilePhoto: member.profilePhoto,
-                    status: member.status
-                },
+                user: user,
                 attendance: record || null
             };
         });

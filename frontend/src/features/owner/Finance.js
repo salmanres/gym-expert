@@ -52,7 +52,7 @@ export default function Finance() {
             }).filter(m => m.membershipPlan);
             
             setMembers(membersWithPlans);
-            setTransactions(txRes.data);
+            setTransactions((txRes.data || []).filter(t => Number(t.amountPaid) > 0));
             setLoading(false);
         } catch (error) {
             toast.error("Failed to fetch finance records");

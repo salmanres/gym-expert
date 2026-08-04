@@ -3,7 +3,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
     FiLogOut, FiList, FiPlusCircle, FiUser, FiHome, FiChevronDown, FiActivity,
     FiClipboard, FiUsers, FiCreditCard, FiUserCheck, FiHeart,
-    FiBox, FiDollarSign, FiBarChart2, FiSettings, FiCheckSquare
+    FiBox, FiDollarSign, FiBarChart2, FiSettings, FiCheckSquare, FiMenu, FiX
 } from 'react-icons/fi';
 import { CgGym } from 'react-icons/cg';
 import { toast } from 'react-toastify';
@@ -13,10 +13,15 @@ function DashboardLayout() {
     const navigate = useNavigate();
     const location = useLocation();
     const [gyms, setGyms] = useState([]);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     
     // Quick user check
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
+
+    useEffect(() => {
+        setSidebarOpen(false);
+    }, [location.pathname]);
 
     useEffect(() => {
         if (user?.role === 'SUPERADMIN') {
@@ -43,20 +48,35 @@ function DashboardLayout() {
     };
 
     return (
-        <div className="min-h-screen flex bg-slate-50 text-slate-800 font-sans print:bg-white">
+        <div className="h-screen flex bg-slate-50 text-slate-800 font-sans print:bg-white overflow-hidden">
+            
+            {/* Mobile Sidebar Backdrop */}
+            {sidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-slate-900/50 z-40 md:hidden" 
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="w-56 bg-white flex flex-col md:flex border-r border-slate-200 z-20 shrink-0 print:hidden">
+            <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-white transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 md:relative md:translate-x-0 md:w-56 border-r border-slate-200 flex flex-col shrink-0 print:hidden`}>
                 <div className="h-14 bg-slate-950 p-4 flex items-center gap-3">
                     <div className="w-8 h-8 bg-emerald-600 rounded flex items-center justify-center text-white shadow-md">
                         <CgGym className="text-lg text-white" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                         <h2 className="font-bold text-white text-base tracking-tight leading-none">Gym Admin</h2>
                         <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1 mt-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                            {user?.role === 'SUPERADMIN' ? 'SUPER ADMIN' : 'GYM OWNER'}
+                            {user?.role ? user.role.replace('_', ' ') : 'USER'}
                         </p>
                     </div>
+                    <button 
+                        onClick={() => setSidebarOpen(false)} 
+                        className="md:hidden text-slate-400 hover:text-white"
+                    >
+                        <FiX className="text-xl" />
+                    </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto py-2 flex flex-col gap-2 custom-scrollbar">
@@ -97,7 +117,7 @@ function DashboardLayout() {
                         </>
                     )}
 
-                    {user?.role === 'GYM_OWNER' && (
+                    {['GYM_OWNER', 'TRAINER', 'STAFF', 'ADMIN', 'BRANCH_MANAGER'].includes(user?.role) && (
                         <>
                             <div className="flex flex-col gap-0.5">
                                 <Link 
@@ -116,46 +136,36 @@ function DashboardLayout() {
                                 </Link>
                                 <Link 
                                     to="/dashboard/owner/members" 
-                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/members') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
+                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${
+                                        location.pathname === '/dashboard/owner/members' || location.pathname.startsWith('/dashboard/owner/members/') 
+                                        ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' 
+                                        : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'
+                                    }`}
                                 >
                                     <FiUsers className="text-base" />
                                     <span>Members</span>
                                 </Link>
                                 <Link 
                                     to="/dashboard/owner/membership" 
-                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/membership') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
+                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${
+                                        location.pathname === '/dashboard/owner/membership' || location.pathname.startsWith('/dashboard/owner/membership/') 
+                                        ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' 
+                                        : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'
+                                    }`}
                                 >
                                     <FiCreditCard className="text-base" />
                                     <span>Membership</span>
                                 </Link>
-                                <Link 
-                                    to="/dashboard/owner/staff" 
-                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/staff') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
-                                >
-                                    <FiUserCheck className="text-base" />
-                                    <span>Trainers</span>
-                                </Link>
-                                <Link 
-                                    to="/dashboard/owner/diet" 
-                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/diet') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
-                                >
-                                    <FiHeart className="text-base" />
-                                    <span>Diet</span>
-                                </Link>
-                                <Link 
-                                    to="/dashboard/owner/workout" 
-                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/workout') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
-                                >
-                                    <FiActivity className="text-base" />
-                                    <span>Workout</span>
-                                </Link>
-                                <Link 
-                                    to="/dashboard/owner/inventory" 
-                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/inventory') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
-                                >
-                                    <FiBox className="text-base" />
-                                    <span>Inventory</span>
-                                </Link>
+                                {['GYM_OWNER', 'ADMIN', 'BRANCH_MANAGER'].includes(user?.role) && (
+                                    <Link 
+                                        to="/dashboard/owner/staff" 
+                                        className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/staff') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
+                                    >
+                                        <FiUserCheck className="text-base" />
+                                        <span>Trainers & Staff</span>
+                                    </Link>
+                                )}
+                                
                                 <Link 
                                     to="/dashboard/owner/attendance" 
                                     className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/attendance') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
@@ -163,13 +173,7 @@ function DashboardLayout() {
                                     <FiCheckSquare className="text-base" />
                                     <span>Attendance</span>
                                 </Link>
-                                <Link 
-                                    to="/dashboard/owner/finance" 
-                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/finance') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
-                                >
-                                    <FiDollarSign className="text-base" />
-                                    <span>Finance</span>
-                                </Link>
+
                                 <Link 
                                     to="/dashboard/owner/reports" 
                                     className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/reports') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
@@ -177,13 +181,25 @@ function DashboardLayout() {
                                     <FiBarChart2 className="text-base" />
                                     <span>Reports</span>
                                 </Link>
-                                <Link 
-                                    to="/dashboard/owner/settings" 
-                                    className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/settings') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
-                                >
-                                    <FiSettings className="text-base" />
-                                    <span>Settings</span>
-                                </Link>
+
+                                {['GYM_OWNER', 'ADMIN', 'BRANCH_MANAGER'].includes(user?.role) && (
+                                    <>
+                                        <Link 
+                                            to="/dashboard/owner/finance" 
+                                            className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/finance') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
+                                        >
+                                            <FiDollarSign className="text-base" />
+                                            <span>Finance</span>
+                                        </Link>
+                                        <Link 
+                                            to="/dashboard/owner/settings" 
+                                            className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/settings') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
+                                        >
+                                            <FiSettings className="text-base" />
+                                            <span>Settings</span>
+                                        </Link>
+                                    </>
+                                )}
                             </div>
                         </>
                     )}
@@ -205,7 +221,13 @@ function DashboardLayout() {
                 {/* Top Navbar */}
                 <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-10 sticky top-0 print:hidden">
                     <div className="flex items-center gap-4">
-                        <h1 className="text-xl font-bold text-slate-800 hidden sm:block">
+                        <button 
+                            onClick={() => setSidebarOpen(true)} 
+                            className="md:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        >
+                            <FiMenu className="text-xl" />
+                        </button>
+                        <h1 className="text-xl font-bold text-slate-800">
                             {user?.gym?.name || 'Emerald Gym Management'}
                         </h1>
                     </div>

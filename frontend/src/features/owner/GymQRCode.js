@@ -39,13 +39,16 @@ export default function GymQRCode() {
                 title="Gym QR Code" 
                 subtitle="Print and display this QR Code at your reception for self check-in."
                 action={
-                    <button onClick={handlePrint} className="print:hidden flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors">
-                        <FiPrinter /> Print QR Code
+                    <button 
+                        onClick={handlePrint} 
+                        className="print:hidden flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-transform hover:-translate-y-0.5 active:scale-95"
+                    >
+                        <FiPrinter className="text-lg" /> Print QR Code
                     </button>
                 }
             />
 
-            <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto print:p-0 print:overflow-visible flex flex-col items-center justify-center">
+            <div className="relative flex-1 overflow-y-auto print:p-0 print:bg-white print:overflow-visible bg-slate-50 flex flex-col items-center justify-start print:justify-center print:h-screen p-4 sm:p-8">
                 
                 {!gym?.qrAttendanceEnabled && (
                     <div className="print:hidden w-full max-w-xl mb-6 bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-lg flex items-start gap-3 shadow-sm">
@@ -58,7 +61,7 @@ export default function GymQRCode() {
                     </div>
                 )}
 
-                <div className="bg-white border-2 border-slate-200 p-12 rounded-2xl shadow-xl flex flex-col items-center text-center print:border-none print:shadow-none print:w-full">
+                <div className="w-full max-w-md bg-white border border-slate-200 p-10 rounded-2xl shadow-lg flex flex-col items-center text-center print:border-none print:shadow-none print:w-full print:max-w-none print:p-0">
                     <div className="w-24 h-24 bg-slate-900 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg">
                         <span className="font-black text-3xl tracking-tighter">GYM</span>
                     </div>

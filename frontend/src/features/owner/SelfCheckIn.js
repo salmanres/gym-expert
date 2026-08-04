@@ -167,29 +167,29 @@ export default function SelfCheckIn() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black flex flex-col items-center justify-center p-0 sm:p-6">
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
             <ToastContainer theme="dark" position="top-center" />
             
-            <div className="w-full max-w-md bg-white sm:rounded-[2rem] shadow-2xl overflow-hidden relative flex flex-col min-h-screen sm:min-h-[600px]">
+            {/* Animated Background Orbs */}
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-600/20 rounded-full mix-blend-screen filter blur-[100px] animate-pulse"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-600/20 rounded-full mix-blend-screen filter blur-[100px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+            
+            <div className="w-full max-w-sm bg-slate-900/60 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden relative flex flex-col z-10 transition-all duration-500">
                 
-                <div className="bg-emerald-600 p-8 text-center relative overflow-hidden shrink-0">
-                    <div className="absolute top-0 right-0 p-16 bg-emerald-500 rounded-full opacity-50 transform translate-x-10 -translate-y-10 blur-xl"></div>
-                    <div className="absolute bottom-0 left-0 p-12 bg-emerald-700 rounded-full opacity-50 transform -translate-x-8 translate-y-8 blur-lg"></div>
-                    
-                    <div className="relative z-10">
-                        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg text-emerald-600">
-                            <FiMapPin className="text-3xl" />
-                        </div>
-                        <h1 className="text-2xl font-black text-white tracking-tight uppercase">Gym Check-In</h1>
-                        {uiState === 'init' && <p className="text-emerald-100 text-sm font-medium mt-1">Ready to mark your attendance</p>}
-                        {uiState === 'phone' && <p className="text-emerald-100 text-sm font-medium mt-1">Please enter your registered phone number</p>}
-                        {uiState === 'otp' && <p className="text-emerald-100 text-sm font-medium mt-1">Verify your phone number</p>}
+                {/* Header Area */}
+                <div className="p-8 pb-4 text-center relative">
+                    <div className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-[0_0_30px_rgba(16,185,129,0.3)] text-white transform hover:scale-105 transition-transform">
+                        <FiMapPin className="text-2xl" />
                     </div>
+                    <h1 className="text-2xl font-black text-white tracking-tight uppercase">Gym Check-In</h1>
+                    {uiState === 'init' && <p className="text-slate-400 text-sm font-medium mt-1">Ready to mark your attendance</p>}
+                    {uiState === 'phone' && <p className="text-slate-400 text-sm font-medium mt-1">Enter your registered phone number</p>}
+                    {uiState === 'otp' && <p className="text-slate-400 text-sm font-medium mt-1">Verify your phone number</p>}
                 </div>
 
-                <div className="p-8 flex-1 flex flex-col justify-center bg-white">
+                <div className="p-8 pt-4 flex flex-col justify-center relative">
                     {message && uiState !== 'success' && uiState !== 'loading' && (
-                        <div className="mb-6 bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl text-sm font-bold flex gap-3 shadow-sm">
+                        <div className="mb-6 bg-rose-500/10 border border-rose-500/20 text-rose-400 px-4 py-3 rounded-2xl text-sm font-bold flex gap-3 shadow-sm backdrop-blur-sm">
                             <FiXCircle className="shrink-0 text-lg mt-0.5" />
                             <span>{message}</span>
                         </div>
@@ -198,50 +198,47 @@ export default function SelfCheckIn() {
                     {uiState === 'init' && (
                         <div className="text-center space-y-6">
                             {memberName && (
-                                <h2 className="text-xl font-bold text-slate-800 mb-2">Hello, {memberName}</h2>
+                                <h2 className="text-xl font-bold text-white mb-2">Hello, <span className="text-emerald-400">{memberName}</span></h2>
                             )}
                             
                             {attendanceStatus === 'none' && (
-                                <Button 
+                                <button 
                                     onClick={handleDirectCheckIn}
-                                    fullWidth
-                                    className="!py-5 !rounded-xl !font-black !text-xl shadow-lg active:scale-95 transform hover:-translate-y-1"
-                                    icon={<FiMapPin />}
+                                    className="w-full py-5 rounded-2xl font-black text-lg text-slate-900 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 shadow-[0_0_40px_rgba(16,185,129,0.4)] active:scale-95 transform transition-all flex items-center justify-center gap-2"
                                 >
+                                    <FiMapPin className="text-xl" />
                                     Tap to Check In
-                                </Button>
+                                </button>
                             )}
 
                             {attendanceStatus === 'checked_in' && (
-                                <Button 
+                                <button 
                                     onClick={handleDirectCheckIn}
-                                    variant="danger"
-                                    fullWidth
-                                    className="!py-5 !rounded-xl !font-black !text-xl shadow-lg active:scale-95 transform hover:-translate-y-1 !bg-amber-500 hover:!bg-amber-600"
-                                    icon={<FiMapPin />}
+                                    className="w-full py-5 rounded-2xl font-black text-lg text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 shadow-[0_0_40px_rgba(245,158,11,0.4)] active:scale-95 transform transition-all flex items-center justify-center gap-2"
                                 >
+                                    <FiMapPin className="text-xl" />
                                     Tap to Check Out
-                                </Button>
+                                </button>
                             )}
 
                             {attendanceStatus === 'checked_out' && (
-                                <div className="bg-slate-100 rounded-xl p-5 border border-slate-200">
-                                    <p className="text-slate-600 font-bold flex items-center justify-center gap-2">
-                                        <FiCheckCircle className="text-emerald-500 text-xl" />
-                                        Attendance Completed Today
+                                <div className="bg-white/5 rounded-2xl p-6 border border-white/10 backdrop-blur-sm">
+                                    <p className="text-emerald-400 text-base font-bold flex items-center justify-center gap-2">
+                                        <FiCheckCircle className="text-xl" />
+                                        Attendance Completed
                                     </p>
                                 </div>
                             )}
 
-                            <p className="text-center text-xs font-bold text-slate-400">
-                                Requires Location Access
+                            <p className="text-center text-[11px] font-bold text-slate-500 mt-4 tracking-wider uppercase">
+                                Requires GPS Location Access
                             </p>
                             <button 
                                 onClick={() => {
                                     localStorage.removeItem(`deviceToken_${gymId}`);
                                     setUiState('phone');
                                 }}
-                                className="text-xs text-rose-500 hover:underline font-bold mt-4"
+                                className="text-sm text-slate-400 hover:text-white font-medium mt-6 transition-colors"
                             >
                                 Not you? Change account
                             </button>
@@ -250,50 +247,52 @@ export default function SelfCheckIn() {
 
                     {uiState === 'phone' && (
                         <form onSubmit={handleRequestOTP} className="space-y-6">
-                            <Input
-                                label="Phone Number"
-                                type="tel"
-                                required
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                placeholder="e.g. 9876543210"
-                                className="!py-3 !text-lg !font-bold"
-                            />
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Phone Number</label>
+                                <input
+                                    type="tel"
+                                    required
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    placeholder="e.g. 9876543210"
+                                    className="w-full py-4 px-5 bg-white/5 border border-white/10 rounded-2xl text-white font-bold text-lg focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all placeholder:text-slate-600"
+                                />
+                            </div>
 
-                            <Button 
+                            <button 
                                 type="submit"
-                                fullWidth
-                                className="!py-4 !rounded-xl !font-black !text-lg shadow-lg active:scale-95 !bg-slate-900 hover:!bg-slate-800"
+                                className="w-full py-4 rounded-2xl font-black text-slate-900 bg-emerald-400 hover:bg-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.3)] active:scale-95 transform transition-all"
                             >
                                 Send OTP
-                            </Button>
+                            </button>
                         </form>
                     )}
 
                     {uiState === 'otp' && (
                         <form onSubmit={handleVerifyOTP} className="space-y-6">
-                            <Input
-                                label="6-Digit OTP"
-                                type="number"
-                                required
-                                value={otp}
-                                onChange={(e) => setOtp(e.target.value)}
-                                placeholder="Enter OTP"
-                                className="!py-3 !text-lg !font-bold tracking-widest text-center"
-                            />
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">6-Digit OTP</label>
+                                <input
+                                    type="number"
+                                    required
+                                    value={otp}
+                                    onChange={(e) => setOtp(e.target.value)}
+                                    placeholder="••••••"
+                                    className="w-full py-4 px-5 bg-white/5 border border-white/10 rounded-2xl text-white font-black text-2xl tracking-[0.5em] text-center focus:outline-none focus:border-emerald-500 focus:bg-white/10 transition-all placeholder:text-slate-700"
+                                />
+                            </div>
 
-                            <Button 
+                            <button 
                                 type="submit"
-                                fullWidth
-                                className="!py-4 !rounded-xl !font-black !text-lg shadow-lg active:scale-95"
+                                className="w-full py-4 rounded-2xl font-black text-slate-900 bg-emerald-400 hover:bg-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.3)] active:scale-95 transform transition-all"
                             >
                                 Verify & Check In
-                            </Button>
+                            </button>
 
                             <button 
                                 type="button"
                                 onClick={() => { setUiState('phone'); setOtp(''); }}
-                                className="w-full text-sm text-slate-500 font-bold hover:text-slate-700 text-center"
+                                className="w-full text-sm text-slate-400 font-medium hover:text-white text-center mt-2 transition-colors"
                             >
                                 Change Phone Number
                             </button>
@@ -302,22 +301,26 @@ export default function SelfCheckIn() {
 
                     {uiState === 'loading' && (
                         <div className="py-12 flex flex-col items-center justify-center space-y-4">
-                            <FiLoader className="text-4xl text-emerald-500 animate-spin" />
-                            <p className="text-slate-600 font-bold animate-pulse text-lg">Processing...</p>
+                            <div className="relative w-16 h-16 flex items-center justify-center">
+                                <div className="absolute inset-0 border-4 border-slate-700 rounded-full"></div>
+                                <div className="absolute inset-0 border-4 border-emerald-500 rounded-full border-t-transparent animate-spin"></div>
+                                <FiMapPin className="text-emerald-500 text-xl animate-pulse" />
+                            </div>
+                            <p className="text-slate-400 font-medium animate-pulse text-sm">Processing...</p>
                         </div>
                     )}
 
                     {uiState === 'error' && (
-                        <div className="py-8 flex flex-col items-center text-center">
-                            <div className="w-24 h-24 bg-rose-100 rounded-full flex items-center justify-center mb-6 shadow-inner relative">
-                                <FiXCircle className="text-5xl text-rose-600 relative z-10" />
+                        <div className="py-6 flex flex-col items-center text-center">
+                            <div className="w-20 h-20 bg-rose-500/10 border border-rose-500/20 rounded-full flex items-center justify-center mb-6 shadow-inner relative backdrop-blur-md">
+                                <FiXCircle className="text-4xl text-rose-500 relative z-10" />
                             </div>
-                            <h2 className="text-2xl font-black text-slate-800 tracking-tight mb-2">Check-in Failed</h2>
-                            <p className="text-slate-500 mb-6">{message}</p>
+                            <h2 className="text-xl font-black text-white tracking-tight mb-2">Check-in Failed</h2>
+                            <p className="text-slate-400 mb-8 text-sm">{message}</p>
                             
                             <button 
                                 onClick={resetFlow}
-                                className="font-bold text-rose-600 hover:text-rose-700 bg-rose-50 px-6 py-3 rounded-xl transition-colors"
+                                className="font-bold text-sm text-slate-900 bg-white hover:bg-slate-200 w-full py-4 rounded-2xl transition-all active:scale-95"
                             >
                                 Try Again
                             </button>
@@ -325,20 +328,20 @@ export default function SelfCheckIn() {
                     )}
 
                     {uiState === 'success' && (
-                        <div className="py-8 flex flex-col items-center text-center">
-                            <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mb-6 shadow-inner relative">
-                                <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-20"></div>
-                                <FiCheckCircle className="text-5xl text-emerald-600 relative z-10" />
+                        <div className="py-6 flex flex-col items-center text-center">
+                            <div className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center justify-center mb-6 shadow-inner relative backdrop-blur-md">
+                                <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-20"></div>
+                                <FiCheckCircle className="text-4xl text-emerald-400 relative z-10" />
                             </div>
-                            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Success!</h2>
-                            <p className="text-slate-600 mt-2 font-medium text-lg">
-                                {isCheckingOut ? 'Goodbye' : 'Welcome'}, <span className="font-bold text-emerald-600">{memberName}</span>!
+                            <h2 className="text-2xl font-black text-white tracking-tight">Success!</h2>
+                            <p className="text-slate-300 mt-2 font-medium text-base">
+                                {isCheckingOut ? 'Goodbye' : 'Welcome'}, <span className="font-bold text-emerald-400">{memberName}</span>!
                             </p>
-                            <p className="text-slate-500 mt-1">{message}</p>
+                            <p className="text-slate-500 mt-1 text-xs">{message}</p>
                             
                             <button 
                                 onClick={resetFlow}
-                                className="mt-8 font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-6 py-3 rounded-xl transition-colors"
+                                className="mt-8 font-bold text-sm text-slate-900 bg-emerald-400 hover:bg-emerald-300 w-full py-4 rounded-2xl transition-all active:scale-95 shadow-[0_0_20px_rgba(52,211,153,0.3)]"
                             >
                                 Back to Home
                             </button>

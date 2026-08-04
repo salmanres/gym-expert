@@ -194,7 +194,12 @@ export default function Members() {
                         </button>
                     ) : (
                         <>
-                            <button onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: member } })} className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Collect Fee">
+                            <button 
+                                onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: member } })} 
+                                className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${member.paymentStatus === 'Paid' ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'}`} 
+                                title={member.paymentStatus === 'Paid' ? 'Fee Fully Paid' : 'Collect Fee'}
+                                disabled={member.paymentStatus === 'Paid'}
+                            >
                                 <FiCreditCard className="text-sm" />
                             </button>
                             <button onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })} className="w-8 h-8 rounded bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Renew or Upgrade Plan">

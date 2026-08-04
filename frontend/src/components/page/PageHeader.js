@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { FiSearch, FiPlus, FiArrowLeft } from 'react-icons/fi';
 import Button from '../form/Button';
 
-export default function PageHeader({ title, subtitle, searchTerm, onSearchChange, onAdd, addLabel, showBack }) {
+export default function PageHeader({ title, subtitle, searchTerm, onSearchChange, onAdd, addLabel, showBack, action }) {
     const navigate = useNavigate();
     
     return (
-        <div className="relative flex flex-col lg:flex-row justify-between items-start lg:items-center px-5 py-5 md:px-8 md:py-6 border-b border-slate-200 bg-gradient-to-r from-emerald-50/50 shrink-0 gap-5 overflow-hidden">
+        <div className="print:hidden relative flex flex-col lg:flex-row justify-between items-start lg:items-center px-5 py-5 md:px-8 md:py-6 border-b border-slate-200 bg-gradient-to-r from-emerald-50/50 shrink-0 gap-5 overflow-hidden">
             {/* Subtle vibrant background glows */}
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-200 rounded-full mix-blend-multiply filter blur-[80px] opacity-20 -translate-y-1/2 translate-x-1/3 pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-72 h-72 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 translate-y-1/2 -translate-x-1/4 pointer-events-none" />
@@ -43,6 +43,7 @@ export default function PageHeader({ title, subtitle, searchTerm, onSearchChange
                         {addLabel || 'Add New'}
                     </Button>
                 )}
+                {action && action}
             </div>
         </div>
     );

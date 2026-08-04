@@ -92,65 +92,63 @@ function MembershipForm() {
     }
 
     const customStyles = {
-        control: (base, state) => ({
-            ...base,
+        control: (provided, state) => ({
+            ...provided,
             minHeight: '38px',
             borderRadius: '0.5rem',
             borderColor: state.isFocused ? '#10b981' : '#e2e8f0',
-            boxShadow: state.isFocused ? '0 0 0 2px rgba(16, 185, 129, 0.2)' : 'none',
             backgroundColor: '#ffffff',
-            '&:hover': {
-                borderColor: state.isFocused ? '#10b981' : '#cbd5e1'
-            },
-            fontSize: '0.875rem',
-            fontWeight: '500'
-        }),
-        valueContainer: (base) => ({
-            ...base,
-            padding: '2px 8px'
-        }),
-        input: (base) => ({
-            ...base,
-            margin: '0',
-            padding: '0'
-        }),
-        multiValue: (base) => ({
-            ...base,
-            backgroundColor: '#f1f5f9',
-            borderRadius: '0.25rem'
-        }),
-        multiValueLabel: (base) => ({
-            ...base,
-            color: '#334155',
-            fontSize: '0.75rem',
-            fontWeight: '600'
-        }),
-        multiValueRemove: (base) => ({
-            ...base,
-            color: '#64748b',
-            ':hover': {
-                backgroundColor: '#f87171',
-                color: 'white',
-            },
-        }),
-        menu: (base) => ({
-            ...base,
-            borderRadius: '0.5rem',
+            boxShadow: state.isFocused ? '0 0 0 4px rgba(16, 185, 129, 0.1)' : 'none',
+            '&:hover': { borderColor: '#10b981' },
             fontSize: '0.875rem',
             fontWeight: '500',
             color: '#1e293b',
-            zIndex: 50,
-            overflow: 'hidden',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+            transition: 'all 0.2s ease',
+            paddingLeft: '0.25rem'
         }),
-        option: (base, state) => ({
-            ...base,
-            backgroundColor: state.isFocused ? '#ecfdf5' : '#ffffff',
-            color: state.isFocused ? '#047857' : '#1e293b',
+        option: (provided, state) => ({
+            ...provided,
+            backgroundColor: state.isSelected ? '#10b981' : state.isFocused ? '#ecfdf5' : 'transparent',
+            color: state.isSelected ? 'white' : '#475569',
+            fontSize: '0.875rem',
+            fontWeight: '500',
             cursor: 'pointer',
-            ':active': {
-                backgroundColor: '#d1fae5'
-            }
+            ':active': { backgroundColor: '#d1fae5' }
+        }),
+        singleValue: (provided) => ({
+            ...provided,
+            color: '#1e293b'
+        }),
+        placeholder: (provided) => ({
+            ...provided,
+            color: '#94a3b8'
+        }),
+        menu: (provided) => ({
+            ...provided,
+            borderRadius: '0.5rem',
+            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+            border: '1px solid #e2e8f0',
+            overflow: 'hidden',
+            zIndex: 50
+        }),
+        multiValue: (provided) => ({
+            ...provided,
+            backgroundColor: '#ecfdf5',
+            borderRadius: '0.25rem'
+        }),
+        multiValueLabel: (provided) => ({
+            ...provided,
+            color: '#047857',
+            fontSize: '0.75rem',
+            fontWeight: '600'
+        }),
+        multiValueRemove: (provided) => ({
+            ...provided,
+            color: '#10b981',
+            ':hover': {
+                backgroundColor: '#10b981',
+                color: 'white',
+            },
         })
     };
 

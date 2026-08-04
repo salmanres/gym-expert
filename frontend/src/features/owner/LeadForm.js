@@ -26,7 +26,7 @@ export default function LeadForm() {
         firstName: '', lastName: '', gender: 'Male', dob: '', contactNumber: '', altContact: '', email: '',
         address: '', source: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
         convertibility: 'Warm', status: 'Pending', attendedBy: 'Admin',
-        response: '', sendTextAndEmail: false, sendWhatsApp: false
+        response: '', offerAmount: '', offerDetails: '', sendTextAndEmail: false, sendWhatsApp: false
     });
     const [errors, setErrors] = useState({});
 
@@ -170,6 +170,28 @@ export default function LeadForm() {
                             <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Contacted', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
                                 {formData.status === 'Lead' && <option value="Lead" className="hidden">Lead</option>}
                             </Select>
+                            
+                            {formData.status === 'Negotiation' && (
+                                <>
+                                    <Input 
+                                        type="number"
+                                        label="Offer Amount (₹)" 
+                                        name="offerAmount" 
+                                        value={formData.offerAmount || ''} 
+                                        onChange={handleChange} 
+                                        placeholder="e.g. 5000" 
+                                    />
+                                    <Input 
+                                        containerClassName="sm:col-span-2 lg:col-span-2"
+                                        label="Offer Details" 
+                                        name="offerDetails" 
+                                        value={formData.offerDetails || ''} 
+                                        onChange={handleChange} 
+                                        placeholder="e.g. 3 Months + 1 Month Free" 
+                                    />
+                                </>
+                            )}
+                            
                             <Textarea containerClassName="sm:col-span-2 lg:col-span-3 xl:col-span-4" label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} required className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
                         </FormSection>
 

@@ -116,6 +116,18 @@ const memberMembershipSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+
+    bonusDays: {
+      type: Number,
+      default: 0
+    },
+
+    bonusHistory: [{
+      days: { type: Number, required: true },
+      reason: { type: String, required: true },
+      date: { type: Date, default: Date.now },
+      addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    }],
   },
   {
     timestamps: true,

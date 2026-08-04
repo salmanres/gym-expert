@@ -4,6 +4,7 @@ import PageHeader from '../../components/page/PageHeader';
 import DataTable from '../../components/page/DataTable';
 import EmptyState from '../../components/page/EmptyState';
 import Loader from '../../components/page/Loader';
+import Tabs from '../../components/page/Tabs';
 import { FiCheckCircle, FiXCircle, FiClock, FiUserCheck, FiPhone } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
@@ -12,11 +13,12 @@ export default function AttendanceDashboard() {
     const [sheet, setSheet] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [activeTab, setActiveTab] = useState('Members');
     
     const fetchSheet = async () => {
         setLoading(true);
         try {
-            const res = await apiClient.get(`/attendance/daily-sheet?date=${selectedDate}`);
+            const res = await apiClient.get(`/attendance/daily-sheet?date=${selectedDate}&type=${activeTab.toLowerCase()}`);
             setSheet(res.data);
         } catch (error) {
             toast.error("Failed to load attendance sheet");
@@ -27,7 +29,7 @@ export default function AttendanceDashboard() {
 
     useEffect(() => {
         fetchSheet();
-    }, [selectedDate]);
+    }, [selectedDate, activeTab]);
 
     const handleMarkAttendance = async (userId, status) => {
         try {
@@ -170,6 +172,12 @@ export default function AttendanceDashboard() {
                 subtitle="View and manually override attendance for your members or staff."
             />
 
+            <Tabs 
+                tabs={['Members', 'Staff']} 
+                activeTab={activeTab} 
+                onTabChange={setActiveTab} 
+            />
+
             <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -211,8 +219,8 @@ export default function AttendanceDashboard() {
                 ) : (
                     <EmptyState 
                         icon={<FiUserCheck size={48} />}
-                        title="No members found"
-                        description="There are no active members to display."
+                        title={`No ${activeTab} found`}
+                        description={`There are no active ${activeTab} to display.`}
                     />
                 )}
             </div>

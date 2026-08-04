@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { FiEdit2, FiTrash2, FiCheckCircle, FiXCircle, FiPlus, FiAlertCircle, FiCreditCard } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiCheckCircle, FiXCircle, FiPlus, FiAlertCircle, FiCreditCard, FiRefreshCw, FiGift } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
@@ -16,6 +16,7 @@ function Memberships() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('Plans'); // 'Plans', 'Assign', 'Active', 'Expired', 'Renewals'
+    const [bonusModal, setBonusModal] = useState({ open: false, membership: null, days: '', reason: '' });
     
     // Filters
     const [filterPaymentStatus, setFilterPaymentStatus] = useState('All');
@@ -66,6 +67,26 @@ function Memberships() {
             fetchData();
         } catch (error) {
             toast.error("Failed to delete membership");
+        }
+    };
+
+    const handleAddBonus = async (e) => {
+        e.preventDefault();
+        if (!bonusModal.days || !bonusModal.reason) {
+            toast.error("Please enter days and reason");
+            return;
+        }
+
+        try {
+            await apiClient.post(`/member-memberships/${bonusModal.membership._id}/bonus`, {
+                days: bonusModal.days,
+                reason: bonusModal.reason
+            });
+            toast.success("Bonus days added successfully!");
+            setBonusModal({ open: false, membership: null, days: '', reason: '' });
+            fetchData();
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to add bonus days");
         }
     };
 
@@ -186,6 +207,9 @@ function Memberships() {
                         <div>
                             <p className="font-bold text-slate-700 text-sm">{m.membershipPlan.name}</p>
                             <p className="text-[10px] text-slate-500">{new Date(m.planStartDate).toLocaleDateString()} to {endDate.toLocaleDateString()}</p>
+                            {m.activeMembership?.bonusDays > 0 && (
+                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded ml-1">+{m.activeMembership.bonusDays} Bonus Days</span>
+                            )}
                         </div>
                     ) : (
                         <span className="text-xs text-slate-400 italic">No Plan</span>
@@ -211,6 +235,16 @@ function Memberships() {
                         {(m.paymentStatus === 'Pending' || m.paymentStatus === 'Partial') && m.membershipPlan && activeTab !== 'Assign' && (
                             <button onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: m } })} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Collect Fee">
                                 <FiCreditCard className="text-sm" />
+                            </button>
+                        )}
+                        {activeTab === 'Active' && m.activeMembership && (
+                            <button onClick={() => setBonusModal({ open: true, membership: m.activeMembership, days: '', reason: '' })} className="w-8 h-8 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Add Bonus Days / Offer">
+                                <FiGift className="text-sm" />
+                            </button>
+                        )}
+                        {(activeTab === 'Expired' || activeTab === 'Renewals') && (
+                            <button onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, isRenew: true } })} className="w-8 h-8 rounded bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Renew Plan">
+                                <FiRefreshCw className="text-sm" />
                             </button>
                         )}
                         <button onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m } })} className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title={activeTab === 'Assign' ? 'Assign Plan' : 'Update Membership'}>
@@ -278,6 +312,53 @@ function Memberships() {
                     emptyMessage={`No ${activeTab.toLowerCase()} members found.`} 
                     renderRow={renderMemberRow} 
                 />
+            )}
+
+            {/* Bonus Days Modal */}
+            {bonusModal.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+                        <div className="bg-indigo-600 p-4 text-white flex items-center gap-3">
+                            <FiGift className="text-2xl" />
+                            <div>
+                                <h3 className="font-bold text-lg">Add Bonus Days</h3>
+                                <p className="text-xs text-indigo-200">Reward member with extra validity</p>
+                            </div>
+                        </div>
+                        <form onSubmit={handleAddBonus} className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Number of Days <span className="text-rose-500">*</span></label>
+                                <input 
+                                    type="number" 
+                                    required 
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    value={bonusModal.days}
+                                    onChange={e => setBonusModal({ ...bonusModal, days: e.target.value })}
+                                    placeholder="e.g. 5 (or -5 to remove)"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Reason / Offer Name <span className="text-rose-500">*</span></label>
+                                <input 
+                                    type="text" 
+                                    required 
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    value={bonusModal.reason}
+                                    onChange={e => setBonusModal({ ...bonusModal, reason: e.target.value })}
+                                    placeholder="e.g. Referred a friend"
+                                />
+                            </div>
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button type="button" onClick={() => setBonusModal({ open: false, membership: null, days: '', reason: '' })} className="px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                                    Cancel
+                                </button>
+                                <button type="submit" className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                                    Add Days
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
         </PageLayout>
     );

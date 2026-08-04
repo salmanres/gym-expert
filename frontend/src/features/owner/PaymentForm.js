@@ -29,7 +29,8 @@ export default function PaymentForm() {
         baseAmount: autoOpenMember?.membershipPlan?.price || 0,
         discount: autoOpenMember?.discount || 0,
         finalAmount: (autoOpenMember?.membershipPlan?.price || 0) - (autoOpenMember?.discount || 0),
-        amountPaid: autoOpenMember?.amountPaid || '',
+        previouslyPaid: autoOpenMember?.amountPaid || 0,
+        newPaymentAmount: '',
         paymentStatus: autoOpenMember?.paymentStatus || 'Pending',
         paymentMode: autoOpenMember?.paymentMode || 'Cash',
         transactionId: autoOpenMember?.transactionId || ''
@@ -55,8 +56,9 @@ export default function PaymentForm() {
                         member.amountPaid = membership.paidAmount;
                         member.planStartDate = membership.startDate;
                         member.paidUntilDate = membership.paidUntilDate;
-                        // Use membership.balanceAmount to determine how much is owed
                         member.balanceAmount = membership.balanceAmount;
+                        member.discount = membership.discount;
+                        member.finalAmount = membership.finalPrice;
                     }
                     return member;
                 }).filter(m => m.membershipPlan); // Only show members with active plans
@@ -72,8 +74,9 @@ export default function PaymentForm() {
                         membershipPlan: freshMember.membershipPlan?._id || '',
                         baseAmount: freshMember.membershipPlan?.price || 0,
                         discount: freshMember.discount || 0,
-                        finalAmount: (freshMember.membershipPlan?.price || 0) - (freshMember.discount || 0),
-                        amountPaid: freshMember.amountPaid || '',
+                        finalAmount: freshMember.finalAmount || ((freshMember.membershipPlan?.price || 0) - (freshMember.discount || 0)),
+                        previouslyPaid: freshMember.amountPaid || 0,
+                        newPaymentAmount: '',
                         paymentStatus: freshMember.paymentStatus || 'Pending',
                         paymentMode: freshMember.paymentMode || 'Cash',
                         transactionId: freshMember.transactionId || ''
@@ -97,8 +100,9 @@ export default function PaymentForm() {
                 updates.membershipPlan = selectedMember.membershipPlan?._id || '';
                 updates.baseAmount = selectedMember.membershipPlan?.price || 0;
                 updates.discount = selectedMember.discount || 0;
-                updates.finalAmount = Math.max(0, updates.baseAmount - updates.discount);
-                updates.amountPaid = selectedMember.amountPaid || '';
+                updates.finalAmount = selectedMember.finalAmount || Math.max(0, updates.baseAmount - updates.discount);
+                updates.previouslyPaid = selectedMember.amountPaid || 0;
+                updates.newPaymentAmount = '';
                 updates.paymentStatus = selectedMember.paymentStatus || 'Pending';
                 updates.paymentMode = selectedMember.paymentMode || 'Cash';
                 updates.transactionId = selectedMember.transactionId || '';
@@ -115,18 +119,21 @@ export default function PaymentForm() {
         let newDisc = name === 'discount' ? parseFloat(value || 0) : parseFloat(formData.discount || 0);
         let newBase = name === 'baseAmount' ? parseFloat(value || 0) : parseFloat(formData.baseAmount || 0);
         let newFinal = Math.max(0, newBase - newDisc);
-        let newAmountPaid = name === 'amountPaid' ? parseFloat(value || 0) : parseFloat(formData.amountPaid || 0);
+        
+        let previouslyPaid = parseFloat(formData.previouslyPaid || 0);
+        let newPayment = name === 'newPaymentAmount' ? parseFloat(value || 0) : parseFloat(formData.newPaymentAmount || 0);
+        let totalPaidNow = previouslyPaid + newPayment;
         
         if (name === 'discount' || name === 'baseAmount') {
             updates.finalAmount = newFinal;
         }
 
-        if (name === 'amountPaid' || name === 'discount' || name === 'baseAmount') {
-            if (newAmountPaid >= newFinal && newFinal > 0) {
+        if (name === 'newPaymentAmount' || name === 'discount' || name === 'baseAmount') {
+            if (totalPaidNow >= newFinal && newFinal > 0) {
                 updates.paymentStatus = 'Paid';
-            } else if (newAmountPaid > 0 && newAmountPaid < newFinal) {
+            } else if (totalPaidNow > 0 && totalPaidNow < newFinal) {
                 updates.paymentStatus = 'Partial';
-            } else if (newAmountPaid <= 0) {
+            } else if (totalPaidNow <= 0) {
                 updates.paymentStatus = 'Pending';
             }
         }
@@ -149,7 +156,9 @@ export default function PaymentForm() {
             
             let updatedPaidUntil = selectedMember?.paidUntilDate;
 
-            // Recalculate paid until based on new amount
+            let totalAmountPaidCalculated = (selectedMember?.amountPaid || 0) + parseFloat(formData.newPaymentAmount || 0);
+            
+            // Recalculate paid until based on new total amount
             if (plan && plan.price > 0) {
                 let totalDurationDays = 0;
                 if (plan.durationUnit === 'Days') totalDurationDays = plan.duration;
@@ -158,11 +167,11 @@ export default function PaymentForm() {
                 else if (plan.durationUnit === 'Years') totalDurationDays = plan.duration * 365;
 
                 if (totalDurationDays > 0) {
-                    if (formData.amountPaid <= 0) {
+                    if (totalAmountPaidCalculated <= 0) {
                         updatedPaidUntil = null;
                     } else {
                         const pricePerDay = plan.price / totalDurationDays;
-                        const daysPaidFor = Math.floor(formData.amountPaid / pricePerDay);
+                        const daysPaidFor = Math.floor(totalAmountPaidCalculated / pricePerDay);
                         
                         let paidUntil = new Date(selectedMember.planStartDate || Date.now());
                         paidUntil.setDate(paidUntil.getDate() + daysPaidFor);
@@ -171,12 +180,12 @@ export default function PaymentForm() {
                 }
             }
 
-            const newPaymentAmount = formData.amountPaid - (selectedMember.amountPaid || 0);
+            const newPaymentAmountValue = parseFloat(formData.newPaymentAmount || 0);
 
             await apiClient.put(`/members/${formData.memberId}`, {
                 ...selectedMember,
                 paymentStatus: formData.paymentStatus,
-                amountPaid: formData.amountPaid,
+                amountPaid: totalAmountPaidCalculated,
                 discount: formData.discount,
                 finalAmount: formData.finalAmount,
                 paymentMode: formData.paymentMode,
@@ -184,7 +193,7 @@ export default function PaymentForm() {
                 paymentDate: new Date().toISOString(),
                 paidUntilDate: updatedPaidUntil,
                 recordTransaction: true,
-                newPaymentAmount: newPaymentAmount > 0 ? newPaymentAmount : 0
+                newPaymentAmount: newPaymentAmountValue > 0 ? newPaymentAmountValue : 0
             });
 
             toast.success("Payment recorded successfully!");
@@ -268,9 +277,11 @@ export default function PaymentForm() {
                             
                             <Input type="number" label="Base Amount (₹)" name="baseAmount" value={formData.baseAmount} readOnly className="bg-slate-50 cursor-not-allowed" />
                             <Input type="number" label="Discount (₹)" name="discount" value={formData.discount} onChange={handleChange} placeholder="e.g. 500" />
-                            <Input type="number" label="Final Amount (₹)" name="finalAmount" value={formData.finalAmount} readOnly className="bg-slate-50 font-bold text-slate-800 cursor-not-allowed" />
+                            <Input type="number" label="Total Plan Fee (₹)" name="finalAmount" value={formData.finalAmount} readOnly className="bg-slate-50 font-bold text-slate-800 cursor-not-allowed" />
 
-                            <Input type="number" label="Amount Paid (₹)" name="amountPaid" value={formData.amountPaid} onChange={handleChange} required placeholder="e.g. 15000" className="border-emerald-200 focus:border-emerald-500" />
+                            <Input type="number" label="Already Paid (₹)" name="previouslyPaid" value={formData.previouslyPaid} readOnly className="bg-blue-50 font-bold text-blue-700 cursor-not-allowed" />
+                            
+                            <Input type="number" label={`Remaining Balance: ₹${Math.max(0, formData.finalAmount - formData.previouslyPaid)}`} name="newPaymentAmount" value={formData.newPaymentAmount} onChange={handleChange} required placeholder="Enter new payment..." className="border-emerald-300 focus:border-emerald-600 font-bold bg-emerald-50/30" />
                             
                             <Select label="Payment Mode" name="paymentMode" value={formData.paymentMode} onChange={handleChange} options={['Cash', 'Card', 'UPI', 'Bank Transfer', 'Other']} />
                             <Input type="text" label="Transaction ID (Optional)" name="transactionId" value={formData.transactionId} onChange={handleChange} placeholder="e.g. UPI-123456789" />

@@ -33,6 +33,8 @@ const enquirySchema = new mongoose.Schema({
     source: { type: String },
     inquiryFor: { type: String },
     response: { type: String },
+    offerAmount: { type: Number },
+    offerDetails: { type: String },
     isMemberCreated: { type: Boolean, default: false },
     sendTextAndEmail: { type: Boolean, default: false },
     sendWhatsApp: { type: Boolean, default: false }

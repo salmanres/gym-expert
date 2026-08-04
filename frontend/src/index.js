@@ -25,6 +25,7 @@ import GymSettings from './features/owner/GymSettings';
 import Staff from './features/owner/Staff';
 import StaffForm from './features/owner/StaffForm';
 import AttendanceDashboard from './features/owner/AttendanceDashboard';
+import Reports from './features/owner/Reports';
 import GymQRCode from './features/owner/GymQRCode';
 import SelfCheckIn from './features/owner/SelfCheckIn';
 import reportWebVitals from './reportWebVitals';
@@ -68,6 +69,7 @@ root.render(
             <Route path="owner/finance/collect" element={<PaymentForm />} />
             <Route path="owner/finance/receipt/:id" element={<FeeReceipt />} />
             <Route path="owner/attendance" element={<AttendanceDashboard />} />
+            <Route path="owner/reports" element={<Reports />} />
             <Route path="owner/settings" element={<GymSettings />} />
             <Route path="owner/settings/qr" element={<GymQRCode />} />
             <Route path="owner/staff" element={<Staff />} />

@@ -81,10 +81,44 @@ const getMemberById = async (req, res) => {
 // @access  Private
 const getTransactions = async (req, res) => {
     try {
-        const transactions = await Transaction.find({ gymId: req.user.gymId })
+        let transactions = await Transaction.find({ 
+            gymId: req.user.gymId,
+            amountPaid: { $gt: 0 }
+        })
             .populate('memberId', 'firstName lastName contactNumber memberId')
             .populate('planId', 'name')
             .sort({ paymentDate: -1 });
+
+        // Auto-sync / backfill any existing MemberMembership payments that missed a Transaction record
+        const MemberMembership = require('../models/MemberMembership');
+        const activeMemberships = await MemberMembership.find({ 
+            gymId: req.user.gymId, 
+            paidAmount: { $gt: 0 } 
+        }).populate('memberId', 'firstName lastName contactNumber memberId').populate('membershipPlanId', 'name');
+
+        const existingMemberTxIds = new Set(transactions.map(t => t.memberId?._id?.toString()));
+
+        for (const m of activeMemberships) {
+            if (m.memberId && m.paidAmount > 0 && !existingMemberTxIds.has(m.memberId._id.toString())) {
+                const newTx = await Transaction.create({
+                    gymId: req.user.gymId,
+                    memberId: m.memberId._id,
+                    planId: m.membershipPlanId?._id || null,
+                    amountPaid: m.paidAmount,
+                    paymentMode: 'Cash',
+                    transactionId: `TRX-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+                    paymentStatus: 'Paid',
+                    paymentDate: m.createdAt || new Date()
+                });
+                const populatedTx = await Transaction.findById(newTx._id)
+                    .populate('memberId', 'firstName lastName contactNumber memberId')
+                    .populate('planId', 'name');
+                transactions.push(populatedTx);
+            }
+        }
+
+        // Re-sort all transactions by date
+        transactions.sort((a, b) => new Date(b.paymentDate || b.createdAt) - new Date(a.paymentDate || a.createdAt));
 
         res.status(200).json(transactions);
     } catch (error) {
@@ -132,15 +166,15 @@ const updateMember = async (req, res) => {
             }
         );
 
-        if (req.body.recordTransaction) {
+        if (req.body.recordTransaction && Number(req.body.newPaymentAmount) > 0) {
             const MemberMembership = require('../models/MemberMembership');
             
-            // 1. Create Transaction
+            // 1. Create Transaction ONLY if amount > 0
             await Transaction.create({
                 gymId: req.user.gymId,
                 memberId: member._id,
                 planId: req.body.membershipPlan || null,
-                amountPaid: Number(req.body.newPaymentAmount) || 0,
+                amountPaid: Number(req.body.newPaymentAmount),
                 paymentMode: req.body.paymentMode || 'Cash',
                 transactionId: req.body.transactionId || `TRX-${Date.now()}`,
                 paymentStatus: 'Paid',
