@@ -4,6 +4,7 @@ const transactionSchema = new mongoose.Schema({
     gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true },
     memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'Member', required: true },
     planId: { type: mongoose.Schema.Types.ObjectId, ref: 'MembershipPlan' },
+    collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     amountPaid: { type: Number, required: true },
     paymentMode: { type: String, enum: ['Cash', 'Card', 'UPI', 'Bank Transfer', 'Other'], default: 'Cash' },
     transactionId: { type: String },

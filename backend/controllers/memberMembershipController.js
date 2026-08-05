@@ -93,6 +93,7 @@ exports.assignMembership = async (req, res) => {
                 gymId,
                 memberId,
                 planId: membershipPlanId,
+                collectedBy: req.user.id || req.user._id,
                 amountPaid: paid,
                 paymentMode: req.body.paymentMode || 'Cash',
                 transactionId: req.body.transactionId || `TRX-${Date.now()}`,

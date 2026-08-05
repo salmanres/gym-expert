@@ -81,12 +81,19 @@ const getMemberById = async (req, res) => {
 // @access  Private
 const getTransactions = async (req, res) => {
     try {
+        // Backfill missing collectedBy on old transactions with req.user._id (or req.user.id)
+        await Transaction.updateMany(
+            { gymId: req.user.gymId, collectedBy: null },
+            { $set: { collectedBy: req.user._id || req.user.id } }
+        );
+
         let transactions = await Transaction.find({ 
             gymId: req.user.gymId,
             amountPaid: { $gt: 0 }
         })
             .populate('memberId', 'firstName lastName contactNumber memberId')
             .populate('planId', 'name')
+            .populate('collectedBy', 'name email role')
             .sort({ paymentDate: -1 });
 
         // Auto-sync / backfill any existing MemberMembership payments that missed a Transaction record
@@ -94,7 +101,10 @@ const getTransactions = async (req, res) => {
         const activeMemberships = await MemberMembership.find({ 
             gymId: req.user.gymId, 
             paidAmount: { $gt: 0 } 
-        }).populate('memberId', 'firstName lastName contactNumber memberId').populate('membershipPlanId', 'name');
+        })
+            .populate('memberId', 'firstName lastName contactNumber memberId')
+            .populate('membershipPlanId', 'name')
+            .populate('assignedBy', 'name email role');
 
         const existingMemberTxIds = new Set(transactions.map(t => t.memberId?._id?.toString()));
 
@@ -104,6 +114,7 @@ const getTransactions = async (req, res) => {
                     gymId: req.user.gymId,
                     memberId: m.memberId._id,
                     planId: m.membershipPlanId?._id || null,
+                    collectedBy: m.assignedBy?._id || req.user.id,
                     amountPaid: m.paidAmount,
                     paymentMode: 'Cash',
                     transactionId: `TRX-${Date.now()}-${Math.floor(Math.random()*1000)}`,
@@ -112,7 +123,8 @@ const getTransactions = async (req, res) => {
                 });
                 const populatedTx = await Transaction.findById(newTx._id)
                     .populate('memberId', 'firstName lastName contactNumber memberId')
-                    .populate('planId', 'name');
+                    .populate('planId', 'name')
+                    .populate('collectedBy', 'name email role');
                 transactions.push(populatedTx);
             }
         }
@@ -174,6 +186,7 @@ const updateMember = async (req, res) => {
                 gymId: req.user.gymId,
                 memberId: member._id,
                 planId: req.body.membershipPlan || null,
+                collectedBy: req.user._id || req.user.id,
                 amountPaid: Number(req.body.newPaymentAmount),
                 paymentMode: req.body.paymentMode || 'Cash',
                 transactionId: req.body.transactionId || `TRX-${Date.now()}`,
