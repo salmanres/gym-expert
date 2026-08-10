@@ -1,6 +1,8 @@
 const Member = require('../models/Member');
 const Transaction = require('../models/Transaction');
 const Enquiry = require('../models/Enquiry');
+const Gym = require('../models/Gym');
+const MemberMembership = require('../models/MemberMembership');
 
 // @desc    Create new member
 // @route   POST /api/members
@@ -35,6 +37,45 @@ const createMember = async (req, res) => {
             await Enquiry.findByIdAndUpdate(req.body.enquiryId, { status: 'Converted', isMemberCreated: true });
         }
 
+        // Process Custom / Flexible Referral Rewards (Bonus Days &/or Wallet Cash)
+        if (req.body.referredBy) {
+            try {
+                const gym = await Gym.findById(gymId);
+                const rewardType = req.body.referralRewardType || (gym ? gym.referralRewardType : 'Both');
+                const bonusDays = req.body.referralBonusDays !== undefined ? Number(req.body.referralBonusDays) : (gym ? gym.referrerBonusDays : 7);
+                const walletAmt = req.body.referralWalletAmount !== undefined ? Number(req.body.referralWalletAmount) : (gym ? gym.referrerWalletAmount : 200);
+
+                const referrerMember = await Member.findById(req.body.referredBy);
+
+                if (referrerMember) {
+                    // 1. Grant Wallet Cash if selected
+                    if ((rewardType === 'Wallet Cash' || rewardType === 'Both') && walletAmt > 0) {
+                        referrerMember.walletBalance = (referrerMember.walletBalance || 0) + walletAmt;
+                        await referrerMember.save();
+                    }
+
+                    // 2. Grant Bonus Days if selected
+                    if ((rewardType === 'Bonus Days' || rewardType === 'Both') && bonusDays > 0) {
+                        const referrerMembership = await MemberMembership.findOne({
+                            gymId,
+                            memberId: req.body.referredBy,
+                            membershipStatus: 'Active'
+                        }).sort({ createdAt: -1 });
+
+                        if (referrerMembership && referrerMembership.endDate) {
+                            const newEndDate = new Date(referrerMembership.endDate);
+                            newEndDate.setDate(newEndDate.getDate() + bonusDays);
+                            referrerMembership.endDate = newEndDate;
+                            referrerMembership.bonusDaysAdded = (referrerMembership.bonusDaysAdded || 0) + bonusDays;
+                            await referrerMembership.save();
+                        }
+                    }
+                }
+            } catch (refErr) {
+                console.error("Referral reward processing error:", refErr);
+            }
+        }
+
         res.status(201).json(savedMember);
     } catch (error) {
         console.error('Error creating member:', error);
@@ -48,23 +89,27 @@ const createMember = async (req, res) => {
 const getMembers = async (req, res) => {
     try {
         const gymId = req.user.gymId;
-       const members = await Member.find({ gymId })
-    .sort({ createdAt: -1 });
+        const members = await Member.find({ gymId })
+            .populate('referredBy', 'firstName lastName memberId contactNumber')
+            .sort({ createdAt: -1 });
         res.status(200).json(members);
     } catch (error) {
         console.error('Error fetching members:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
+
 // @desc    Get single member by ID
 // @route   GET /api/members/:id
 // @access  Private
 const getMemberById = async (req, res) => {
     try {
-       const member = await Member.findOne({
-    _id: req.params.id,
-    gymId: req.user.gymId
-}).populate("gymId");
+        const member = await Member.findOne({
+            _id: req.params.id,
+            gymId: req.user.gymId
+        })
+            .populate('gymId')
+            .populate('referredBy', 'firstName lastName memberId contactNumber');
 
         if (!member) {
             return res.status(404).json({ message: 'Member not found' });
@@ -97,7 +142,6 @@ const getTransactions = async (req, res) => {
             .sort({ paymentDate: -1 });
 
         // Auto-sync / backfill any existing MemberMembership payments that missed a Transaction record
-        const MemberMembership = require('../models/MemberMembership');
         const activeMemberships = await MemberMembership.find({ 
             gymId: req.user.gymId, 
             paidAmount: { $gt: 0 } 
@@ -139,7 +183,6 @@ const getTransactions = async (req, res) => {
     }
 };
 
-
 const updateMember = async (req, res) => {
     try {
         const member = await Member.findById(req.params.id);
@@ -169,6 +212,10 @@ const updateMember = async (req, res) => {
         delete updateData.createdAt;
         delete updateData.updatedAt;
 
+        if (req.body.walletUsed && Number(req.body.walletUsed) > 0) {
+            updateData.walletBalance = Math.max(0, (member.walletBalance || 0) - Number(req.body.walletUsed));
+        }
+
         const updatedMember = await Member.findByIdAndUpdate(
             req.params.id,
             updateData,
@@ -178,8 +225,10 @@ const updateMember = async (req, res) => {
             }
         );
 
-        if (req.body.recordTransaction && Number(req.body.newPaymentAmount) > 0) {
-            const MemberMembership = require('../models/MemberMembership');
+        if (req.body.recordTransaction && (Number(req.body.newPaymentAmount) > 0 || Number(req.body.walletUsed) > 0)) {
+            const paid = Number(req.body.newPaymentAmount) || 0;
+            const walletVal = Number(req.body.walletUsed) || 0;
+            const totalPaid = paid + walletVal;
             
             // 1. Create Transaction ONLY if amount > 0
             await Transaction.create({
@@ -187,8 +236,8 @@ const updateMember = async (req, res) => {
                 memberId: member._id,
                 planId: req.body.membershipPlan || null,
                 collectedBy: req.user._id || req.user.id,
-                amountPaid: Number(req.body.newPaymentAmount),
-                paymentMode: req.body.paymentMode || 'Cash',
+                amountPaid: totalPaid,
+                paymentMode: walletVal > 0 && paid === 0 ? 'Wallet Cash' : (req.body.paymentMode || 'Cash'),
                 transactionId: req.body.transactionId || `TRX-${Date.now()}`,
                 paymentStatus: 'Paid',
                 paymentDate: req.body.paymentDate || new Date()
@@ -203,6 +252,17 @@ const updateMember = async (req, res) => {
                 if (req.body.paidUntilDate) {
                     activePlan.paidUntilDate = new Date(req.body.paidUntilDate);
                 }
+
+                if (req.body.bonusDaysAwarded && Number(req.body.bonusDaysAwarded) > 0) {
+                    const bonus = Number(req.body.bonusDaysAwarded);
+                    activePlan.bonusDaysAdded = (activePlan.bonusDaysAdded || 0) + bonus;
+                    if (activePlan.endDate) {
+                        const newEndDate = new Date(activePlan.endDate);
+                        newEndDate.setDate(newEndDate.getDate() + bonus);
+                        activePlan.endDate = newEndDate;
+                    }
+                }
+
                 await activePlan.save();
             }
         }

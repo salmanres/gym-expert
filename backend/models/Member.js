@@ -14,6 +14,13 @@ const memberSchema = new mongoose.Schema({
     email: { type: String },
     bloodGroup: { type: String },
 
+    // Member Wallet Balance
+    walletBalance: { type: Number, default: 0 },
+
+    // Referral Details
+    referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Member' },
+    referralBonusGranted: { type: Boolean, default: false },
+
     // Inherited Lead Fields
     altContact: { type: String },
     source: { type: String },
@@ -35,8 +42,7 @@ const memberSchema = new mongoose.Schema({
     bmi: { type: Number },
     bodyFat: { type: Number }, // percentage
     dietPreference: { type: String, enum: ['', 'Veg', 'Non-Veg', 'Vegan', 'Eggitarian', 'Any'] },
-    // Membership & Subscription
-   
+    
     joiningDate: { type: Date, required: true, default: Date.now },
     status: { type: String, enum: ['Active', 'Inactive', 'Frozen'], default: 'Active' },
     freezeDate: { type: Date },

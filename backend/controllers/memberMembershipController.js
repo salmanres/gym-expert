@@ -18,7 +18,9 @@ exports.assignMembership = async (req, res) => {
             totalSessions,
             amountPaid,
             paidUntilDate,
-            discount
+            discount,
+            walletUsed,
+            bonusDays
         } = req.body;
 
         if (!membershipPlans || membershipPlans.length === 0) {
@@ -51,10 +53,12 @@ exports.assignMembership = async (req, res) => {
         const discountAmount = Number(discount) || 0;
         const finalPrice = Math.max(0, originalPrice - discountAmount);
         const paid = Number(amountPaid) || 0;
+        const walletVal = Number(walletUsed) || 0;
+        const totalPaid = paid + walletVal;
 
         let paymentStatus = "Pending";
-        if (paid >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
-        else if (paid > 0) paymentStatus = "Partial";
+        if (totalPaid >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
+        else if (totalPaid > 0) paymentStatus = "Partial";
         if (finalPrice === 0) paymentStatus = "Paid";
 
         const membership = await MemberMembership.create({
@@ -85,17 +89,28 @@ exports.assignMembership = async (req, res) => {
             membershipStatus: "Active",
 
             assignedBy: req.user.id,
+            bonusDays: Number(bonusDays) || 0,
+            bonusHistory: Number(bonusDays) > 0 ? [{
+                days: Number(bonusDays),
+                reason: 'Welcome/Referral Bonus',
+                addedBy: req.user.id
+            }] : []
         });
 
+        if (walletVal > 0) {
+            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal);
+            await member.save();
+        }
+
         // Record transaction if amount paid is > 0
-        if (paid > 0) {
+        if (totalPaid > 0) {
             await Transaction.create({
                 gymId,
                 memberId,
                 planId: membershipPlanId,
                 collectedBy: req.user.id || req.user._id,
-                amountPaid: paid,
-                paymentMode: req.body.paymentMode || 'Cash',
+                amountPaid: totalPaid,
+                paymentMode: walletVal > 0 && paid === 0 ? 'Wallet Cash' : (req.body.paymentMode || 'Cash'),
                 transactionId: req.body.transactionId || `TRX-${Date.now()}`,
                 paymentStatus: paymentStatus,
                 paymentDate: start || new Date()

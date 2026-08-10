@@ -35,6 +35,13 @@ const enquirySchema = new mongoose.Schema({
     response: { type: String },
     offerAmount: { type: Number },
     offerDetails: { type: String },
+    followUpHistory: [{
+        contactDate: { type: Date, default: Date.now },
+        response: { type: String },
+        nextFollowUpDate: { type: Date },
+        nextFollowUpTime: { type: String },
+        status: { type: String }
+    }],
     isMemberCreated: { type: Boolean, default: false },
     sendTextAndEmail: { type: Boolean, default: false },
     sendWhatsApp: { type: Boolean, default: false }

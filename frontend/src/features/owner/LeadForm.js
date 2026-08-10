@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { FiUser, FiMapPin, FiMessageSquare } from 'react-icons/fi';
+import { FiUser, FiMapPin, FiMessageSquare, FiEdit2, FiTrash2, FiPlus } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import apiClient from '../../api/apiClient';
 import PageLayout from '../../components/page/PageLayout';
@@ -21,12 +21,14 @@ export default function LeadForm() {
     const isEdit = !!id;
     const [loading, setLoading] = useState(isEdit && !location.state?.lead);
     const [submitting, setSubmitting] = useState(false);
+    const [logNewFollowUp, setLogNewFollowUp] = useState(false);
     
     const [formData, setFormData] = useState({
         firstName: '', lastName: '', gender: 'Male', dob: '', contactNumber: '', altContact: '', email: '',
         address: '', source: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
         convertibility: 'Warm', status: 'Pending', attendedBy: 'Admin',
-        response: '', offerAmount: '', offerDetails: '', sendTextAndEmail: false, sendWhatsApp: false
+        response: '', offerAmount: '', offerDetails: '', sendTextAndEmail: false, sendWhatsApp: false,
+        followUpHistory: []
     });
     const [errors, setErrors] = useState({});
 
@@ -65,6 +67,34 @@ export default function LeadForm() {
         }
     };
 
+    const handleDeleteFollowUp = (index) => {
+        setFormData(prev => {
+            const updatedHistory = [...prev.followUpHistory];
+            const originalIndex = updatedHistory.length - 1 - index;
+            updatedHistory.splice(originalIndex, 1);
+            return { ...prev, followUpHistory: updatedHistory };
+        });
+    };
+
+    const handleEditFollowUp = (index) => {
+        const originalIndex = formData.followUpHistory.length - 1 - index;
+        const item = formData.followUpHistory[originalIndex];
+        
+        setFormData(prev => {
+            const updatedHistory = [...prev.followUpHistory];
+            updatedHistory.splice(originalIndex, 1);
+            
+            return {
+                ...prev,
+                followUpHistory: updatedHistory,
+                response: item.response,
+                followUpDate: item.nextFollowUpDate ? new Date(item.nextFollowUpDate).toISOString().split('T')[0] : '',
+                followUpTime: item.nextFollowUpTime || '',
+                status: item.status || prev.status
+            };
+        });
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -95,9 +125,44 @@ export default function LeadForm() {
 
         setSubmitting(true);
         try {
+            let submitData = { ...formData };
+            
+            // Check if current form inputs are different from the latest history item
+            let isDifferent = true;
+            if (submitData.followUpHistory && submitData.followUpHistory.length > 0) {
+                const latest = submitData.followUpHistory[submitData.followUpHistory.length - 1];
+                const latestNextDate = latest.nextFollowUpDate ? new Date(latest.nextFollowUpDate).toISOString().split('T')[0] : '';
+                const currentNextDate = submitData.followUpDate ? new Date(submitData.followUpDate).toISOString().split('T')[0] : '';
+                
+                if (latest.response === submitData.response && latestNextDate === currentNextDate && latest.nextFollowUpTime === submitData.followUpTime) {
+                    isDifferent = false; // They didn't change the response or date
+                }
+            }
+
+            // Auto-add it to history if it's new or changed!
+            if (isDifferent && submitData.response && submitData.response.trim() !== '') {
+                const autoAddedItem = {
+                    contactDate: new Date().toISOString(),
+                    response: submitData.response,
+                    nextFollowUpDate: submitData.followUpDate || '',
+                    nextFollowUpTime: submitData.followUpTime || '',
+                    status: submitData.status
+                };
+                submitData.followUpHistory = [...(submitData.followUpHistory || []), autoAddedItem];
+            }
+
+            // Sync top-level fields for the Leads list view based on the latest history item (in case they deleted the last one)
+            if (submitData.followUpHistory && submitData.followUpHistory.length > 0) {
+                const latestHistory = submitData.followUpHistory[submitData.followUpHistory.length - 1];
+                submitData.response = latestHistory.response;
+                submitData.followUpDate = latestHistory.nextFollowUpDate;
+                submitData.followUpTime = latestHistory.nextFollowUpTime;
+                submitData.status = latestHistory.status;
+            }
+
             let leadId = id;
             if (isEdit) {
-                await apiClient.put(`/enquiries/${id}`, formData);
+                await apiClient.put(`/enquiries/${id}`, submitData);
                 toast.success("Lead updated successfully");
             } else {
                 const response = await apiClient.post('/enquiries', formData);
@@ -192,8 +257,66 @@ export default function LeadForm() {
                                 </>
                             )}
                             
-                            <Textarea containerClassName="sm:col-span-2 lg:col-span-3 xl:col-span-4" label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} required className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
+                            <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 flex flex-col gap-2">
+                                <Textarea label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
+                            </div>
                         </FormSection>
+
+                        {formData.followUpHistory && formData.followUpHistory.length > 0 && (
+                            <FormSection title="Follow-up History" icon={<FiMessageSquare />} className="mt-4">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-slate-200 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50">
+                                                <th className="py-2.5 px-3">Contact Date</th>
+                                                <th className="py-2.5 px-3">Response / Notes</th>
+                                                <th className="py-2.5 px-3">Status</th>
+                                                <th className="py-2.5 px-3">Next Follow-up</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 text-xs">
+                                            {formData.followUpHistory && formData.followUpHistory.length > 0 && (
+                                                [...formData.followUpHistory].reverse().map((history, idx) => (
+                                                    <tr key={idx} className="hover:bg-slate-50">
+                                                        <td className="py-2.5 px-3 font-bold text-slate-800 whitespace-nowrap">
+                                                            {new Date(history.contactDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        </td>
+                                                        <td className="py-2.5 px-3 text-slate-700 italic max-w-xs break-words">
+                                                            "{history.response}"
+                                                        </td>
+                                                        <td className="py-2.5 px-3">
+                                                            <span className="px-2 py-1 text-[10px] font-black uppercase tracking-wider rounded-md bg-white border border-slate-200 text-slate-600">
+                                                                {history.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 whitespace-nowrap">
+                                                            <div className="flex flex-col gap-0.5">
+                                                                {history.nextFollowUpDate ? (
+                                                                    <span className="font-bold text-indigo-600">{new Date(history.nextFollowUpDate).toLocaleDateString('en-GB')}</span>
+                                                                ) : <span className="text-slate-400">-</span>}
+                                                                {history.nextFollowUpTime && (
+                                                                    <span className="text-[10px] text-slate-500">{history.nextFollowUpTime}</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 text-right">
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <button type="button" onClick={() => handleEditFollowUp(idx)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Edit">
+                                                                    <FiEdit2 size={14} />
+                                                                </button>
+                                                                <button type="button" onClick={() => handleDeleteFollowUp(idx)} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors" title="Delete">
+                                                                    <FiTrash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </FormSection>
+                        )}
 
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full gap-4 mt-2 pt-6 border-t border-slate-200">
                             <div className="flex items-center gap-6 w-full sm:w-auto flex-wrap">

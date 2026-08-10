@@ -5,7 +5,7 @@ import PageHeader from '../../components/page/PageHeader';
 import FormSection from '../../components/form/FormSection';
 import Input from '../../components/form/Input';
 import Button from '../../components/form/Button';
-import { FiActivity } from 'react-icons/fi';
+import { FiActivity, FiTag, FiCheckCircle } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 import Loader from '../../components/page/Loader';
@@ -19,8 +19,12 @@ export default function AssignMembershipForm() {
     const [submitting, setSubmitting] = useState(false);
     const [members, setMembers] = useState([]);
     const [memberships, setMemberships] = useState([]);
+    const [gymSettings, setGymSettings] = useState(null);
     const [editMode, setEditMode] = useState(false);
     const [membershipId, setMembershipId] = useState(null);
+
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
 
     const [formData, setFormData] = useState({
         memberId: '',
@@ -30,18 +34,22 @@ export default function AssignMembershipForm() {
         totalSessions: '',
         discount: '',
         amountPaid: '',
-        paidUntilDate: ''
+        paidUntilDate: '',
+        walletUsed: '',
+        bonusDays: 0
     });
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [memRes, planRes] = await Promise.all([
-                    apiClient.get('/members'),
-                    apiClient.get('/membership-plans')
+                const [memRes, planRes, gymRes] = await Promise.all([
+                    apiClient.get('/members').catch(() => ({ data: [] })),
+                    apiClient.get('/membership-plans').catch(() => ({ data: [] })),
+                    apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
                 ]);
-                setMembers(memRes.data);
-                setMemberships(planRes.data);
+                setMembers(memRes.data || []);
+                setMemberships(planRes.data || []);
+                setGymSettings(gymRes.data);
 
                 // Pre-fill if navigated from Member details
                 if (location.state?.member) {
@@ -60,7 +68,9 @@ export default function AssignMembershipForm() {
                             totalSessions: activeMem.totalSessions || '',
                             discount: activeMem.discount || '',
                             amountPaid: activeMem.paidAmount || '',
-                            paidUntilDate: activeMem.paidUntilDate ? new Date(activeMem.paidUntilDate).toISOString().split('T')[0] : ''
+                            paidUntilDate: activeMem.paidUntilDate ? new Date(activeMem.paidUntilDate).toISOString().split('T')[0] : '',
+                            walletUsed: '',
+                            bonusDays: 0
                         }));
                     } else {
                         setFormData(prev => ({
@@ -181,6 +191,125 @@ export default function AssignMembershipForm() {
         }
     };
 
+    // Apply Referral / Discount Coupon Code
+    const handleApplyCoupon = (overrideCode) => {
+        const targetCode = overrideCode || couponCode;
+        if (!targetCode || !targetCode.trim()) {
+            toast.error("Please enter or select a coupon code");
+            return;
+        }
+
+        const codeUpper = targetCode.trim().toUpperCase();
+        const plan = memberships.find(p => p._id === formData.membershipPlanId);
+        const planPrice = plan ? plan.price || 0 : 0;
+
+        // Check 1: Check Gym Custom Created Coupons
+        const createdCoupon = (gymSettings?.couponOffers || []).find(c => (c.code || '').toUpperCase() === codeUpper && c.isActive);
+
+        if (createdCoupon) {
+            let discountAmt = 0;
+            if (createdCoupon.discountValue > 0) {
+                if (createdCoupon.discountType === 'Percentage') {
+                    discountAmt = planPrice > 0 ? Math.round((planPrice * createdCoupon.discountValue) / 100) : 0;
+                } else {
+                    discountAmt = createdCoupon.discountValue || 0;
+                }
+            }
+            
+            const bonus = createdCoupon.bonusDays || 0;
+
+            setFormData(prev => ({
+                ...prev,
+                discount: discountAmt,
+                amountPaid: Math.max(0, planPrice - discountAmt),
+                bonusDays: bonus
+            }));
+            
+            let descDesc = createdCoupon.title;
+            let parts = [];
+            if (createdCoupon.discountValue > 0) {
+                parts.push(createdCoupon.discountType === 'Percentage' ? `${createdCoupon.discountValue}% OFF` : `₹${createdCoupon.discountValue} OFF`);
+            }
+            if (bonus > 0) parts.push(`+${bonus} Free Days`);
+            if (parts.length > 0) descDesc += ` (${parts.join(' ')})`;
+
+            setAppliedCoupon({
+                code: codeUpper,
+                description: descDesc,
+                discountAmount: discountAmt
+            });
+            setCouponCode(codeUpper);
+            toast.success(`🎉 Coupon "${codeUpper}" Applied! ${parts.join(' ')}`);
+            return;
+        }
+
+        // Check 2: Is it a Member Referral Code (e.g. MEM-0001)?
+        const matchedMember = members.find(m => (m.memberId || '').toUpperCase() === codeUpper);
+
+        if (matchedMember) {
+            const refereeDiscountPercent = gymSettings?.refereeDiscountPercent || 10;
+            const refereeBonusDays = gymSettings?.refereeBonusDays || 5;
+            const discountAmt = planPrice > 0 ? Math.round((planPrice * refereeDiscountPercent) / 100) : 200;
+
+            setFormData(prev => ({
+                ...prev,
+                discount: discountAmt,
+                amountPaid: Math.max(0, planPrice - discountAmt),
+                bonusDays: refereeBonusDays
+            }));
+            setAppliedCoupon({
+                code: codeUpper,
+                description: `Referral Coupon (${matchedMember.firstName}) - ${refereeDiscountPercent}% OFF + ${refereeBonusDays} Bonus Days`,
+                discountAmount: discountAmt
+            });
+            setCouponCode(codeUpper);
+            toast.success(`🎉 Referral Coupon Applied! ₹${discountAmt} Discount granted (${refereeDiscountPercent}% OFF).`);
+            return;
+        }
+
+        // Check 3: Standard Fallbacks
+        let discountAmt = 0;
+        let desc = '';
+
+        if (codeUpper === 'WELCOME10') {
+            discountAmt = planPrice > 0 ? Math.round((planPrice * 10) / 100) : 300;
+            desc = 'Welcome Promo - 10% OFF';
+        } else if (codeUpper === 'FIT500') {
+            discountAmt = 500;
+            desc = 'Fitness Special - ₹500 Flat OFF';
+        } else {
+            discountAmt = planPrice > 0 ? Math.round((planPrice * 10) / 100) : 200;
+            desc = `Coupon "${codeUpper}" Applied`;
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            discount: discountAmt,
+            amountPaid: Math.max(0, planPrice - discountAmt)
+        }));
+        setAppliedCoupon({
+            code: codeUpper,
+            description: desc,
+            discountAmount: discountAmt
+        });
+        setCouponCode(codeUpper);
+        toast.success(`🎉 Coupon "${codeUpper}" Applied! Discount of ₹${discountAmt} applied.`);
+    };
+
+    const handleRemoveCoupon = () => {
+        setAppliedCoupon(null);
+        setCouponCode('');
+        const plan = memberships.find(p => p._id === formData.membershipPlanId);
+        const planPrice = plan ? plan.price || 0 : 0;
+        setFormData(prev => ({
+            ...prev,
+            discount: 0,
+            amountPaid: planPrice,
+            bonusDays: 0
+        }));
+        toast.info("Coupon removed.");
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         
@@ -199,7 +328,10 @@ export default function AssignMembershipForm() {
                 totalSessions: formData.totalSessions,
                 amountPaid: formData.amountPaid,
                 paidUntilDate: formData.paidUntilDate,
-                discount: formData.discount
+                discount: formData.discount,
+                couponCode: appliedCoupon ? appliedCoupon.code : undefined,
+                walletUsed: formData.walletUsed,
+                bonusDays: formData.bonusDays
             };
 
             if (editMode && membershipId) {
@@ -242,6 +374,8 @@ export default function AssignMembershipForm() {
     };
 
     if (loading) return <Loader text="Loading assignment details..." />;
+
+    const availableCoupons = (gymSettings?.couponOffers || []).filter(c => c.isActive);
 
     return (
         <PageLayout>
@@ -293,8 +427,97 @@ export default function AssignMembershipForm() {
                             <Input type="date" label="Plan End Date" name="planEndDate" value={formData.planEndDate} onChange={handleChange} required />
                             <Input type="number" label="Total Sessions (if applicable)" name="totalSessions" value={formData.totalSessions} onChange={handleChange} placeholder="e.g. 12" />
                             
+                            {/* Referral Coupon Number Box & Dropdown Selector */}
+                            <div className="sm:col-span-2 p-4 bg-gradient-to-r from-emerald-50/70 to-teal-50/70 border border-emerald-200 rounded-xl space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-extrabold text-slate-800 flex items-center gap-2">
+                                        <FiTag className="text-emerald-600" /> Apply Active Coupon Offer / Referral Code
+                                    </span>
+                                    {appliedCoupon && (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full">
+                                            <FiCheckCircle size={12} /> Coupon Active
+                                        </span>
+                                    )}
+                                </div>
+
+                                {!appliedCoupon ? (
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                        {/* Dropdown of active Gym Coupon Offers */}
+                                        {availableCoupons.length > 0 && (
+                                            <select
+                                                onChange={(e) => {
+                                                    if (e.target.value) handleApplyCoupon(e.target.value);
+                                                }}
+                                                className="h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 cursor-pointer"
+                                            >
+                                                <option value="">-- Choose Active Gym Offer --</option>
+                                                {availableCoupons.map((c, i) => (
+                                                    <option key={i} value={c.code}>
+                                                        {c.code} - {c.title} 
+                                                        ({c.discountValue > 0 ? (c.discountType === 'Percentage' ? `${c.discountValue}% OFF ` : `₹${c.discountValue} OFF `) : ''}
+                                                        {c.bonusDays > 0 ? `+${c.bonusDays} Free Days` : ''})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
+
+                                        <div className="flex-1 flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                value={couponCode}
+                                                onChange={(e) => setCouponCode(e.target.value)}
+                                                placeholder="Or Enter Code (e.g. MEM-0001, WELCOME10)"
+                                                className="flex-1 h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 uppercase tracking-wider"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleApplyCoupon()}
+                                                className="px-4 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-lg transition-colors shadow-xs"
+                                            >
+                                                Apply
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-emerald-200">
+                                        <div>
+                                            <div className="text-xs font-extrabold text-slate-900 font-mono">
+                                                {appliedCoupon.code} - <span className="text-emerald-700">{appliedCoupon.description}</span>
+                                            </div>
+                                            <div className="text-[11px] text-slate-500">
+                                                Discount of ₹{appliedCoupon.discountAmount} deducted from plan total.
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleRemoveCoupon}
+                                            className="text-xs font-bold text-rose-600 hover:text-rose-700 underline"
+                                        >
+                                            Remove Coupon
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
                             <Input type="number" label="Discount (₹)" name="discount" value={formData.discount} onChange={handleChange} placeholder="e.g. 1000" />
-                            <Input type="number" label="Amount Paid (₹)" name="amountPaid" value={formData.amountPaid} onChange={handleChange} placeholder="e.g. 15000" />
+                            
+                            {formData.memberId && members.find(m => m._id === formData.memberId)?.walletBalance > 0 && (
+                                <Input 
+                                    type="number" 
+                                    label={`Use Wallet Cash (Available: ₹${members.find(m => m._id === formData.memberId).walletBalance})`} 
+                                    name="walletUsed" 
+                                    value={formData.walletUsed} 
+                                    onChange={(e) => {
+                                        const val = Number(e.target.value);
+                                        const maxWallet = members.find(m => m._id === formData.memberId).walletBalance;
+                                        if (val <= maxWallet) handleChange(e);
+                                    }} 
+                                    placeholder="Enter amount to use" 
+                                    max={members.find(m => m._id === formData.memberId)?.walletBalance}
+                                />
+                            )}
+
+                            <Input type="number" label="Amount Paid Now (₹)" name="amountPaid" value={formData.amountPaid} onChange={handleChange} placeholder="e.g. 15000" />
                             
                             {Number(formData.amountPaid) > 0 && (
                                 <Input containerClassName="sm:col-span-2 animate-in fade-in slide-in-from-top-2 duration-300" type="date" label="Valid Until (Check-in Allowed Till)" name="paidUntilDate" value={formData.paidUntilDate || ''} onChange={handleChange} className="bg-emerald-50 font-bold border-emerald-200" />

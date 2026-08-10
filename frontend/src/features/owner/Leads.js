@@ -138,11 +138,22 @@ function Leads() {
             </td>
             <td className="py-3 px-4">
                 <div className="flex flex-col gap-1 text-xs text-slate-600">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                    {lead.followUpHistory && lead.followUpHistory.length > 0 ? (
+                        <div className="flex items-center gap-1.5 font-bold text-indigo-600 bg-indigo-50 w-max px-2 py-0.5 rounded border border-indigo-100">
+                            <FiMessageSquare className="shrink-0" />
+                            Last: {new Date(lead.followUpHistory[lead.followUpHistory.length - 1].contactDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                            <span className="text-[9px] bg-indigo-200 text-indigo-800 px-1 rounded-full ml-1">{lead.followUpHistory.length}</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 font-bold text-slate-400 bg-slate-50 w-max px-2 py-0.5 rounded border border-slate-200">
+                            <FiMessageSquare className="shrink-0" /> New Lead
+                        </div>
+                    )}
+                    <div className="flex items-center gap-1.5 font-bold text-slate-700 mt-1">
                         <FiCalendar className="text-emerald-500 shrink-0" />
-                        {new Date(lead.followUpDate).toLocaleDateString()} {lead.followUpTime}
+                        Next: {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'None'} {lead.followUpTime}
                     </div>
-                    <div className="text-[10px] font-medium"><span className="text-slate-400">Assigned:</span> {lead.attendedBy}</div>
+                    <div className="text-[10px] font-medium mt-0.5"><span className="text-slate-400">Assigned:</span> {lead.attendedBy}</div>
                 </div>
             </td>
             <td className="py-3 px-4 text-center">

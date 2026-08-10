@@ -17,6 +17,7 @@ function Memberships() {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('Plans'); // 'Plans', 'Assign', 'Active', 'Expired', 'Renewals'
     const [bonusModal, setBonusModal] = useState({ open: false, membership: null, days: '', reason: '' });
+    const [gymSettings, setGymSettings] = useState(null);
     
     // Filters
     const [filterPaymentStatus, setFilterPaymentStatus] = useState('All');
@@ -24,12 +25,15 @@ function Memberships() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [memRes, memberRes, activeMembershipsRes] = await Promise.all([
+            const [memRes, memberRes, activeMembershipsRes, gymRes] = await Promise.all([
                 apiClient.get('/membership-plans'),
                 apiClient.get('/members'),
-                apiClient.get('/member-memberships/active')
+                apiClient.get('/member-memberships/active'),
+                apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
             ]);
             
+            if (gymRes?.data) setGymSettings(gymRes.data);
+
             const activeMemberships = activeMembershipsRes.data;
             const membersWithPlans = memberRes.data.map(member => {
                 const membership = activeMemberships.find(m => m.memberId?._id === member._id);
@@ -338,14 +342,35 @@ function Memberships() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1">Reason / Offer Name <span className="text-rose-500">*</span></label>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Select Offer / Reason <span className="text-rose-500">*</span></label>
+                                {gymSettings?.couponOffers?.filter(c => c.isActive && c.bonusDays > 0).length > 0 && (
+                                    <select
+                                        className="w-full px-3 py-2 mb-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-sm bg-slate-50 font-semibold"
+                                        onChange={(e) => {
+                                            const selected = gymSettings.couponOffers.find(c => c.code === e.target.value);
+                                            if (selected) {
+                                                setBonusModal(prev => ({ 
+                                                    ...prev, 
+                                                    reason: `${selected.title} (${selected.code})`,
+                                                    days: selected.bonusDays
+                                                }));
+                                            }
+                                        }}
+                                        defaultValue=""
+                                    >
+                                        <option value="" disabled>-- Select a predefined offer --</option>
+                                        {gymSettings.couponOffers.filter(c => c.isActive && c.bonusDays > 0).map(c => (
+                                            <option key={c.code} value={c.code}>{c.title} (+{c.bonusDays} Days)</option>
+                                        ))}
+                                    </select>
+                                )}
                                 <input 
                                     type="text" 
                                     required 
                                     className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
                                     value={bonusModal.reason}
                                     onChange={e => setBonusModal({ ...bonusModal, reason: e.target.value })}
-                                    placeholder="e.g. Referred a friend"
+                                    placeholder="e.g. 100% Attendance Reward"
                                 />
                             </div>
                             <div className="flex justify-end gap-3 pt-2">

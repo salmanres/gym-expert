@@ -22,6 +22,7 @@ export default function PaymentForm() {
     
     const [memberships, setMemberships] = useState([]);
     const [members, setMembers] = useState([]);
+    const [gymSettings, setGymSettings] = useState(null);
     
     const [formData, setFormData] = useState({
         memberId: autoOpenMember?._id || '',
@@ -33,18 +34,22 @@ export default function PaymentForm() {
         newPaymentAmount: '',
         paymentStatus: autoOpenMember?.paymentStatus || 'Pending',
         paymentMode: autoOpenMember?.paymentMode || 'Cash',
-        transactionId: autoOpenMember?.transactionId || ''
+        appliedCoupon: '',
+        rewardAttendance: false,
+        bonusDaysAwarded: 0
     });
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [memRes, memberRes, activeRes] = await Promise.all([
+                const [memRes, memberRes, activeRes, gymRes] = await Promise.all([
                     apiClient.get('/membership-plans'),
                     apiClient.get('/members'),
-                    apiClient.get('/member-memberships/active')
+                    apiClient.get('/member-memberships/active'),
+                    apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
                 ]);
                 setMemberships(memRes.data.filter(m => m.isActive));
+                if (gymRes?.data) setGymSettings(gymRes.data);
                 
                 const activeMemberships = activeRes.data;
                 const membersWithPlans = memberRes.data.map(member => {
@@ -79,7 +84,10 @@ export default function PaymentForm() {
                         newPaymentAmount: '',
                         paymentStatus: freshMember.paymentStatus || 'Pending',
                         paymentMode: freshMember.paymentMode || 'Cash',
-                        transactionId: freshMember.transactionId || ''
+                        transactionId: freshMember.transactionId || '',
+                        walletUsed: '',
+                        rewardAttendance: false,
+                        bonusDaysAwarded: 0
                     }));
                 }
             } catch (err) {
@@ -106,6 +114,9 @@ export default function PaymentForm() {
                 updates.paymentStatus = selectedMember.paymentStatus || 'Pending';
                 updates.paymentMode = selectedMember.paymentMode || 'Cash';
                 updates.transactionId = selectedMember.transactionId || '';
+                updates.walletUsed = '';
+                updates.rewardAttendance = false;
+                updates.bonusDaysAwarded = 0;
             }
         }
 
@@ -121,14 +132,15 @@ export default function PaymentForm() {
         let newFinal = Math.max(0, newBase - newDisc);
         
         let previouslyPaid = parseFloat(formData.previouslyPaid || 0);
+        let walletAmt = name === 'walletUsed' ? parseFloat(value || 0) : parseFloat(formData.walletUsed || 0);
         let newPayment = name === 'newPaymentAmount' ? parseFloat(value || 0) : parseFloat(formData.newPaymentAmount || 0);
-        let totalPaidNow = previouslyPaid + newPayment;
+        let totalPaidNow = previouslyPaid + newPayment + walletAmt;
         
         if (name === 'discount' || name === 'baseAmount') {
             updates.finalAmount = newFinal;
         }
 
-        if (name === 'newPaymentAmount' || name === 'discount' || name === 'baseAmount') {
+        if (name === 'newPaymentAmount' || name === 'walletUsed' || name === 'discount' || name === 'baseAmount') {
             if (totalPaidNow >= newFinal && newFinal > 0) {
                 updates.paymentStatus = 'Paid';
             } else if (totalPaidNow > 0 && totalPaidNow < newFinal) {
@@ -139,6 +151,36 @@ export default function PaymentForm() {
         }
 
         setFormData(prev => ({ ...prev, ...updates }));
+    };
+
+    const handleCouponChange = (e) => {
+        const code = e.target.value;
+        setFormData(prev => ({ ...prev, appliedCoupon: code }));
+        
+        if (!code) return;
+
+        const coupon = gymSettings?.couponOffers?.find(c => c.code === code);
+        if (coupon) {
+            let discountAmt = 0;
+            const baseAmount = parseFloat(formData.baseAmount || 0);
+            
+            if (coupon.discountValue > 0) {
+                if (coupon.discountType === 'Percentage') {
+                    discountAmt = baseAmount > 0 ? Math.round((baseAmount * coupon.discountValue) / 100) : 0;
+                } else {
+                    discountAmt = coupon.discountValue || 0;
+                }
+            }
+
+            const newFinal = Math.max(0, baseAmount - discountAmt);
+            
+            setFormData(prev => ({ 
+                ...prev, 
+                discount: discountAmt,
+                finalAmount: newFinal
+            }));
+            toast.success(`Coupon applied! ₹${discountAmt} discount calculated.`);
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -156,7 +198,7 @@ export default function PaymentForm() {
             
             let updatedPaidUntil = selectedMember?.paidUntilDate;
 
-            let totalAmountPaidCalculated = (selectedMember?.amountPaid || 0) + parseFloat(formData.newPaymentAmount || 0);
+            let totalAmountPaidCalculated = (selectedMember?.amountPaid || 0) + parseFloat(formData.newPaymentAmount || 0) + parseFloat(formData.walletUsed || 0);
             
             // Recalculate paid until based on new total amount
             if (plan && plan.price > 0) {
@@ -193,7 +235,9 @@ export default function PaymentForm() {
                 paymentDate: new Date().toISOString(),
                 paidUntilDate: updatedPaidUntil,
                 recordTransaction: true,
-                newPaymentAmount: newPaymentAmountValue > 0 ? newPaymentAmountValue : 0
+                newPaymentAmount: newPaymentAmountValue > 0 ? newPaymentAmountValue : 0,
+                walletUsed: formData.walletUsed,
+                bonusDaysAwarded: formData.rewardAttendance ? Number(formData.bonusDaysAwarded) : 0
             });
 
             toast.success("Payment recorded successfully!");
@@ -276,17 +320,85 @@ export default function PaymentForm() {
                             </div>
                             
                             <Input type="number" label="Base Amount (₹)" name="baseAmount" value={formData.baseAmount} readOnly className="bg-slate-50 cursor-not-allowed" />
+                            
+                            <div className="col-span-1">
+                                <Select
+                                    label="Apply Gym Coupon Offer"
+                                    name="appliedCoupon"
+                                    value={formData.appliedCoupon}
+                                    onChange={handleCouponChange}
+                                    options={[
+                                        { value: '', label: '-- No Coupon --' },
+                                        ...(gymSettings?.couponOffers?.filter(c => c.isActive).map(c => ({
+                                            value: c.code,
+                                            label: `${c.code} - ${c.title} (${c.discountValue > 0 ? (c.discountType === 'Percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`) : 'Free Days'})`
+                                        })) || [])
+                                    ]}
+                                />
+                            </div>
+
                             <Input type="number" label="Discount (₹)" name="discount" value={formData.discount} onChange={handleChange} placeholder="e.g. 500" />
                             <Input type="number" label="Total Plan Fee (₹)" name="finalAmount" value={formData.finalAmount} readOnly className="bg-slate-50 font-bold text-slate-800 cursor-not-allowed" />
 
                             <Input type="number" label="Already Paid (₹)" name="previouslyPaid" value={formData.previouslyPaid} readOnly className="bg-blue-50 font-bold text-blue-700 cursor-not-allowed" />
                             
-                            <Input type="number" label={`Remaining Balance: ₹${Math.max(0, formData.finalAmount - formData.previouslyPaid)}`} name="newPaymentAmount" value={formData.newPaymentAmount} onChange={handleChange} required placeholder="Enter new payment..." className="border-emerald-300 focus:border-emerald-600 font-bold bg-emerald-50/30" />
+                            {formData.memberId && members.find(m => m._id === formData.memberId)?.walletBalance > 0 && (
+                                <Input 
+                                    type="number" 
+                                    label={`Use Wallet Cash (Available: ₹${members.find(m => m._id === formData.memberId).walletBalance})`} 
+                                    name="walletUsed" 
+                                    value={formData.walletUsed} 
+                                    onChange={(e) => {
+                                        const val = Number(e.target.value);
+                                        const maxWallet = members.find(m => m._id === formData.memberId).walletBalance;
+                                        if (val <= maxWallet) handleChange(e);
+                                    }} 
+                                    placeholder="Enter amount to use" 
+                                    max={members.find(m => m._id === formData.memberId)?.walletBalance}
+                                />
+                            )}
+                            
+                            <Input type="number" label={`Remaining Balance: ₹${Math.max(0, formData.finalAmount - formData.previouslyPaid - (Number(formData.walletUsed) || 0))}`} name="newPaymentAmount" value={formData.newPaymentAmount} onChange={handleChange} required placeholder="Enter new payment..." className="border-emerald-300 focus:border-emerald-600 font-bold bg-emerald-50/30" />
                             
                             <Select label="Payment Mode" name="paymentMode" value={formData.paymentMode} onChange={handleChange} options={['Cash', 'Card', 'UPI', 'Bank Transfer', 'Other']} />
                             <Input type="text" label="Transaction ID (Optional)" name="transactionId" value={formData.transactionId} onChange={handleChange} placeholder="e.g. UPI-123456789" />
 
-                            
+                        </FormSection>
+
+                        <FormSection title="Member Rewards" icon={<FiDollarSign />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+                            <div className="col-span-1 sm:col-span-2 lg:col-span-3">
+                                <label className="flex items-center gap-3 cursor-pointer p-3 border border-emerald-200 rounded-xl bg-emerald-50/50 hover:bg-emerald-50 transition-colors">
+                                    <div className="relative flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            name="rewardAttendance"
+                                            checked={formData.rewardAttendance}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, rewardAttendance: e.target.checked }))}
+                                            className="peer sr-only"
+                                        />
+                                        <div className="w-10 h-5 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                                    </div>
+                                    <span className="text-sm font-extrabold text-slate-800">
+                                        🏆 100% Attendance Reward (Manually Grant Bonus Days)
+                                    </span>
+                                </label>
+                            </div>
+
+                            {formData.rewardAttendance && (
+                                <div className="col-span-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <Input 
+                                        type="number" 
+                                        label="Bonus Days to Award" 
+                                        name="bonusDaysAwarded" 
+                                        value={formData.bonusDaysAwarded} 
+                                        onChange={handleChange} 
+                                        placeholder="e.g. 5" 
+                                        min="1"
+                                        required={formData.rewardAttendance}
+                                        className="border-emerald-300 focus:border-emerald-600 font-bold bg-emerald-50/30"
+                                    />
+                                </div>
+                            )}
                         </FormSection>
 
                         <div className="flex justify-end items-center gap-3 mt-4 pt-6 border-t border-slate-200">

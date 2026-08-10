@@ -26,6 +26,8 @@ exports.getMyGym = async (req, res) => {
         if (!gym) {
             return res.status(404).json({ message: 'Gym not found' });
         }
+
+
         res.json(gym);
     } catch (error) {
         console.error(error);
@@ -42,7 +44,21 @@ exports.updateMyGym = async (req, res) => {
             return res.status(400).json({ message: 'No gym associated with this user' });
         }
         
-        const { latitude, longitude, qrAttendanceEnabled, qrAttendanceRange } = req.body;
+        const { 
+            latitude, 
+            longitude, 
+            qrAttendanceEnabled, 
+            qrAttendanceRange,
+            referralProgramEnabled,
+            referralRewardType,
+            referrerBonusDays,
+            referrerWalletAmount,
+            referrerDiscountPercent,
+            refereeBonusDays,
+            refereeDiscountPercent,
+            minPlanDurationDays,
+            couponOffers
+        } = req.body;
         
         const gym = await Gym.findById(req.user.gymId);
         if (!gym) {
@@ -53,6 +69,18 @@ exports.updateMyGym = async (req, res) => {
         if (longitude !== undefined) gym.longitude = longitude;
         if (qrAttendanceEnabled !== undefined) gym.qrAttendanceEnabled = qrAttendanceEnabled;
         if (qrAttendanceRange !== undefined) gym.qrAttendanceRange = qrAttendanceRange;
+
+        // Referral & Bonus Program Settings
+        if (referralProgramEnabled !== undefined) gym.referralProgramEnabled = referralProgramEnabled;
+        if (referralRewardType !== undefined) gym.referralRewardType = referralRewardType;
+        if (referrerBonusDays !== undefined) gym.referrerBonusDays = Number(referrerBonusDays);
+        if (referrerWalletAmount !== undefined) gym.referrerWalletAmount = Number(referrerWalletAmount);
+        if (referrerDiscountPercent !== undefined) gym.referrerDiscountPercent = Number(referrerDiscountPercent);
+        if (refereeBonusDays !== undefined) gym.refereeBonusDays = Number(refereeBonusDays);
+        if (refereeDiscountPercent !== undefined) gym.refereeDiscountPercent = Number(refereeDiscountPercent);
+        if (minPlanDurationDays !== undefined) gym.minPlanDurationDays = Number(minPlanDurationDays);
+
+        if (couponOffers !== undefined) gym.couponOffers = couponOffers;
 
         await gym.save();
         res.json(gym);

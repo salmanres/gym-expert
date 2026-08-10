@@ -166,6 +166,11 @@ export default function Members() {
                     <div>
                         <p className="font-bold text-slate-800 text-sm">{member.firstName} {member.lastName}</p>
                         <p className="text-[10px] text-slate-400 font-medium">{member.gender} • Joined: {new Date(member.joiningDate).toLocaleDateString()}</p>
+                        {member.walletBalance > 0 && (
+                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 mt-1 inline-block">
+                                Wallet: ₹{member.walletBalance}
+                            </span>
+                        )}
                     </div>
                 </div>
             </td>

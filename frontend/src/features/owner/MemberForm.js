@@ -8,7 +8,7 @@ import Select from '../../components/form/Select';
 import Textarea from '../../components/form/Textarea';
 import Button from '../../components/form/Button';
 import Loader from '../../components/page/Loader';
-import { FiUser, FiMapPin, FiActivity, FiMessageSquare, FiCamera, FiUpload, FiX, FiTrash2 } from 'react-icons/fi';
+import { FiUser, FiMapPin, FiActivity, FiMessageSquare, FiCamera, FiUpload, FiX, FiTrash2, FiGift, FiAward, FiCheckCircle, FiCalendar, FiCreditCard, FiTag } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 import Webcam from 'react-webcam';
@@ -25,6 +25,10 @@ export default function MemberForm() {
     const [submitting, setSubmitting] = useState(false);
     const [errors, setErrors] = useState({});
     
+    const [existingMembers, setExistingMembers] = useState([]);
+    const [gymSettings, setGymSettings] = useState(null);
+    const [customizeReward, setCustomizeReward] = useState(false);
+
     const [formData, setFormData] = useState({
         firstName: '', lastName: '', gender: 'Male', contactNumber: '', altContact: '', email: '',
         dob: '', bloodGroup: '', address: '', emergencyContactName: '', emergencyContactNumber: '',
@@ -32,6 +36,10 @@ export default function MemberForm() {
         source: '--Select--', interest: '--Select--', followUpDate: '', followUpTime: '', convertibility: 'Warm',
         attendedBy: 'Admin', response: '',
         joiningDate: new Date().toISOString().split('T')[0], status: 'Active',
+        referredBy: '',
+        referralRewardType: 'Both', // 'Bonus Days' | 'Wallet Cash' | 'Both'
+        referralBonusDays: 7,
+        referralWalletAmount: 200,
         enquiryId: '',
         membershipPlan: '',
         planStartDate: '',
@@ -65,15 +73,30 @@ export default function MemberForm() {
     };
 
     useEffect(() => {
-        const fetchMemberships = async () => {
+        const fetchData = async () => {
             try {
-                const res = await apiClient.get('/membership-plans');
-                setMemberships(res.data.filter(m => m.isActive));
+                const [plansRes, membersRes, gymRes] = await Promise.all([
+                    apiClient.get('/membership-plans').catch(() => ({ data: [] })),
+                    apiClient.get('/members').catch(() => ({ data: [] })),
+                    apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
+                ]);
+                setMemberships((plansRes.data || []).filter(m => m.isActive));
+                setExistingMembers(membersRes.data || []);
+                setGymSettings(gymRes.data);
+
+                if (gymRes.data) {
+                    setFormData(prev => ({
+                        ...prev,
+                        referralRewardType: gymRes.data.referralRewardType || 'Both',
+                        referralBonusDays: gymRes.data.referrerBonusDays || 7,
+                        referralWalletAmount: gymRes.data.referrerWalletAmount || 200
+                    }));
+                }
             } catch (err) {
-                console.error("Failed to fetch memberships");
+                console.error("Failed to fetch initial registration data", err);
             }
         };
-        fetchMemberships();
+        fetchData();
     }, []);
 
     // Auto-calculate BMI
@@ -93,6 +116,7 @@ export default function MemberForm() {
             const member = location.state.member;
             setFormData({
                 ...member,
+                referredBy: member.referredBy?._id || member.referredBy || '',
                 followUpDate: member.followUpDate ? new Date(member.followUpDate).toISOString().split('T')[0] : ''
             });
             setLoading(false);
@@ -157,6 +181,8 @@ export default function MemberForm() {
         if (errors[name]) setErrors({ ...errors, [name]: null });
     };
 
+
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         
@@ -186,7 +212,11 @@ export default function MemberForm() {
                 navigate('/dashboard/owner/members');
             } else {
                 const res = await apiClient.post('/members', formData);
-                toast.success("Member registered successfully");
+                if (formData.referredBy) {
+                    toast.success("Member registered & Referral Rewards (Wallet/Bonus Days) credited to Referrer!");
+                } else {
+                    toast.success("Member registered successfully");
+                }
                 // Navigate seamlessly to Assign Plan step
                 navigate('/dashboard/owner/membership/assign', { state: { member: res.data } });
             }
@@ -197,6 +227,21 @@ export default function MemberForm() {
     };
 
     if (loading) return <Loader text="Loading member details..." />;
+
+    // Selected Referrer Member details
+    const selectedReferrer = existingMembers.find(m => m._id === formData.referredBy);
+    const rewardType = formData.referralRewardType || 'Both';
+    const bonusDays = formData.referralBonusDays || 7;
+    const walletAmt = formData.referralWalletAmount || 200;
+
+    let rewardSummaryText = '';
+    if (rewardType === 'Bonus Days') {
+        rewardSummaryText = `+${bonusDays} Bonus Days`;
+    } else if (rewardType === 'Wallet Cash') {
+        rewardSummaryText = `₹${walletAmt} Wallet Cash`;
+    } else {
+        rewardSummaryText = `+${bonusDays} Bonus Days & ₹${walletAmt} Wallet Cash`;
+    }
 
     return (
         <PageLayout>
@@ -275,6 +320,30 @@ export default function MemberForm() {
                             <Input type="tel" label="Alt. Phone" name="altContact" value={formData.altContact || ''} onChange={handleChange} placeholder="Secondary Phone" error={errors.altContact} />
                             <Input type="email" label="Email Address" name="email" value={formData.email || ''} onChange={handleChange} placeholder="email@example.com" error={errors.email} />
                             <Select label="Blood Group" name="bloodGroup" value={formData.bloodGroup || ''} onChange={handleChange} error={errors.bloodGroup} options={['', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']} />
+                        </FormSection>
+
+                        {/* Dedicated Referral Section */}
+                        <FormSection title="Referral Source" icon={<FiGift className="text-emerald-600" />} className="grid grid-cols-1 gap-4">
+                            <div className="flex flex-col justify-end">
+                                <Select
+                                    label="Referred By Existing Member (Optional)"
+                                    name="referredBy"
+                                    value={formData.referredBy || ''}
+                                    onChange={handleChange}
+                                    options={[
+                                        { value: '', label: '-- Direct Registration / No Referral --' },
+                                        ...existingMembers.map(m => {
+                                            const name = `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Gym Member';
+                                            const code = m.memberId || 'MEM';
+                                            const phone = m.contactNumber || m.phone || '';
+                                            return {
+                                                value: m._id,
+                                                label: `${code} - ${name} ${phone ? `(${phone})` : ''}`
+                                            };
+                                        })
+                                    ]}
+                                />
+                            </div>
                         </FormSection>
 
                         <FormSection title="Address & Emergency" icon={<FiMapPin />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
