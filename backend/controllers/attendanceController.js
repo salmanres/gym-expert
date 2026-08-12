@@ -32,25 +32,35 @@ exports.markAttendance = async (req, res) => {
         
         let targetUser = await Member.findById(targetUserId);
         let isStaff = false;
+        let isTrial = false;
+        let attendanceType = 'Member';
         
         if (!targetUser) {
             targetUser = await User.findById(targetUserId);
-            isStaff = true;
+            if (targetUser) {
+                isStaff = true;
+            } else {
+                targetUser = await Enquiry.findById(targetUserId);
+                if (targetUser) {
+                    isTrial = true;
+                    attendanceType = 'Trial';
+                }
+            }
         }
 
         if (!targetUser || !targetUser.gymId) {
-            return res.status(404).json({ message: 'Member/Staff or gym association not found' });
+            return res.status(404).json({ message: 'Member/Staff/Trial or gym association not found' });
         }
         if (targetUser.status === 'Frozen') {
             return res.status(403).json({ message: 'User is currently Frozen. Attendance cannot be marked.' });
         }
-        if (targetUser.status !== 'Active') {
+        if (!isTrial && targetUser.status !== 'Active') {
             return res.status(403).json({ message: 'User is not Active. Attendance cannot be marked.' });
         }
 
         const gymId = targetUser.gymId;
 
-        if (!isStaff) {
+        if (!isStaff && !isTrial) {
             // Check if member has an active membership
             const currentDate = new Date();
             currentDate.setHours(0, 0, 0, 0);
@@ -109,6 +119,7 @@ exports.markAttendance = async (req, res) => {
 
         let attendance = await Attendance.findOne({
             userId: targetUserId,
+            gymId: gymId,
             date: recordDate
         });
 
@@ -143,6 +154,7 @@ exports.markAttendance = async (req, res) => {
                 checkInTime: status !== 'Absent' ? new Date() : null,
                 status: status || 'Present',
                 source: source || 'Manual',
+                attendanceType: attendanceType,
                 location: latitude ? { latitude, longitude } : undefined,
                 notes: notes,
                 markedBy: req.user._id
@@ -219,6 +231,25 @@ exports.getDailySheet = async (req, res) => {
                 profilePhoto: u.profilePhoto,
                 status: u.status
             }));
+        } else if (type === 'trial') {
+            // Show enquiries that are actively on trial during the queryDate
+            // OR have an attendance record on the queryDate
+            const queryDateEnd = new Date(queryDate);
+            queryDateEnd.setHours(23, 59, 59, 999);
+
+            const enquiries = await Enquiry.find({ 
+                gymId: req.user.gymId,
+                trialDate: { $lte: queryDateEnd },
+                trialEndDate: { $gte: queryDate }
+            }).select('firstName lastName contactNumber status');
+            
+            users = enquiries.map(e => ({
+                _id: e._id,
+                name: `${e.firstName} ${e.lastName || ''}`.trim(),
+                phone: e.contactNumber,
+                profilePhoto: null,
+                status: e.status
+            }));
         } else {
             const members = await Member.find({ 
                 gymId: req.user.gymId
@@ -279,6 +310,7 @@ exports.getCheckInStatus = async (req, res) => {
 
         const attendance = await Attendance.findOne({
             userId: member._id,
+            gymId: gymId,
             date: recordDate
         });
 
@@ -385,6 +417,7 @@ exports.selfCheckIn = async (req, res) => {
 
         let attendance = await Attendance.findOne({
             userId: member._id,
+            gymId: gymId,
             date: recordDate
         });
 

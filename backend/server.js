@@ -11,6 +11,7 @@ const membershipRoutes = require('./routes/membershipRoutes');
 const memberMembershipRoutes = require('./routes/memberMembershipRoutes');
 const staffRoutes = require('./routes/staffRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const trialAttendanceRoutes = require('./routes/trialAttendanceRoutes');
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use('/api/membership-plans', membershipRoutes);
 app.use('/api/member-memberships', memberMembershipRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/trial-attendance', trialAttendanceRoutes);
 
 // Basic Route for testing
 app.get('/', (req, res) => {

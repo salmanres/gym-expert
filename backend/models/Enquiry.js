@@ -35,6 +35,7 @@ const enquirySchema = new mongoose.Schema({
     response: { type: String },
     offerAmount: { type: Number },
     offerDetails: { type: String },
+    lostReason: { type: String },
     followUpHistory: [{
         contactDate: { type: Date, default: Date.now },
         response: { type: String },

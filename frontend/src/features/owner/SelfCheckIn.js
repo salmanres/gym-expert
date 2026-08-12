@@ -19,25 +19,33 @@ export default function SelfCheckIn() {
 
     const [attendanceStatus, setAttendanceStatus] = useState('none');
 
+    const [isTrial, setIsTrial] = useState(false);
+
     useEffect(() => {
         const token = localStorage.getItem(`deviceToken_${gymId}`);
+        const trialToken = localStorage.getItem(`trial_deviceToken_${gymId}`);
         if (token) {
-            checkStatus(token);
+            checkStatus(token, false);
+        } else if (trialToken) {
+            checkStatus(trialToken, true);
+            setIsTrial(true);
         } else {
             setUiState('phone'); // Needs phone number
         }
     }, [gymId]);
 
-    const checkStatus = async (token) => {
+    const checkStatus = async (token, trial = false) => {
         setUiState('loading');
         try {
-            const res = await apiClient.get(`/attendance/status/${gymId}/${token}`);
+            const endpoint = trial ? `/trial-attendance/status/${gymId}/${token}` : `/attendance/status/${gymId}/${token}`;
+            const res = await apiClient.get(endpoint);
             setAttendanceStatus(res.data.status); // 'none', 'checked_in', 'checked_out'
             setMemberName(res.data.memberName || '');
             setUiState('init');
         } catch (error) {
             if (error.response?.data?.requiresReauth) {
-                localStorage.removeItem(`deviceToken_${gymId}`);
+                localStorage.removeItem(trial ? `trial_deviceToken_${gymId}` : `deviceToken_${gymId}`);
+                setIsTrial(false);
                 setUiState('phone');
             } else {
                 setUiState('init'); // fallback to init if there's a non-auth error
@@ -55,18 +63,46 @@ export default function SelfCheckIn() {
         setUiState('loading');
         try {
             const res = await apiClient.post(`/attendance/request-otp`, { gymId, phone });
-            toast.success(res.data.message);
-            // In dev mode, log the mock OTP and show it in a toast
-            console.log("Mock OTP:", res.data.mockOtp);
-            if (res.data.mockOtp) {
-                toast.info(`Mock OTP : ${res.data.mockOtp}`, { autoClose: false });
-            }
-            setUiState('otp');
-            setMessage('');
+            setIsTrial(false);
+            showOtpSuccess(res.data);
         } catch (error) {
+            if (error.response?.status === 404) {
+                // If not found as member, try as trial person
+                try {
+                    const trialRes = await apiClient.post(`/trial-attendance/identify`, { 
+                        gymId, 
+                        contactNumber: phone
+                    });
+                    setIsTrial(true);
+                    
+                    if (trialRes.data.skipOtp) {
+                        const tokenKey = `trial_deviceToken_${gymId}`;
+                        localStorage.setItem(tokenKey, trialRes.data.deviceToken);
+                        setMemberName(trialRes.data.memberName || '');
+                        performCheckIn(trialRes.data.deviceToken, true);
+                        return;
+                    }
+
+                    showOtpSuccess(trialRes.data);
+                    return;
+                } catch (trialErr) {
+                    setUiState('phone');
+                    setMessage(trialErr.response?.data?.message || 'Phone number not found as Member or Trial.');
+                    return;
+                }
+            }
             setUiState('phone');
             setMessage(error.response?.data?.message || 'Failed to send OTP. Please try again.');
         }
+    };
+
+    const showOtpSuccess = (data) => {
+        toast.success(data.message);
+        if (data.mockOtp) {
+            toast.info(`Mock OTP : ${data.mockOtp}`, { autoClose: false });
+        }
+        setUiState('otp');
+        setMessage('');
     };
 
     const handleVerifyOTP = async (e) => {
@@ -98,14 +134,19 @@ export default function SelfCheckIn() {
 
     const handleDirectCheckIn = () => {
         const token = localStorage.getItem(`deviceToken_${gymId}`);
-        if (!token) {
+        const trialToken = localStorage.getItem(`trial_deviceToken_${gymId}`);
+        
+        if (token) {
+            performCheckIn(token, false);
+        } else if (trialToken) {
+            performCheckIn(trialToken, true);
+        } else {
             setUiState('phone');
-            return;
         }
-        performCheckIn(token);
     };
 
-    const performCheckIn = (deviceToken) => {
+    const performCheckIn = (deviceToken, forceTrial = null) => {
+        const useTrial = forceTrial !== null ? forceTrial : isTrial;
         setUiState('loading');
         
         if (!navigator.geolocation) {
@@ -118,12 +159,12 @@ export default function SelfCheckIn() {
             async (position) => {
                 const { latitude, longitude } = position.coords;
                 try {
-                    const res = await apiClient.post(`/attendance/self-checkin`, {
+                    const endpoint = useTrial ? `/trial-attendance/self-checkin` : `/attendance/self-checkin`;
+                    const res = await apiClient.post(endpoint, {
                         gymId,
                         deviceToken,
                         latitude,
-                        longitude,
-                        fingerprint: navigator.userAgent
+                        longitude
                     });
                     
                     setMemberName(res.data.memberName || memberName || '');
@@ -138,7 +179,8 @@ export default function SelfCheckIn() {
                     setMessage(errorMsg);
                     
                     if (error.response?.data?.requiresReauth) {
-                        localStorage.removeItem(`deviceToken_${gymId}`);
+                        localStorage.removeItem(useTrial ? `trial_deviceToken_${gymId}` : `deviceToken_${gymId}`);
+                        setIsTrial(false);
                         setTimeout(() => setUiState('phone'), 3000); // go back to phone after a bit
                     }
                 }
@@ -156,7 +198,7 @@ export default function SelfCheckIn() {
     };
 
     const resetFlow = () => {
-        if (localStorage.getItem(`deviceToken_${gymId}`)) {
+        if (localStorage.getItem(`deviceToken_${gymId}`) || localStorage.getItem(`trial_deviceToken_${gymId}`)) {
             setUiState('init');
         } else {
             setUiState('phone');
@@ -236,6 +278,8 @@ export default function SelfCheckIn() {
                             <button 
                                 onClick={() => {
                                     localStorage.removeItem(`deviceToken_${gymId}`);
+                                    localStorage.removeItem(`trial_deviceToken_${gymId}`);
+                                    setIsTrial(false);
                                     setUiState('phone');
                                 }}
                                 className="text-sm text-slate-400 hover:text-white font-medium mt-6 transition-colors"
@@ -263,7 +307,7 @@ export default function SelfCheckIn() {
                                 type="submit"
                                 className="w-full py-4 rounded-2xl font-black text-slate-900 bg-emerald-400 hover:bg-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.3)] active:scale-95 transform transition-all"
                             >
-                                Send OTP
+                                Continue
                             </button>
                         </form>
                     )}

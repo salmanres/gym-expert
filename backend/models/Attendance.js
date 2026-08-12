@@ -3,13 +3,17 @@ const mongoose = require('mongoose');
 const attendanceSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Member',
         required: true
     },
     gymId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Gym',
         required: true
+    },
+    attendanceType: {
+        type: String,
+        enum: ['Member', 'Trial'],
+        default: 'Member'
     },
     date: {
         type: Date,
@@ -48,7 +52,10 @@ const attendanceSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-// Ensure one attendance record per user per day
-attendanceSchema.index({ userId: 1, date: 1 }, { unique: true });
+// Ensure one attendance record per user per gym per day
+attendanceSchema.index(
+    { userId: 1, gymId: 1, date: 1 },
+    { unique: true }
+);
 
 module.exports = mongoose.model('Attendance', attendanceSchema);

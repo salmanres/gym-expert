@@ -173,7 +173,7 @@ export default function AttendanceDashboard() {
             />
 
             <Tabs 
-                tabs={['Members', 'Staff']} 
+                tabs={['Members', 'Staff', 'Trial']} 
                 activeTab={activeTab} 
                 onTabChange={setActiveTab} 
             />

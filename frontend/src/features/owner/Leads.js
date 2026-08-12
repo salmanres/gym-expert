@@ -76,8 +76,8 @@ function Leads() {
     const filteredLeads = leads.filter(lead => {
         let tabMatch = true;
         if (activeTab === 'Enquiries') tabMatch = lead.status === 'Pending';
-        else if (activeTab === 'Leads') tabMatch = true; // Show all
-        else if (activeTab === 'Follow Ups') tabMatch = lead.status === 'Contacted';
+        else if (activeTab === 'Leads') tabMatch = lead.status === 'Lead';
+        else if (activeTab === 'Follow Ups') tabMatch = !!lead.followUpDate && lead.status !== 'Converted' && lead.status !== 'Lost';
         else if (activeTab === 'Trials') tabMatch = !!lead.trialDate || !!lead.trialEndDate;
         else if (activeTab === 'Negotiation') tabMatch = lead.status === 'Negotiation';
         else if (activeTab === 'Converted') tabMatch = lead.status === 'Converted';
@@ -168,7 +168,7 @@ function Leads() {
                           lead.status === 'Negotiation' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' :
                           'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
                 >
-                    {lead.status === 'Lead' && <option value="Lead" className="hidden">Lead</option>}
+                    <option value="Lead">Lead</option>
                     <option value="Pending">Pending</option>
                     <option value="Contacted">Contacted</option>
                     <option value="Negotiation">Negotiation</option>

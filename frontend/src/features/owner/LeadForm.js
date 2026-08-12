@@ -27,7 +27,7 @@ export default function LeadForm() {
         firstName: '', lastName: '', gender: 'Male', dob: '', contactNumber: '', altContact: '', email: '',
         address: '', source: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
         convertibility: 'Warm', status: 'Pending', attendedBy: 'Admin',
-        response: '', offerAmount: '', offerDetails: '', sendTextAndEmail: false, sendWhatsApp: false,
+        response: '', offerAmount: '', offerDetails: '', lostReason: '', sendTextAndEmail: false, sendWhatsApp: false,
         followUpHistory: []
     });
     const [errors, setErrors] = useState({});
@@ -117,6 +117,15 @@ export default function LeadForm() {
             newErrors.altContact = 'Invalid 10-digit mobile number';
         }
 
+        if (formData.status === 'Negotiation') {
+            if (!formData.offerAmount || String(formData.offerAmount).trim() === '') newErrors.offerAmount = 'Offer amount is required for negotiation';
+            if (!formData.offerDetails || formData.offerDetails.trim() === '') newErrors.offerDetails = 'Offer details are required';
+        }
+
+        if (formData.status === 'Lost') {
+            if (!formData.lostReason || formData.lostReason.trim() === '') newErrors.lostReason = 'Please specify the reason for losing this lead';
+        }
+
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
             toast.error("Please fix the highlighted errors before submitting.");
@@ -165,7 +174,7 @@ export default function LeadForm() {
                 await apiClient.put(`/enquiries/${id}`, submitData);
                 toast.success("Lead updated successfully");
             } else {
-                const response = await apiClient.post('/enquiries', formData);
+                const response = await apiClient.post('/enquiries', submitData);
                 leadId = response.data._id;
                 toast.success("Lead added successfully");
             }
@@ -232,8 +241,7 @@ export default function LeadForm() {
                         </FormSection>
 
                         <FormSection title="Feedback & Action" icon={<FiMessageSquare />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Contacted', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
-                                {formData.status === 'Lead' && <option value="Lead" className="hidden">Lead</option>}
+                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Lead', 'Contacted', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
                             </Select>
                             
                             {formData.status === 'Negotiation' && (
@@ -255,6 +263,18 @@ export default function LeadForm() {
                                         placeholder="e.g. 3 Months + 1 Month Free" 
                                     />
                                 </>
+                            )}
+
+                            {formData.status === 'Lost' && (
+                                <Input 
+                                    containerClassName="sm:col-span-2 lg:col-span-2"
+                                    label="Lost Reason" 
+                                    name="lostReason" 
+                                    value={formData.lostReason || ''} 
+                                    onChange={handleChange} 
+                                    placeholder="e.g. Joined another gym, Too expensive" 
+                                    error={errors.lostReason}
+                                />
                             )}
                             
                             <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 flex flex-col gap-2">
