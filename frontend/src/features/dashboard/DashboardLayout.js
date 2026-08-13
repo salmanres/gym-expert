@@ -156,6 +156,13 @@ function DashboardLayout() {
                                     <FiCreditCard className="text-base" />
                                     <span>Membership</span>
                                 </Link>
+                                 <Link 
+                                            to="/dashboard/owner/finance" 
+                                            className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/finance') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
+                                        >
+                                            <FiDollarSign className="text-base" />
+                                            <span>Finance</span>
+                                        </Link>
                                 {['GYM_OWNER', 'ADMIN', 'BRANCH_MANAGER'].includes(user?.role) && (
                                     <Link 
                                         to="/dashboard/owner/staff" 
@@ -184,13 +191,7 @@ function DashboardLayout() {
 
                                 {['GYM_OWNER', 'ADMIN', 'BRANCH_MANAGER'].includes(user?.role) && (
                                     <>
-                                        <Link 
-                                            to="/dashboard/owner/finance" 
-                                            className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/finance') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}
-                                        >
-                                            <FiDollarSign className="text-base" />
-                                            <span>Finance</span>
-                                        </Link>
+                                       
                                         <Link 
                                             to="/dashboard/owner/settings" 
                                             className={`flex items-center gap-2 px-4 py-2 font-bold text-xs transition-colors ${location.pathname.includes('/settings') ? 'text-emerald-600 border-l-4 border-emerald-600 bg-emerald-50' : 'text-slate-600 hover:bg-slate-50 border-l-4 border-transparent'}`}

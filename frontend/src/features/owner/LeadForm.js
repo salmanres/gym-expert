@@ -12,6 +12,7 @@ import Textarea from '../../components/form/Textarea';
 import Checkbox from '../../components/form/Checkbox';
 import Button from '../../components/form/Button';
 import Loader from '../../components/page/Loader';
+import { useRef } from 'react';
 
 export default function LeadForm() {
     const { id } = useParams();
@@ -19,44 +20,119 @@ export default function LeadForm() {
     const location = useLocation();
     
     const isEdit = !!id;
-    const [loading, setLoading] = useState(isEdit && !location.state?.lead);
+    const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [gymSettings, setGymSettings] = useState(null);
     const [logNewFollowUp, setLogNewFollowUp] = useState(false);
     
     const [formData, setFormData] = useState({
         firstName: '', lastName: '', gender: 'Male', dob: '', contactNumber: '', altContact: '', email: '',
         address: '', source: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
         convertibility: 'Warm', status: 'Pending', attendedBy: 'Admin',
-        response: '', offerAmount: '', offerDetails: '', lostReason: '', sendTextAndEmail: false, sendWhatsApp: false,
+        response: '', offerAmount: '', offerDetails: '', selectedOffer: '', lostReason: '', sendTextAndEmail: false, sendWhatsApp: false,
         followUpHistory: []
     });
     const [errors, setErrors] = useState({});
+    const negotiationRef = useRef(null);
+    const lostReasonRef = useRef(null);
+
+    useEffect(() => {
+        if (!loading && location.state?.autoFocusStatus) {
+            setTimeout(() => {
+                if (location.state.autoFocusStatus === 'Negotiation' && negotiationRef.current) {
+                    negotiationRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    negotiationRef.current.focus();
+                } else if (location.state.autoFocusStatus === 'Lost' && lostReasonRef.current) {
+                    lostReasonRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    lostReasonRef.current.focus();
+                }
+            }, 500);
+        }
+    }, [loading, location.state]);
 
     useEffect(() => {
         if (isEdit) {
             if (location.state?.lead) {
-                // If lead data was passed through navigation state, use it directly
-                setFormData({ ...location.state.lead, sendTextAndEmail: false, sendWhatsApp: false });
-                setLoading(false);
+                // We still need to fetch gym settings for the dropdowns
+                const fetchGymOnly = async () => {
+                    try {
+                        const gymRes = await apiClient.get('/gyms/my-gym');
+                        let matchedOfferId = '';
+                        if (gymRes?.data) {
+                            setGymSettings(gymRes.data);
+                            const matchedOffer = gymRes.data.couponOffers?.find(o => o.title === location.state.lead.offerDetails);
+                            matchedOfferId = matchedOffer ? matchedOffer._id : (location.state.lead.offerDetails ? 'Custom' : '');
+                        }
+                        setFormData({ ...location.state.lead, selectedOffer: matchedOfferId, sendTextAndEmail: false, sendWhatsApp: false });
+                    } catch (err) {
+                        setFormData({ ...location.state.lead, sendTextAndEmail: false, sendWhatsApp: false });
+                    }
+                    setLoading(false);
+                };
+                fetchGymOnly();
             } else {
                 // Otherwise fetch it from the backend
-                const fetchLead = async () => {
+                const fetchData = async () => {
                     try {
-                        const res = await apiClient.get(`/enquiries/${id}`);
-                        setFormData({ ...res.data, sendTextAndEmail: false, sendWhatsApp: false });
+                        const [leadRes, gymRes] = await Promise.all([
+                            apiClient.get(`/enquiries/${id}`),
+                            apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
+                        ]);
+                        let matchedOfferId = '';
+                        if (gymRes?.data) {
+                            setGymSettings(gymRes.data);
+                            const matchedOffer = gymRes.data.couponOffers?.find(o => o.title === leadRes.data.offerDetails);
+                            matchedOfferId = matchedOffer ? matchedOffer._id : (leadRes.data.offerDetails ? 'Custom' : '');
+                        }
+                        setFormData({ ...leadRes.data, selectedOffer: matchedOfferId, sendTextAndEmail: false, sendWhatsApp: false });
                         setLoading(false);
                     } catch (error) {
                         toast.error("Failed to fetch lead details");
                         navigate('/dashboard/owner/leads');
                     }
                 };
-                fetchLead();
+                fetchData();
             }
+        } else {
+            // New Lead - just fetch gym settings
+            const fetchGym = async () => {
+                try {
+                    const gymRes = await apiClient.get('/gyms/my-gym');
+                    if (gymRes?.data) setGymSettings(gymRes.data);
+                    setLoading(false);
+                } catch (error) {
+                    setLoading(false);
+                }
+            };
+            fetchGym();
         }
     }, [id, navigate, isEdit, location.state]);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
+        
+        if (name === 'selectedOffer') {
+            if (value === 'Custom' || value === '') {
+                setFormData({
+                    ...formData,
+                    selectedOffer: value,
+                    offerDetails: '',
+                    offerAmount: ''
+                });
+            } else {
+                const selectedOffer = gymSettings?.couponOffers?.find(o => o._id === value);
+                if (selectedOffer) {
+                    setFormData({
+                        ...formData,
+                        selectedOffer: value,
+                        offerDetails: selectedOffer.title,
+                        offerAmount: selectedOffer.discountType === 'Flat' ? selectedOffer.discountValue : '' 
+                    });
+                }
+            }
+            return;
+        }
+
         setFormData({ 
             ...formData, 
             [name]: type === 'checkbox' ? checked : value 
@@ -118,7 +194,6 @@ export default function LeadForm() {
         }
 
         if (formData.status === 'Negotiation') {
-            if (!formData.offerAmount || String(formData.offerAmount).trim() === '') newErrors.offerAmount = 'Offer amount is required for negotiation';
             if (!formData.offerDetails || formData.offerDetails.trim() === '') newErrors.offerDetails = 'Offer details are required';
         }
 
@@ -244,8 +319,21 @@ export default function LeadForm() {
                             <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Lead', 'Contacted', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
                             </Select>
                             
-                            {formData.status === 'Negotiation' && (
+                            {(formData.status === 'Negotiation' || formData.status === 'Converted') && (
                                 <>
+                                    <Select 
+                                        label="Select Preset Offer" 
+                                        name="selectedOffer" 
+                                        value={formData.selectedOffer || ''}
+                                        onChange={handleChange}
+                                    >
+                                        <option value="">-- Choose an Offer --</option>
+                                        {gymSettings?.couponOffers?.filter(o => o.isActive).map(offer => (
+                                            <option key={offer._id} value={offer._id}>{offer.title} ({offer.discountType === 'Percentage' ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} OFF`})</option>
+                                        ))}
+                                        <option value="Custom">Custom Offer</option>
+                                    </Select>
+
                                     <Input 
                                         type="number"
                                         label="Offer Amount (₹)" 
@@ -253,14 +341,16 @@ export default function LeadForm() {
                                         value={formData.offerAmount || ''} 
                                         onChange={handleChange} 
                                         placeholder="e.g. 5000" 
+                                        error={errors.offerAmount}
                                     />
                                     <Input 
-                                        containerClassName="sm:col-span-2 lg:col-span-2"
                                         label="Offer Details" 
                                         name="offerDetails" 
                                         value={formData.offerDetails || ''} 
                                         onChange={handleChange} 
                                         placeholder="e.g. 3 Months + 1 Month Free" 
+                                        error={errors.offerDetails}
+                                        inputRef={negotiationRef}
                                     />
                                 </>
                             )}
@@ -274,6 +364,7 @@ export default function LeadForm() {
                                     onChange={handleChange} 
                                     placeholder="e.g. Joined another gym, Too expensive" 
                                     error={errors.lostReason}
+                                    inputRef={lostReasonRef}
                                 />
                             )}
                             

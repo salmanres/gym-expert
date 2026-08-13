@@ -67,8 +67,8 @@ export default function AssignMembershipForm() {
                             planEndDate: new Date(activeMem.endDate).toISOString().split('T')[0],
                             totalSessions: activeMem.totalSessions || '',
                             discount: activeMem.discount || '',
-                            amountPaid: activeMem.paidAmount || '',
-                            paidUntilDate: activeMem.paidUntilDate ? new Date(activeMem.paidUntilDate).toISOString().split('T')[0] : '',
+                            amountPaid: 0,
+                            paidUntilDate: '',
                             walletUsed: '',
                             bonusDays: 0
                         }));
@@ -121,62 +121,18 @@ export default function AssignMembershipForm() {
             if (maxEndDate) {
                 const maxEndDateStr = maxEndDate.toISOString().split('T')[0];
                 const discountVal = Number(formData.discount) || 0;
-                const finalAmt = Math.max(0, totalAmount - discountVal);
                 setFormData(prev => ({ 
                     ...prev, 
                     planEndDate: maxEndDateStr,
-                    amountPaid: prev.amountPaid !== '' ? prev.amountPaid : finalAmt, // Auto-fill amount if empty
+                    amountPaid: 0, 
                     totalSessions: prev.totalSessions || totalSess, 
-                    paidUntilDate: prev.paidUntilDate || maxEndDateStr 
+                    paidUntilDate: '' 
                 }));
             }
         }
     }, [formData.membershipPlanId, formData.planStartDate, formData.discount, memberships]);
 
-    // Proportionally calculate paidUntilDate when amountPaid changes
-    useEffect(() => {
-        if (formData.membershipPlanId && formData.planStartDate && formData.planEndDate) {
-            let originalTotalAmount = 0;
-            const plan = memberships.find(p => p._id === formData.membershipPlanId);
-            if (plan) originalTotalAmount = plan.price || 0;
-            const discountVal = Number(formData.discount) || 0;
-            const finalTotalAmount = Math.max(0, originalTotalAmount - discountVal);
-
-            const paid = Number(formData.amountPaid) || 0;
-            
-            if (paid > 0 && finalTotalAmount > 0) {
-                const start = new Date(formData.planStartDate);
-                const end = new Date(formData.planEndDate);
-                
-                // Calculate total days of the plan
-                const totalDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
-                
-                if (paid >= finalTotalAmount) {
-                    // Full payment
-                    if (formData.paidUntilDate !== formData.planEndDate) {
-                        setFormData(prev => ({ ...prev, paidUntilDate: prev.planEndDate }));
-                    }
-                } else {
-                    // Partial payment - calculate proportional days
-                    const proportion = paid / finalTotalAmount;
-                    const paidDays = Math.round(totalDays * proportion);
-                    
-                    const paidUntilObj = new Date(start);
-                    paidUntilObj.setDate(paidUntilObj.getDate() + paidDays);
-                    
-                    const calculatedDateStr = paidUntilObj.toISOString().split('T')[0];
-                    
-                    if (formData.paidUntilDate !== calculatedDateStr) {
-                        setFormData(prev => ({ ...prev, paidUntilDate: calculatedDateStr }));
-                    }
-                }
-            } else if (paid === 0) {
-                 if (formData.paidUntilDate !== '') {
-                     setFormData(prev => ({ ...prev, paidUntilDate: '' }));
-                 }
-            }
-        }
-    }, [formData.amountPaid, formData.planStartDate, formData.planEndDate, formData.membershipPlanId, formData.discount, memberships]);
+    // Proportional paidUntilDate calculation removed as payments are handled separately.
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -221,7 +177,7 @@ export default function AssignMembershipForm() {
             setFormData(prev => ({
                 ...prev,
                 discount: discountAmt,
-                amountPaid: Math.max(0, planPrice - discountAmt),
+                amountPaid: 0,
                 bonusDays: bonus
             }));
             
@@ -304,7 +260,7 @@ export default function AssignMembershipForm() {
         setFormData(prev => ({
             ...prev,
             discount: 0,
-            amountPaid: planPrice,
+            amountPaid: 0,
             bonusDays: 0
         }));
         toast.info("Coupon removed.");
@@ -342,7 +298,7 @@ export default function AssignMembershipForm() {
                 toast.success("Membership assigned successfully");
             }
             
-            navigate('/dashboard/owner/membership');
+            navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: { _id: formData.memberId } } });
         } catch (error) {
             toast.error(error.response?.data?.message || "Failed to assign membership");
             setSubmitting(false);
@@ -501,28 +457,6 @@ export default function AssignMembershipForm() {
 
                             <Input type="number" label="Discount (₹)" name="discount" value={formData.discount} onChange={handleChange} placeholder="e.g. 1000" />
                             
-                            {formData.memberId && members.find(m => m._id === formData.memberId)?.walletBalance > 0 && (
-                                <Input 
-                                    type="number" 
-                                    label={`Use Wallet Cash (Available: ₹${members.find(m => m._id === formData.memberId).walletBalance})`} 
-                                    name="walletUsed" 
-                                    value={formData.walletUsed} 
-                                    onChange={(e) => {
-                                        const val = Number(e.target.value);
-                                        const maxWallet = members.find(m => m._id === formData.memberId).walletBalance;
-                                        if (val <= maxWallet) handleChange(e);
-                                    }} 
-                                    placeholder="Enter amount to use" 
-                                    max={members.find(m => m._id === formData.memberId)?.walletBalance}
-                                />
-                            )}
-
-                            <Input type="number" label="Amount Paid Now (₹)" name="amountPaid" value={formData.amountPaid} onChange={handleChange} placeholder="e.g. 15000" />
-                            
-                            {Number(formData.amountPaid) > 0 && (
-                                <Input containerClassName="sm:col-span-2 animate-in fade-in slide-in-from-top-2 duration-300" type="date" label="Valid Until (Check-in Allowed Till)" name="paidUntilDate" value={formData.paidUntilDate || ''} onChange={handleChange} className="bg-emerald-50 font-bold border-emerald-200" />
-                            )}
-                            
                         </FormSection>
 
                         <div className="flex justify-end items-center gap-3 mt-4 pt-6 border-t border-slate-200">
@@ -531,8 +465,8 @@ export default function AssignMembershipForm() {
                             </Button>
                             <Button type="submit" loading={submitting}>
                                 {editMode 
-                                    ? 'Update Membership' 
-                                    : (formData.amountPaid > 0 ? 'Assign Plan & Collect Payment' : 'Assign Plan')}
+                                    ? 'Update Membership & Pay' 
+                                    : 'Assign Plan & Pay'}
                             </Button>
                         </div>
                     </form>

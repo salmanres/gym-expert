@@ -6,13 +6,15 @@ const {
     getActiveMemberships,
     getMemberMembershipHistory,
     updateAssignedMembership,
-    addBonusDays
+    addBonusDays,
+    addPayment
 } = require("../controllers/memberMembershipController");
 
 const { protect } = require("../middleware/authMiddleware");
 
 router.post("/", protect, assignMembership);
 router.put("/:id", protect, updateAssignedMembership);
+router.post("/:id/payment", protect, addPayment);
 router.post("/:id/bonus", protect, addBonusDays);
 
 router.get("/active", protect, getActiveMemberships);

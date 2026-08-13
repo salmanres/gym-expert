@@ -52,6 +52,35 @@ function Leads() {
         navigate(`/dashboard/owner/leads/edit/${lead._id}`, { state: { lead: formattedLead } });
     };
 
+    const handleStatusDropdownChange = async (lead, newStatus) => {
+        if (newStatus === lead.status) return;
+
+        if (['Negotiation', 'Lost', 'Converted'].includes(newStatus)) {
+            const formattedDate = lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '';
+            const formattedTrial = lead.trialDate ? new Date(lead.trialDate).toISOString().split('T')[0] : '';
+            const formattedTrialEnd = lead.trialEndDate ? new Date(lead.trialEndDate).toISOString().split('T')[0] : '';
+            const formattedLead = {
+                ...lead,
+                firstName: lead.firstName || lead.name || '',
+                contactNumber: lead.contactNumber || lead.phone || '',
+                followUpDate: formattedDate,
+                trialDate: formattedTrial,
+                trialEndDate: formattedTrialEnd,
+                response: lead.response || '',
+                status: newStatus
+            };
+            navigate(`/dashboard/owner/leads/edit/${lead._id}`, { state: { lead: formattedLead, autoFocusStatus: newStatus } });
+        } else {
+            try {
+                await apiClient.put(`/enquiries/${lead._id}`, { status: newStatus });
+                toast.success("Status updated");
+                fetchLeads();
+            } catch (error) {
+                toast.error("Failed to update status");
+            }
+        }
+    };
+
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this prospect?')) return;
         try {
@@ -159,7 +188,7 @@ function Leads() {
             <td className="py-3 px-4 text-center">
                 <select
                     value={lead.status}
-                    onChange={(e) => updateStatus(lead._id, e.target.value)}
+                    onChange={(e) => handleStatusDropdownChange(lead, e.target.value)}
                     className={`text-xs font-bold rounded-lg px-2 py-1.5 border-0 shadow-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer transition-colors outline-none
                         ${lead.status === 'Pending' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 
                           lead.status === 'Lead' ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100' :

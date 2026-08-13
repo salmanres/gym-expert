@@ -107,8 +107,11 @@ function Memberships() {
             const isExpired = endDate < today;
             const isRenewingSoon = endDate >= today && endDate <= nextWeek;
             
+            const isScheduled = member.activeMembership?.membershipStatus === 'Scheduled';
+
             if (activeTab === 'Assign') return !member.membershipPlan;
-            if (activeTab === 'Active') return !isExpired;
+            if (activeTab === 'Active') return !isExpired && !isScheduled;
+            if (activeTab === 'Scheduled') return isScheduled;
             if (activeTab === 'Expired') return isExpired;
             if (activeTab === 'Renewals') return isRenewingSoon;
             return false;
@@ -260,7 +263,7 @@ function Memberships() {
         );
     };
 
-    const tabs = ['Plans', 'Assign', 'Active', 'Expired', 'Renewals'];
+    const tabs = ['Plans', 'Assign', 'Active', 'Scheduled', 'Expired', 'Renewals'];
 
     return (
         <PageLayout>

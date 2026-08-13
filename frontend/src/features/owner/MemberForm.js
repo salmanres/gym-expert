@@ -133,7 +133,7 @@ export default function MemberForm() {
                 email: lead.email || '',
                 address: lead.address || '',
                 source: lead.source || '--Select--',
-                interest: lead.interest || '--Select--',
+                interest: lead.inquiryFor || '--Select--',
                 followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '',
                 followUpTime: lead.followUpTime || '',
                 convertibility: lead.convertibility || 'Warm',

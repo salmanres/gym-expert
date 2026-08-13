@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Counter = require('./Counter');
 
 const memberSchema = new mongoose.Schema({
     gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true },
@@ -42,6 +43,7 @@ const memberSchema = new mongoose.Schema({
     bmi: { type: Number },
     bodyFat: { type: Number }, // percentage
     dietPreference: { type: String, enum: ['', 'Veg', 'Non-Veg', 'Vegan', 'Eggitarian', 'Any'] },
+    medicalConditions: { type: String },
     
     joiningDate: { type: Date, required: true, default: Date.now },
     status: { type: String, enum: ['Active', 'Inactive', 'Frozen'], default: 'Active' },
@@ -55,12 +57,16 @@ const memberSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Pre-save hook to auto-generate memberId
+// Pre-save hook to auto-generate memberId atomically
 memberSchema.pre('validate', async function(next) {
     if (!this.memberId) {
         try {
-            const count = await this.constructor.countDocuments({ gymId: this.gymId });
-            this.memberId = `MEM-${String(count + 1).padStart(4, '0')}`;
+            const counter = await Counter.findOneAndUpdate(
+                { gymId: this.gymId, identifier: 'memberId' },
+                { $inc: { seq: 1 } },
+                { new: true, upsert: true }
+            );
+            this.memberId = `MEM-${String(counter.seq).padStart(4, '0')}`;
         } catch (err) {
             return next(err);
         }

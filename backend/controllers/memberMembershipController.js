@@ -38,15 +38,26 @@ exports.assignMembership = async (req, res) => {
         const plan = await MembershipPlan.findOne({ _id: membershipPlanId, gymId });
         if (!plan) return res.status(404).json({ message: "Membership plan not found." });
 
-        // Auto-expire any existing active memberships for this member
-        // This allows seamless renewals without throwing "Member already has an active membership"
-        await MemberMembership.updateMany(
-            { memberId, membershipStatus: "Active" },
-            { $set: { membershipStatus: "Expired" } }
-        );
+        // Only auto-expire existing active memberships if the new plan is starting today or in the past
+        if (new Date(planStartDate) <= new Date()) {
+            await MemberMembership.updateMany(
+                { memberId, membershipStatus: "Active" },
+                { $set: { membershipStatus: "Expired" } }
+            );
+        }
 
         const start = new Date(planStartDate);
         const end = planEndDate ? new Date(planEndDate) : new Date(start);
+
+        if (paidUntilDate) {
+            const pDate = new Date(paidUntilDate);
+            if (pDate > end) {
+                return res.status(400).json({ message: "Paid until date cannot be after membership end date." });
+            }
+            if (pDate < start) {
+                return res.status(400).json({ message: "Paid until date cannot be before membership start date." });
+            }
+        }
 
         // Calculate pricing
         const originalPrice = plan.price;
@@ -54,12 +65,28 @@ exports.assignMembership = async (req, res) => {
         const finalPrice = Math.max(0, originalPrice - discountAmount);
         const paid = Number(amountPaid) || 0;
         const walletVal = Number(walletUsed) || 0;
+        
+        if (walletVal > 0) {
+            if ((member.walletBalance || 0) < walletVal) {
+                return res.status(400).json({ message: "Insufficient wallet balance." });
+            }
+        }
+
         const totalPaid = paid + walletVal;
 
         let paymentStatus = "Pending";
         if (totalPaid >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
         else if (totalPaid > 0) paymentStatus = "Partial";
         if (finalPrice === 0) paymentStatus = "Paid";
+
+        let calculatedPaidUntilDate = null;
+        if (paymentStatus === 'Paid') {
+            calculatedPaidUntilDate = end;
+        } else if (paidUntilDate) {
+            calculatedPaidUntilDate = new Date(paidUntilDate);
+        }
+
+        const calculatedMembershipStatus = start <= new Date() ? "Active" : "Scheduled";
 
         const membership = await MemberMembership.create({
             gymId,
@@ -80,13 +107,13 @@ exports.assignMembership = async (req, res) => {
             discount: discountAmount,
             finalPrice: finalPrice,
 
-            paidAmount: paid,
-            balanceAmount: finalPrice - paid,
+            paidAmount: totalPaid,
+            balanceAmount: Math.max(0, finalPrice - totalPaid),
 
-            paidUntilDate: paidUntilDate ? new Date(paidUntilDate) : null,
+            paidUntilDate: calculatedPaidUntilDate,
 
             paymentStatus: paymentStatus,
-            membershipStatus: "Active",
+            membershipStatus: calculatedMembershipStatus,
 
             assignedBy: req.user.id,
             bonusDays: Number(bonusDays) || 0,
@@ -110,10 +137,12 @@ exports.assignMembership = async (req, res) => {
                 planId: membershipPlanId,
                 collectedBy: req.user.id || req.user._id,
                 amountPaid: totalPaid,
-                paymentMode: walletVal > 0 && paid === 0 ? 'Wallet Cash' : (req.body.paymentMode || 'Cash'),
+                cashAmount: paid,
+                walletAmount: walletVal,
+                paymentMode: walletVal > 0 && paid > 0 ? 'Mixed' : walletVal > 0 ? 'Wallet Cash' : (req.body.paymentMode || 'Cash'),
                 transactionId: req.body.transactionId || `TRX-${Date.now()}`,
-                paymentStatus: paymentStatus,
-                paymentDate: start || new Date()
+                paymentStatus: 'Paid',
+                paymentDate: new Date()
             });
         }
 
@@ -132,7 +161,7 @@ exports.assignMembership = async (req, res) => {
 };
 
 
-// @desc    Update Assigned Membership
+// @desc    Update Assigned Membership (Details Only)
 // @route   PUT /api/member-memberships/:id
 // @access  Private
 exports.updateAssignedMembership = async (req, res) => {
@@ -144,8 +173,6 @@ exports.updateAssignedMembership = async (req, res) => {
             planStartDate,
             planEndDate,
             totalSessions,
-            amountPaid,
-            paidUntilDate,
             discount
         } = req.body;
 
@@ -167,12 +194,16 @@ exports.updateAssignedMembership = async (req, res) => {
         const originalPrice = plan.price;
         const discountAmount = Number(discount) || 0;
         const finalPrice = Math.max(0, originalPrice - discountAmount);
-        const paid = Number(amountPaid) || 0;
+        
+        // Recalculate balance with the new finalPrice (assuming paidAmount stays the same)
+        const balanceAmount = Math.max(0, finalPrice - (membership.paidAmount || 0));
 
         let paymentStatus = "Pending";
-        if (paid >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
-        else if (paid > 0) paymentStatus = "Partial";
+        if (membership.paidAmount >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
+        else if (membership.paidAmount > 0) paymentStatus = "Partial";
         if (finalPrice === 0) paymentStatus = "Paid";
+
+        const calculatedMembershipStatus = start <= new Date() ? "Active" : "Scheduled";
 
         membership.membershipPlanId = membershipPlanId;
         membership.planName = plan.name;
@@ -184,15 +215,110 @@ exports.updateAssignedMembership = async (req, res) => {
         membership.originalPrice = originalPrice;
         membership.discount = discountAmount;
         membership.finalPrice = finalPrice;
-        membership.paidAmount = paid;
-        membership.balanceAmount = finalPrice - paid;
-        membership.paidUntilDate = paidUntilDate ? new Date(paidUntilDate) : null;
+        membership.balanceAmount = balanceAmount;
         membership.paymentStatus = paymentStatus;
+        if (membership.membershipStatus !== "Expired" && membership.membershipStatus !== "Cancelled") {
+            membership.membershipStatus = calculatedMembershipStatus;
+        }
 
         await membership.save();
 
         res.status(200).json({
             message: "Membership updated successfully.",
+            membership,
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+// @desc    Add Payment to Membership
+// @route   POST /api/member-memberships/:id/payment
+// @access  Private
+exports.addPayment = async (req, res) => {
+    try {
+        const gymId = req.user.gymId;
+        const membershipId = req.params.id;
+        const {
+            amountPaid,
+            walletUsed,
+            paidUntilDate,
+            paymentMode,
+            transactionId
+        } = req.body;
+
+        const membership = await MemberMembership.findOne({ _id: membershipId, gymId }).populate('memberId');
+        if (!membership) return res.status(404).json({ message: "Membership assignment not found." });
+
+        const member = membership.memberId;
+        if (!member) return res.status(404).json({ message: "Member not found." });
+
+        const paid = Number(amountPaid) || 0;
+        const walletVal = Number(walletUsed) || 0;
+
+        if (walletVal > 0) {
+            if ((member.walletBalance || 0) < walletVal) {
+                return res.status(400).json({ message: "Insufficient wallet balance." });
+            }
+        }
+
+        const totalPaid = paid + walletVal;
+        
+        if (totalPaid <= 0) {
+            return res.status(400).json({ message: "Payment amount must be greater than zero." });
+        }
+
+        if (paidUntilDate) {
+            const pDate = new Date(paidUntilDate);
+            if (pDate > membership.endDate) {
+                return res.status(400).json({ message: "Paid until date cannot be after membership end date." });
+            }
+            if (pDate < membership.startDate) {
+                return res.status(400).json({ message: "Paid until date cannot be before membership start date." });
+            }
+        }
+
+        membership.paidAmount = (membership.paidAmount || 0) + totalPaid;
+        membership.balanceAmount = Math.max(0, membership.finalPrice - membership.paidAmount);
+
+        let paymentStatus = "Pending";
+        if (membership.paidAmount >= membership.finalPrice && membership.finalPrice > 0) paymentStatus = "Paid";
+        else if (membership.paidAmount > 0) paymentStatus = "Partial";
+        if (membership.finalPrice === 0) paymentStatus = "Paid";
+
+        membership.paymentStatus = paymentStatus;
+
+        if (paymentStatus === 'Paid') {
+            membership.paidUntilDate = membership.endDate;
+        } else if (paidUntilDate) {
+            membership.paidUntilDate = new Date(paidUntilDate);
+        }
+
+        await membership.save();
+
+        if (walletVal > 0) {
+            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal);
+            await member.save();
+        }
+
+        await Transaction.create({
+            gymId,
+            memberId: member._id,
+            planId: membership.membershipPlanId,
+            collectedBy: req.user.id || req.user._id,
+            amountPaid: totalPaid,
+            cashAmount: paid,
+            walletAmount: walletVal,
+            paymentMode: walletVal > 0 && paid > 0 ? 'Mixed' : walletVal > 0 ? 'Wallet Cash' : (paymentMode || 'Cash'),
+            transactionId: transactionId || `TRX-${Date.now()}`,
+            paymentStatus: 'Paid',
+            paymentDate: new Date()
+        });
+
+        res.status(200).json({
+            message: "Payment added successfully.",
             membership,
         });
 
@@ -257,9 +383,11 @@ exports.getActiveMemberships = async (req, res) => {
 
     try {
 
+        const now = new Date();
         const memberships = await MemberMembership.find({
             gymId: req.user.gymId,
-            membershipStatus: "Active",
+            membershipStatus: { $in: ["Active", "Scheduled"] },
+            endDate: { $gte: now }
         })
             .populate("memberId")
             .populate("membershipPlanId")

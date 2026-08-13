@@ -60,15 +60,25 @@ exports.markAttendance = async (req, res) => {
 
         const gymId = targetUser.gymId;
 
+        let activeMembership = null;
         if (!isStaff && !isTrial) {
             // Check if member has an active membership
             const currentDate = new Date();
             currentDate.setHours(0, 0, 0, 0);
             
-            const activeMembership = await MemberMembership.findOne({
+            activeMembership = await MemberMembership.findOne({
                 memberId: targetUserId,
                 membershipStatus: 'Active',
-                endDate: { $gte: currentDate }
+                startDate: { $lte: currentDate },
+                endDate: { $gte: currentDate },
+                $or: [
+                    { paidUntilDate: null },
+                    { paidUntilDate: { $gte: currentDate } }
+                ],
+                $or: [
+                    { totalSessions: 0 },
+                    { $expr: { $lt: ["$usedSessions", "$totalSessions"] } }
+                ]
             });
 
             if (!activeMembership) {
@@ -159,6 +169,20 @@ exports.markAttendance = async (req, res) => {
                 notes: notes,
                 markedBy: req.user._id
             });
+            
+            if (attendanceType === 'Member' && activeMembership) {
+                await MemberMembership.findOneAndUpdate(
+                    {
+                        _id: activeMembership._id,
+                        $or: [
+                            { totalSessions: 0 },
+                            { usedSessions: { $lt: activeMembership.totalSessions } }
+                        ]
+                    },
+                    { $inc: { usedSessions: 1 } }
+                );
+            }
+
             return res.status(201).json({ message: 'Attendance marked successfully', attendance });
         }
 
@@ -389,7 +413,16 @@ exports.selfCheckIn = async (req, res) => {
         const activeMembership = await MemberMembership.findOne({
             memberId: member._id,
             membershipStatus: 'Active',
-            endDate: { $gte: currentDate }
+            startDate: { $lte: currentDate },
+            endDate: { $gte: currentDate },
+            $or: [
+                { paidUntilDate: null },
+                { paidUntilDate: { $gte: currentDate } }
+            ],
+            $or: [
+                { totalSessions: 0 },
+                { $expr: { $lt: ["$usedSessions", "$totalSessions"] } }
+            ]
         });
 
         if (!activeMembership) {
@@ -446,6 +479,20 @@ exports.selfCheckIn = async (req, res) => {
                 source: 'QR',
                 location: { latitude, longitude }
             });
+
+            if (activeMembership) {
+                await MemberMembership.findOneAndUpdate(
+                    {
+                        _id: activeMembership._id,
+                        $or: [
+                            { totalSessions: 0 },
+                            { usedSessions: { $lt: activeMembership.totalSessions } }
+                        ]
+                    },
+                    { $inc: { usedSessions: 1 } }
+                );
+            }
+
             return res.status(201).json({ message: 'Checked in successfully!', type: 'checkin', memberName: member.firstName });
         }
     } catch (error) {

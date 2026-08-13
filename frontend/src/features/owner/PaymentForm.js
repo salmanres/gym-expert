@@ -35,8 +35,8 @@ export default function PaymentForm() {
         paymentStatus: autoOpenMember?.paymentStatus || 'Pending',
         paymentMode: autoOpenMember?.paymentMode || 'Cash',
         appliedCoupon: '',
-        rewardAttendance: false,
-        bonusDaysAwarded: 0
+        additionalDiscount: 0,
+        useWallet: false
     });
 
     useEffect(() => {
@@ -86,8 +86,7 @@ export default function PaymentForm() {
                         paymentMode: freshMember.paymentMode || 'Cash',
                         transactionId: freshMember.transactionId || '',
                         walletUsed: '',
-                        rewardAttendance: false,
-                        bonusDaysAwarded: 0
+                        additionalDiscount: 0
                     }));
                 }
             } catch (err) {
@@ -115,8 +114,7 @@ export default function PaymentForm() {
                 updates.paymentMode = selectedMember.paymentMode || 'Cash';
                 updates.transactionId = selectedMember.transactionId || '';
                 updates.walletUsed = '';
-                updates.rewardAttendance = false;
-                updates.bonusDaysAwarded = 0;
+                updates.additionalDiscount = 0;
             }
         }
 
@@ -127,20 +125,31 @@ export default function PaymentForm() {
         const { name, value } = e.target;
         let updates = { [name]: value };
         
-        let newDisc = name === 'discount' ? parseFloat(value || 0) : parseFloat(formData.discount || 0);
-        let newBase = name === 'baseAmount' ? parseFloat(value || 0) : parseFloat(formData.baseAmount || 0);
-        let newFinal = Math.max(0, newBase - newDisc);
+        let initialDisc = parseFloat(formData.discount || 0);
+        let additionalDisc = name === 'additionalDiscount' ? parseFloat(value || 0) : parseFloat(formData.additionalDiscount || 0);
+        let totalDisc = initialDisc + additionalDisc;
+        
+        let newBase = parseFloat(formData.baseAmount || 0);
+        let newFinal = Math.max(0, newBase - totalDisc);
+        
+        let walletAmt = (name === 'useWallet' && !e.target.checked) ? 0 : 
+                        (name === 'walletUsed' ? parseFloat(value || 0) : 
+                        (formData.useWallet ? parseFloat(formData.walletUsed || 0) : 0));
         
         let previouslyPaid = parseFloat(formData.previouslyPaid || 0);
-        let walletAmt = name === 'walletUsed' ? parseFloat(value || 0) : parseFloat(formData.walletUsed || 0);
         let newPayment = name === 'newPaymentAmount' ? parseFloat(value || 0) : parseFloat(formData.newPaymentAmount || 0);
         let totalPaidNow = previouslyPaid + newPayment + walletAmt;
         
-        if (name === 'discount' || name === 'baseAmount') {
+        if (name === 'additionalDiscount') {
             updates.finalAmount = newFinal;
         }
 
-        if (name === 'newPaymentAmount' || name === 'walletUsed' || name === 'discount' || name === 'baseAmount') {
+        if (name === 'useWallet') {
+            updates.useWallet = e.target.checked;
+            if (!e.target.checked) updates.walletUsed = '';
+        }
+
+        if (name === 'newPaymentAmount' || name === 'walletUsed' || name === 'additionalDiscount' || name === 'useWallet') {
             if (totalPaidNow >= newFinal && newFinal > 0) {
                 updates.paymentStatus = 'Paid';
             } else if (totalPaidNow > 0 && totalPaidNow < newFinal) {
@@ -228,7 +237,7 @@ export default function PaymentForm() {
                 ...selectedMember,
                 paymentStatus: formData.paymentStatus,
                 amountPaid: totalAmountPaidCalculated,
-                discount: formData.discount,
+                discount: parseFloat(formData.discount || 0) + parseFloat(formData.additionalDiscount || 0),
                 finalAmount: formData.finalAmount,
                 paymentMode: formData.paymentMode,
                 transactionId: formData.transactionId,
@@ -236,8 +245,7 @@ export default function PaymentForm() {
                 paidUntilDate: updatedPaidUntil,
                 recordTransaction: true,
                 newPaymentAmount: newPaymentAmountValue > 0 ? newPaymentAmountValue : 0,
-                walletUsed: formData.walletUsed,
-                bonusDaysAwarded: formData.rewardAttendance ? Number(formData.bonusDaysAwarded) : 0
+                walletUsed: formData.walletUsed
             });
 
             toast.success("Payment recorded successfully!");
@@ -288,10 +296,11 @@ export default function PaymentForm() {
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                 <div className="w-full">
-                    <form onSubmit={handleSubmit} className="flex flex-col">
-                        <FormSection title="Payment Details" icon={<FiDollarSign />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            
-                            <div className="col-span-1 sm:col-span-2 lg:col-span-1">
+                    <form id="paymentForm" onSubmit={handleSubmit} className="flex flex-col gap-6">
+                        
+                        {/* Section 1: Membership Summary */}
+                        <FormSection title="Membership Summary" icon={<FiDollarSign />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="col-span-1 sm:col-span-2">
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Member <span className="text-rose-500">*</span></label>
                                 <ReactSelect
                                     options={members.map(m => ({
@@ -305,7 +314,7 @@ export default function PaymentForm() {
                                 />
                             </div>
 
-                            <div className="col-span-1 sm:col-span-2 lg:col-span-2">
+                            <div className="col-span-1 sm:col-span-2">
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Membership Plan</label>
                                 <ReactSelect
                                     options={memberships.map(m => ({
@@ -318,94 +327,171 @@ export default function PaymentForm() {
                                     isDisabled={true}
                                 />
                             </div>
-                            
-                            <Input type="number" label="Base Amount (₹)" name="baseAmount" value={formData.baseAmount} readOnly className="bg-slate-50 cursor-not-allowed" />
-                            
-                            <div className="col-span-1">
-                                <Select
-                                    label="Apply Gym Coupon Offer"
-                                    name="appliedCoupon"
-                                    value={formData.appliedCoupon}
-                                    onChange={handleCouponChange}
-                                    options={[
-                                        { value: '', label: '-- No Coupon --' },
-                                        ...(gymSettings?.couponOffers?.filter(c => c.isActive).map(c => ({
-                                            value: c.code,
-                                            label: `${c.code} - ${c.title} (${c.discountValue > 0 ? (c.discountType === 'Percentage' ? `${c.discountValue}% OFF` : `₹${c.discountValue} OFF`) : 'Free Days'})`
-                                        })) || [])
-                                    ]}
-                                />
+
+                            <div className="col-span-1 sm:col-span-2 lg:col-span-1">
+                                <Input type="text" label="Original Price (₹)" name="baseAmount" value={Number(formData.baseAmount || 0).toLocaleString()} disabled className="bg-slate-50 font-bold" />
                             </div>
-
-                            <Input type="number" label="Discount (₹)" name="discount" value={formData.discount} onChange={handleChange} placeholder="e.g. 500" />
-                            <Input type="number" label="Total Plan Fee (₹)" name="finalAmount" value={formData.finalAmount} readOnly className="bg-slate-50 font-bold text-slate-800 cursor-not-allowed" />
-
-                            <Input type="number" label="Already Paid (₹)" name="previouslyPaid" value={formData.previouslyPaid} readOnly className="bg-blue-50 font-bold text-blue-700 cursor-not-allowed" />
-                            
-                            {formData.memberId && members.find(m => m._id === formData.memberId)?.walletBalance > 0 && (
-                                <Input 
-                                    type="number" 
-                                    label={`Use Wallet Cash (Available: ₹${members.find(m => m._id === formData.memberId).walletBalance})`} 
-                                    name="walletUsed" 
-                                    value={formData.walletUsed} 
-                                    onChange={(e) => {
-                                        const val = Number(e.target.value);
-                                        const maxWallet = members.find(m => m._id === formData.memberId).walletBalance;
-                                        if (val <= maxWallet) handleChange(e);
-                                    }} 
-                                    placeholder="Enter amount to use" 
-                                    max={members.find(m => m._id === formData.memberId)?.walletBalance}
-                                />
-                            )}
-                            
-                            <Input type="number" label={`Remaining Balance: ₹${Math.max(0, formData.finalAmount - formData.previouslyPaid - (Number(formData.walletUsed) || 0))}`} name="newPaymentAmount" value={formData.newPaymentAmount} onChange={handleChange} required placeholder="Enter new payment..." className="border-emerald-300 focus:border-emerald-600 font-bold bg-emerald-50/30" />
-                            
-                            <Select label="Payment Mode" name="paymentMode" value={formData.paymentMode} onChange={handleChange} options={['Cash', 'Card', 'UPI', 'Bank Transfer', 'Other']} />
-                            <Input type="text" label="Transaction ID (Optional)" name="transactionId" value={formData.transactionId} onChange={handleChange} placeholder="e.g. UPI-123456789" />
-
+                            <div className="col-span-1 sm:col-span-2 lg:col-span-1">
+                                <Input type="text" label="Initial Discount (₹)" name="discount" value={Number(formData.discount || 0).toLocaleString()} disabled className="bg-slate-50 font-bold text-rose-500" />
+                            </div>
+                            <div className="col-span-1 sm:col-span-2 lg:col-span-1">
+                                <Input type="text" label="Already Paid (₹)" name="previouslyPaid" value={Number(formData.previouslyPaid || 0).toLocaleString()} disabled className="bg-slate-50 font-bold text-blue-600" />
+                            </div>
+                            <div className="col-span-1 sm:col-span-2 lg:col-span-1">
+                                <Input type="text" label="Amount Due (₹)" name="amountDue" value={Math.max(0, Number(formData.baseAmount - formData.discount) - Number(formData.previouslyPaid || 0)).toLocaleString()} disabled className="bg-slate-50 font-black text-slate-800" />
+                            </div>
                         </FormSection>
 
-                        <FormSection title="Member Rewards" icon={<FiDollarSign />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-                            <div className="col-span-1 sm:col-span-2 lg:col-span-3">
-                                <label className="flex items-center gap-3 cursor-pointer p-3 border border-emerald-200 rounded-xl bg-emerald-50/50 hover:bg-emerald-50 transition-colors">
-                                    <div className="relative flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            name="rewardAttendance"
-                                            checked={formData.rewardAttendance}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, rewardAttendance: e.target.checked }))}
-                                            className="peer sr-only"
-                                        />
-                                        <div className="w-10 h-5 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                        {/* Layout for Payment Section (Right) & Summary (Left) */}
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                            
+                            {/* LEFT: Payment Summary Receipt */}
+                            <div className="lg:col-span-5 w-full">
+                                <FormSection title="Payment Summary" icon={<FiDollarSign />} className="flex flex-col h-full">
+                                    <div className="w-full bg-slate-900 text-slate-300 rounded-2xl p-6 md:p-8 shadow-2xl relative overflow-hidden h-full flex flex-col justify-between">
+                                        
+                                        {/* Premium subtle background glow */}
+                                        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-32 h-32 bg-emerald-500 rounded-full blur-3xl opacity-20"></div>
+                                        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 bg-blue-500 rounded-full blur-3xl opacity-20"></div>
+
+                                        <div className="relative z-10">
+                                            <div className="flex justify-between items-center mb-6">
+                                                <h4 className="text-white font-black tracking-widest uppercase text-sm">Invoice</h4>
+                                                <div className="h-6 w-6 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
+                                                    <FiDollarSign className="text-emerald-400 text-xs" />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4 font-mono text-sm">
+                                                <div className="flex justify-between items-center group">
+                                                    <span className="text-slate-400 group-hover:text-slate-200 transition-colors">Amount Due</span>
+                                                    <span className="font-bold text-white">₹{Math.max(0, Number(formData.baseAmount - formData.discount) - Number(formData.previouslyPaid || 0)).toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center group">
+                                                    <span className="text-slate-400 group-hover:text-slate-200 transition-colors">Additional Discount</span>
+                                                    <span className="text-rose-400 font-bold">-₹{Number(formData.additionalDiscount || 0).toLocaleString()}</span>
+                                                </div>
+                                                
+                                                <div className="my-4 border-t border-dashed border-slate-700"></div>
+
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-slate-300 font-semibold uppercase tracking-wider text-xs">Total Payable</span>
+                                                    <span className="font-black text-white text-lg">₹{Math.max(0, Number(formData.baseAmount - formData.discount) - Number(formData.previouslyPaid || 0) - Number(formData.additionalDiscount || 0)).toLocaleString()}</span>
+                                                </div>
+
+                                                <div className="my-4 border-t border-dashed border-slate-700"></div>
+
+                                                <div className="flex justify-between items-center group">
+                                                    <span className="text-slate-400 group-hover:text-slate-200 transition-colors">Wallet Used</span>
+                                                    <span className="text-blue-400 font-bold">₹{Number(formData.useWallet ? (formData.walletUsed || 0) : 0).toLocaleString()}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center group">
+                                                    <span className="text-slate-400 group-hover:text-slate-200 transition-colors">{formData.paymentMode || 'Payment'}</span>
+                                                    <span className="text-emerald-400 font-bold">₹{Number(formData.newPaymentAmount || 0).toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="relative z-10 mt-8 pt-6 border-t-2 border-slate-800">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Remaining Balance</span>
+                                                <span className="text-3xl font-black text-white tracking-tight">₹{Math.max(0, (Number(formData.baseAmount - formData.discount) - Number(formData.previouslyPaid || 0) - Number(formData.additionalDiscount || 0)) - (Number(formData.newPaymentAmount || 0) + Number(formData.useWallet ? (formData.walletUsed || 0) : 0))).toLocaleString()}</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <span className="text-sm font-extrabold text-slate-800">
-                                        🏆 100% Attendance Reward (Manually Grant Bonus Days)
-                                    </span>
-                                </label>
+                                </FormSection>
                             </div>
 
-                            {formData.rewardAttendance && (
-                                <div className="col-span-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <Input 
-                                        type="number" 
-                                        label="Bonus Days to Award" 
-                                        name="bonusDaysAwarded" 
-                                        value={formData.bonusDaysAwarded} 
-                                        onChange={handleChange} 
-                                        placeholder="e.g. 5" 
-                                        min="1"
-                                        required={formData.rewardAttendance}
-                                        className="border-emerald-300 focus:border-emerald-600 font-bold bg-emerald-50/30"
-                                    />
-                                </div>
-                            )}
-                        </FormSection>
+                            {/* RIGHT: Collect Payment */}
+                            <div className="lg:col-span-7 w-full">
+                                <FormSection title="Collect Payment" icon={<FiDollarSign />} className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
+                                    <div className="col-span-1 sm:col-span-2">
+                                        <Input 
+                                            type="number" 
+                                            label="Amount to Pay (₹)" 
+                                            name="newPaymentAmount" 
+                                            value={formData.newPaymentAmount} 
+                                            onChange={handleChange} 
+                                            required 
+                                            placeholder="Enter amount..." 
+                                            className="text-xl py-3 border-emerald-300 focus:border-emerald-600 font-bold bg-emerald-50/30 text-emerald-900 placeholder:text-emerald-300" 
+                                        />
+                                    </div>
+                                    
+                                    <div className="col-span-1 sm:col-span-1">
+                                        <Select 
+                                            label="Payment Method" 
+                                            name="paymentMode" 
+                                            value={formData.paymentMode} 
+                                            onChange={handleChange} 
+                                            options={['Cash', 'UPI', 'Card', 'Bank Transfer', 'Other']} 
+                                        />
+                                    </div>
+
+                                    <div className="col-span-1 sm:col-span-1">
+                                        <Input 
+                                            type="number" 
+                                            label="Additional Discount (₹)" 
+                                            name="additionalDiscount" 
+                                            value={formData.additionalDiscount} 
+                                            onChange={handleChange} 
+                                            placeholder="e.g. 500" 
+                                        />
+                                    </div>
+                                    
+                                    <div className="col-span-1 sm:col-span-2 mt-2">
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                            <div className="flex-1">
+                                                <label className="flex items-center gap-3 cursor-pointer">
+                                                    <div className="relative flex items-center">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            name="useWallet" 
+                                                            checked={formData.useWallet} 
+                                                            onChange={handleChange} 
+                                                            disabled={!formData.memberId || (members.find(m => m._id === formData.memberId)?.walletBalance || 0) <= 0}
+                                                            className="peer sr-only"
+                                                        />
+                                                        <div className={`w-10 h-5 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all ${(!formData.memberId || (members.find(m => m._id === formData.memberId)?.walletBalance || 0) <= 0) ? 'opacity-50' : 'peer-checked:bg-emerald-500'}`}></div>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-sm font-extrabold text-slate-800 block">Use Wallet</span>
+                                                        <span className="text-xs font-bold text-slate-500">Available: ₹{members.find(m => m._id === formData.memberId)?.walletBalance || 0}</span>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                            
+                                            {formData.useWallet && (
+                                                <div className="flex-1 animate-in fade-in slide-in-from-left-2 duration-300">
+                                                    <Input
+                                                        type="number"
+                                                        label="Wallet Amount (₹)"
+                                                        name="walletUsed"
+                                                        value={formData.walletUsed}
+                                                        onChange={(e) => {
+                                                            const val = Number(e.target.value);
+                                                            const maxWallet = members.find(m => m._id === formData.memberId)?.walletBalance || 0;
+                                                            if (val <= maxWallet) handleChange(e);
+                                                        }}
+                                                        placeholder="Amount to deduct"
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="col-span-1 sm:col-span-2 mt-2">
+                                        <Input type="text" label="Transaction ID (Optional)" name="transactionId" value={formData.transactionId} onChange={handleChange} placeholder="e.g. UPI-123456789" />
+                                    </div>
+                                </FormSection>
+                            </div>
+                        </div>
 
                         <div className="flex justify-end items-center gap-3 mt-4 pt-6 border-t border-slate-200">
                             <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/finance')}>
                                 Cancel
                             </Button>
-                            <Button type="submit" loading={submitting}>
+                            <Button type="submit" form="paymentForm" loading={submitting}>
                                 Record Payment
                             </Button>
                         </div>

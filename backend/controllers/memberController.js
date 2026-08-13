@@ -11,10 +11,6 @@ const createMember = async (req, res) => {
     try {
         const gymId = req.user.gymId;
         let memberId = req.body.memberId;
-        if (!memberId) {
-            const count = await Member.countDocuments({ gymId });
-            memberId = `MEM-${(count + 1).toString().padStart(4, '0')}`;
-        }
 
         let memberData = { ...req.body };
         
@@ -25,27 +21,42 @@ const createMember = async (req, res) => {
             }
         });
 
+        // Security: Prevent malicious frontend manipulation
+        delete memberData.walletBalance;
+        delete memberData.referralBonusGranted;
+        delete memberData.otp;
+        delete memberData.otpExpiry;
+
         const newMember = new Member({
             ...memberData,
-            memberId,
             gymId
         });
+        
+        if (memberId) {
+            newMember.memberId = memberId;
+        }
 
         const savedMember = await newMember.save();
 
         if (req.body.enquiryId) {
-            await Enquiry.findByIdAndUpdate(req.body.enquiryId, { status: 'Converted', isMemberCreated: true });
+            await Enquiry.findOneAndUpdate(
+                { _id: req.body.enquiryId, gymId },
+                { status: 'Converted', isMemberCreated: true }
+            );
         }
 
         // Process Custom / Flexible Referral Rewards (Bonus Days &/or Wallet Cash)
         if (req.body.referredBy) {
             try {
                 const gym = await Gym.findById(gymId);
-                const rewardType = req.body.referralRewardType || (gym ? gym.referralRewardType : 'Both');
-                const bonusDays = req.body.referralBonusDays !== undefined ? Number(req.body.referralBonusDays) : (gym ? gym.referrerBonusDays : 7);
-                const walletAmt = req.body.referralWalletAmount !== undefined ? Number(req.body.referralWalletAmount) : (gym ? gym.referrerWalletAmount : 200);
+                const rewardType = gym ? gym.referralRewardType : 'Both';
+                const bonusDays = gym ? gym.referrerBonusDays : 7;
+                const walletAmt = gym ? gym.referrerWalletAmount : 200;
 
-                const referrerMember = await Member.findById(req.body.referredBy);
+                const referrerMember = await Member.findOne({
+                    _id: req.body.referredBy,
+                    gymId
+                });
 
                 if (referrerMember) {
                     // 1. Grant Wallet Cash if selected
@@ -66,7 +77,21 @@ const createMember = async (req, res) => {
                             const newEndDate = new Date(referrerMembership.endDate);
                             newEndDate.setDate(newEndDate.getDate() + bonusDays);
                             referrerMembership.endDate = newEndDate;
-                            referrerMembership.bonusDaysAdded = (referrerMembership.bonusDaysAdded || 0) + bonusDays;
+                            
+                            if (referrerMembership.paidUntilDate) {
+                                const newPaidUntilDate = new Date(referrerMembership.paidUntilDate);
+                                newPaidUntilDate.setDate(newPaidUntilDate.getDate() + bonusDays);
+                                referrerMembership.paidUntilDate = newPaidUntilDate;
+                            }
+
+                            referrerMembership.bonusDays = (referrerMembership.bonusDays || 0) + bonusDays;
+                            referrerMembership.bonusHistory = referrerMembership.bonusHistory || [];
+                            referrerMembership.bonusHistory.push({
+                                days: bonusDays,
+                                reason: 'Referral Bonus',
+                                addedBy: req.user._id || req.user.id
+                            });
+                            
                             await referrerMembership.save();
                         }
                     }
@@ -114,7 +139,17 @@ const getMemberById = async (req, res) => {
         if (!member) {
             return res.status(404).json({ message: 'Member not found' });
         }
-        res.status(200).json(member);
+        
+        const memberObj = member.toObject();
+        
+        // Fetch latest transaction for this member
+        const latestTx = await Transaction.findOne({ memberId: member._id }).sort({ createdAt: -1 });
+        if (latestTx) {
+            memberObj.paymentMode = latestTx.paymentMode;
+            memberObj.transactionId = latestTx.transactionId;
+        }
+
+        res.status(200).json(memberObj);
     } catch (error) {
         console.error('Error fetching member:', error);
         res.status(500).json({ message: 'Server error' });
@@ -126,12 +161,6 @@ const getMemberById = async (req, res) => {
 // @access  Private
 const getTransactions = async (req, res) => {
     try {
-        // Backfill missing collectedBy on old transactions with req.user._id (or req.user.id)
-        await Transaction.updateMany(
-            { gymId: req.user.gymId, collectedBy: null },
-            { $set: { collectedBy: req.user._id || req.user.id } }
-        );
-
         let transactions = await Transaction.find({ 
             gymId: req.user.gymId,
             amountPaid: { $gt: 0 }
@@ -140,41 +169,6 @@ const getTransactions = async (req, res) => {
             .populate('planId', 'name')
             .populate('collectedBy', 'name email role')
             .sort({ paymentDate: -1 });
-
-        // Auto-sync / backfill any existing MemberMembership payments that missed a Transaction record
-        const activeMemberships = await MemberMembership.find({ 
-            gymId: req.user.gymId, 
-            paidAmount: { $gt: 0 } 
-        })
-            .populate('memberId', 'firstName lastName contactNumber memberId')
-            .populate('membershipPlanId', 'name')
-            .populate('assignedBy', 'name email role');
-
-        const existingMemberTxIds = new Set(transactions.map(t => t.memberId?._id?.toString()));
-
-        for (const m of activeMemberships) {
-            if (m.memberId && m.paidAmount > 0 && !existingMemberTxIds.has(m.memberId._id.toString())) {
-                const newTx = await Transaction.create({
-                    gymId: req.user.gymId,
-                    memberId: m.memberId._id,
-                    planId: m.membershipPlanId?._id || null,
-                    collectedBy: m.assignedBy?._id || req.user.id,
-                    amountPaid: m.paidAmount,
-                    paymentMode: 'Cash',
-                    transactionId: `TRX-${Date.now()}-${Math.floor(Math.random()*1000)}`,
-                    paymentStatus: 'Paid',
-                    paymentDate: m.createdAt || new Date()
-                });
-                const populatedTx = await Transaction.findById(newTx._id)
-                    .populate('memberId', 'firstName lastName contactNumber memberId')
-                    .populate('planId', 'name')
-                    .populate('collectedBy', 'name email role');
-                transactions.push(populatedTx);
-            }
-        }
-
-        // Re-sort all transactions by date
-        transactions.sort((a, b) => new Date(b.paymentDate || b.createdAt) - new Date(a.paymentDate || a.createdAt));
 
         res.status(200).json(transactions);
     } catch (error) {
@@ -197,6 +191,9 @@ const updateMember = async (req, res) => {
         }
 
         let updateData = { ...req.body };
+        const recordTransaction = updateData.recordTransaction;
+        const newPaymentAmount = parseFloat(updateData.newPaymentAmount || 0);
+        const walletUsed = parseFloat(updateData.walletUsed || 0);
 
         // Remove empty string values
         Object.keys(updateData).forEach((key) => {
@@ -211,10 +208,10 @@ const updateMember = async (req, res) => {
         delete updateData.enquiryId;
         delete updateData.createdAt;
         delete updateData.updatedAt;
-
-        if (req.body.walletUsed && Number(req.body.walletUsed) > 0) {
-            updateData.walletBalance = Math.max(0, (member.walletBalance || 0) - Number(req.body.walletUsed));
-        }
+        delete updateData.walletBalance;
+        delete updateData.referralBonusGranted;
+        delete updateData.otp;
+        delete updateData.otpExpiry;
 
         const updatedMember = await Member.findByIdAndUpdate(
             req.params.id,
@@ -225,45 +222,51 @@ const updateMember = async (req, res) => {
             }
         );
 
-        if (req.body.recordTransaction && (Number(req.body.newPaymentAmount) > 0 || Number(req.body.walletUsed) > 0)) {
-            const paid = Number(req.body.newPaymentAmount) || 0;
-            const walletVal = Number(req.body.walletUsed) || 0;
-            const totalPaid = paid + walletVal;
-            
-            // 1. Create Transaction ONLY if amount > 0
-            await Transaction.create({
-                gymId: req.user.gymId,
-                memberId: member._id,
-                planId: req.body.membershipPlan || null,
-                collectedBy: req.user._id || req.user.id,
-                amountPaid: totalPaid,
-                paymentMode: walletVal > 0 && paid === 0 ? 'Wallet Cash' : (req.body.paymentMode || 'Cash'),
-                transactionId: req.body.transactionId || `TRX-${Date.now()}`,
-                paymentStatus: 'Paid',
-                paymentDate: req.body.paymentDate || new Date()
-            });
+        // Record Transaction and deduct wallet if requested
+        if (recordTransaction) {
+            // Deduct wallet balance if used
+            if (walletUsed > 0 && updatedMember.walletBalance >= walletUsed) {
+                updatedMember.walletBalance -= walletUsed;
+                await updatedMember.save();
+            }
 
-            // 2. Update MemberMembership
-            const activePlan = await MemberMembership.findOne({ memberId: member._id, membershipStatus: "Active" }).sort({ createdAt: -1 });
-            if (activePlan) {
-                activePlan.paidAmount = Number(req.body.amountPaid) || 0;
-                activePlan.balanceAmount = activePlan.finalPrice - activePlan.paidAmount;
-                activePlan.paymentStatus = req.body.paymentStatus || activePlan.paymentStatus;
-                if (req.body.paidUntilDate) {
-                    activePlan.paidUntilDate = new Date(req.body.paidUntilDate);
+            // Create Transaction record if actual money was paid or wallet was used
+            if (newPaymentAmount > 0 || walletUsed > 0) {
+                await Transaction.create({
+                    gymId: req.user.gymId,
+                    memberId: updatedMember._id,
+                    planId: updatedMember.membershipPlan,
+                    amountPaid: newPaymentAmount,
+                    paymentMode: updateData.paymentMode || 'Cash',
+                    transactionId: updateData.transactionId,
+                    paymentDate: new Date(),
+                    collectedBy: req.user._id,
+                    walletAmountUsed: walletUsed
+                });
+            }
+
+            // Sync with active MemberMembership
+            const activeMembership = await MemberMembership.findOne({
+                memberId: updatedMember._id,
+                membershipStatus: "Active"
+            }).sort({ createdAt: -1 });
+
+            if (activeMembership) {
+                if (updateData.amountPaid !== undefined) {
+                    activeMembership.paidAmount = updateData.amountPaid;
                 }
-
-                if (req.body.bonusDaysAwarded && Number(req.body.bonusDaysAwarded) > 0) {
-                    const bonus = Number(req.body.bonusDaysAwarded);
-                    activePlan.bonusDaysAdded = (activePlan.bonusDaysAdded || 0) + bonus;
-                    if (activePlan.endDate) {
-                        const newEndDate = new Date(activePlan.endDate);
-                        newEndDate.setDate(newEndDate.getDate() + bonus);
-                        activePlan.endDate = newEndDate;
-                    }
+                if (updateData.paymentStatus) {
+                    activeMembership.paymentStatus = updateData.paymentStatus;
                 }
-
-                await activePlan.save();
+                if (updateData.paidUntilDate) {
+                    activeMembership.paidUntilDate = updateData.paidUntilDate;
+                }
+                
+                const finalPrice = activeMembership.finalPrice || 0;
+                const paidAmt = activeMembership.paidAmount || 0;
+                activeMembership.balanceAmount = Math.max(0, finalPrice - paidAmt);
+                
+                await activeMembership.save();
             }
         }
 
@@ -277,9 +280,7 @@ const updateMember = async (req, res) => {
     }
 };
 
-// @desc    Delete a member
-// @route   DELETE /api/members/:id
-// @access  Private
+
 const deleteMember = async (req, res) => {
     try {
         const member = await Member.findById(req.params.id);

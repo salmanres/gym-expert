@@ -100,6 +100,7 @@ const memberMembershipSchema = new mongoose.Schema(
       type: String,
       enum: [
         "Active",
+        "Scheduled",
         "Expired",
         "Frozen",
         "Cancelled",
