@@ -55,7 +55,7 @@ function Leads() {
     const handleStatusDropdownChange = async (lead, newStatus) => {
         if (newStatus === lead.status) return;
 
-        if (['Negotiation', 'Lost', 'Converted'].includes(newStatus)) {
+        if (['Contacted', 'Trial', 'Negotiation', 'Lost', 'Converted'].includes(newStatus)) {
             const formattedDate = lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '';
             const formattedTrial = lead.trialDate ? new Date(lead.trialDate).toISOString().split('T')[0] : '';
             const formattedTrialEnd = lead.trialEndDate ? new Date(lead.trialEndDate).toISOString().split('T')[0] : '';
@@ -105,9 +105,9 @@ function Leads() {
     const filteredLeads = leads.filter(lead => {
         let tabMatch = true;
         if (activeTab === 'Enquiries') tabMatch = lead.status === 'Pending';
-        else if (activeTab === 'Leads') tabMatch = lead.status === 'Lead';
-        else if (activeTab === 'Follow Ups') tabMatch = !!lead.followUpDate && lead.status !== 'Converted' && lead.status !== 'Lost';
-        else if (activeTab === 'Trials') tabMatch = !!lead.trialDate || !!lead.trialEndDate;
+        else if (activeTab === 'Leads') tabMatch = lead.status === 'Lead' || lead.status === 'Contacted';
+        else if (activeTab === 'Follow Ups') tabMatch = (!!lead.followUpDate || lead.status === 'Contacted') && lead.status !== 'Converted' && lead.status !== 'Lost';
+        else if (activeTab === 'Trials') tabMatch = !!lead.trialDate || !!lead.trialEndDate || lead.status === 'Trial';
         else if (activeTab === 'Negotiation') tabMatch = lead.status === 'Negotiation';
         else if (activeTab === 'Converted') tabMatch = lead.status === 'Converted';
         else if (activeTab === 'Lost') tabMatch = lead.status === 'Lost';
@@ -193,6 +193,7 @@ function Leads() {
                         ${lead.status === 'Pending' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 
                           lead.status === 'Lead' ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100' :
                           lead.status === 'Contacted' ? 'bg-sky-50 text-sky-700 hover:bg-sky-100' :
+                          lead.status === 'Trial' ? 'bg-teal-50 text-teal-700 hover:bg-teal-100' :
                           lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' :
                           lead.status === 'Negotiation' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' :
                           'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
@@ -200,6 +201,7 @@ function Leads() {
                     <option value="Lead">Lead</option>
                     <option value="Pending">Pending</option>
                     <option value="Contacted">Contacted</option>
+                    <option value="Trial">Trial</option>
                     <option value="Negotiation">Negotiation</option>
                     <option value="Converted">Converted</option>
                     <option value="Lost">Lost</option>
@@ -261,13 +263,15 @@ function Leads() {
                 onTabChange={setActiveTab}
             />
 
-            <DataTable 
-                columns={columns}
-                data={filteredLeads}
-                loading={loading}
-                emptyMessage="No inquiries found in this category."
-                renderRow={renderRow}
-            />
+            <div className="px-4 py-4 flex-1 overflow-y-auto w-full">
+                <DataTable 
+                    columns={columns}
+                    data={filteredLeads}
+                    loading={loading}
+                    emptyMessage="No inquiries found in this category."
+                    renderRow={renderRow}
+                />
+            </div>
         </PageLayout>
     );
 }

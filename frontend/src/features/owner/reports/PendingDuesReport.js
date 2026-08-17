@@ -52,7 +52,7 @@ export default function PendingDuesReport({
         const memberCustomId = p.memberId?.memberId || 'N/A';
         const memberName = p.memberId?.firstName ? `${p.memberId.firstName} ${p.memberId.lastName || ''}`.trim() : 'Gym Member';
         const phone = p.memberId?.contactNumber || 'N/A';
-        const planName = p.membershipPlanId?.name || p.planName || 'Standard Plan';
+        const planName = p.membershipPlanId?.name || p.planName || 'General Plan';
         const totalAmt = p.finalPrice || p.originalPrice || p.totalAmount || 0;
         const paidAmt = p.paidAmount || 0;
         const pendingAmt = p.pendingAmount || p.balanceAmount || 0;

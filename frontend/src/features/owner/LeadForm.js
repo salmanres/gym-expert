@@ -35,6 +35,8 @@ export default function LeadForm() {
     const [errors, setErrors] = useState({});
     const negotiationRef = useRef(null);
     const lostReasonRef = useRef(null);
+    const followUpDateRef = useRef(null);
+    const trialDateRef = useRef(null);
 
     useEffect(() => {
         if (!loading && location.state?.autoFocusStatus) {
@@ -45,6 +47,12 @@ export default function LeadForm() {
                 } else if (location.state.autoFocusStatus === 'Lost' && lostReasonRef.current) {
                     lostReasonRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     lostReasonRef.current.focus();
+                } else if (location.state.autoFocusStatus === 'Contacted' && followUpDateRef.current) {
+                    followUpDateRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    followUpDateRef.current.focus();
+                } else if (location.state.autoFocusStatus === 'Trial' && trialDateRef.current) {
+                    trialDateRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    trialDateRef.current.focus();
                 }
             }, 500);
         }
@@ -308,16 +316,25 @@ export default function LeadForm() {
                                 <option value="Yoga">Yoga</option>
                                 <option value="Crossfit">Crossfit</option>
                             </Select>
-                            <Input type="date" label="Follow-up Date" name="followUpDate" value={formData.followUpDate || ''} onChange={handleChange} required error={errors.followUpDate} />
-                            <Input type="time" label="Follow-up Time" name="followUpTime" value={formData.followUpTime || ''} onChange={handleChange} error={errors.followUpTime} />
-                            <Input type="date" label="Trial Start Date" name="trialDate" value={formData.trialDate || ''} onChange={handleChange} error={errors.trialDate} />
-                            <Input type="date" label="Trial End Date" name="trialEndDate" value={formData.trialEndDate || ''} onChange={handleChange} min={formData.trialDate || ''} error={errors.trialEndDate} />
+                            {['Trial', 'Negotiation', 'Converted'].includes(formData.status) && (
+                                <>
+                                    <Input type="date" label="Trial Start Date" name="trialDate" value={formData.trialDate || ''} onChange={handleChange} error={errors.trialDate} inputRef={trialDateRef} />
+                                    <Input type="date" label="Trial End Date" name="trialEndDate" value={formData.trialEndDate || ''} onChange={handleChange} min={formData.trialDate || ''} error={errors.trialEndDate} />
+                                </>
+                            )}
                             <Select label="Lead Priority" name="convertibility" value={formData.convertibility || ''} onChange={handleChange} required options={['Warm', 'Hot', 'Cold']} error={errors.convertibility} />
                         </FormSection>
 
                         <FormSection title="Feedback & Action" icon={<FiMessageSquare />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Lead', 'Contacted', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
+                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Lead', 'Contacted', 'Trial', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
                             </Select>
+                            
+                            {['Contacted', 'Trial', 'Negotiation', 'Lead'].includes(formData.status) && (
+                                <>
+                                    <Input type="date" label="Follow-up Date" name="followUpDate" value={formData.followUpDate || ''} onChange={handleChange} required error={errors.followUpDate} inputRef={followUpDateRef} />
+                                    <Input type="time" label="Follow-up Time" name="followUpTime" value={formData.followUpTime || ''} onChange={handleChange} error={errors.followUpTime} />
+                                </>
+                            )}
                             
                             {(formData.status === 'Negotiation' || formData.status === 'Converted') && (
                                 <>

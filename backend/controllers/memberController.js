@@ -168,11 +168,102 @@ const getTransactions = async (req, res) => {
             .populate('memberId', 'firstName lastName contactNumber memberId')
             .populate('planId', 'name')
             .populate('collectedBy', 'name email role')
-            .sort({ paymentDate: -1 });
+            .sort({ paymentDate: -1 })
+            .lean();
+
+        // Fallback to active membership plan name if planId is missing in transaction
+        const memberIds = [...new Set(transactions.map(t => t.memberId?._id?.toString()).filter(Boolean))];
+        const activeMemberships = await MemberMembership.find({ 
+            memberId: { $in: memberIds }, 
+            membershipStatus: { $in: ['Active', 'Scheduled'] }
+        });
+
+        transactions = transactions.map(tx => {
+            if (!tx.planId) {
+                const activeMem = activeMemberships.find(m => m.memberId?.toString() === tx.memberId?._id?.toString());
+                if (activeMem) {
+                    tx.planName = activeMem.planName || 'Membership Payment';
+                }
+            }
+            return tx;
+        });
 
         res.status(200).json(transactions);
     } catch (error) {
         console.error('Error fetching transactions:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
+// @desc    Delete a transaction
+// @route   DELETE /api/members/transactions/:id
+// @access  Private
+const deleteTransaction = async (req, res) => {
+    try {
+        const transaction = await Transaction.findById(req.params.id);
+
+        if (!transaction) {
+            return res.status(404).json({ message: 'Transaction not found' });
+        }
+
+        // Ensure transaction belongs to logged-in gym
+        if (transaction.gymId.toString() !== req.user.gymId.toString()) {
+            return res.status(401).json({ message: 'Not authorized' });
+        }
+
+        const amountPaid = transaction.amountPaid || 0;
+        const walletAmount = transaction.walletAmount || transaction.walletAmountUsed || 0;
+
+        // Find the associated MemberMembership
+        let membershipQuery = {
+            memberId: transaction.memberId,
+            membershipStatus: { $in: ['Active', 'Scheduled', 'Expired'] }
+        };
+        if (transaction.planId) {
+            membershipQuery.membershipPlanId = transaction.planId;
+        }
+
+        const membership = await MemberMembership.findOne(membershipQuery).sort({ createdAt: -1 });
+
+        if (membership) {
+            membership.paidAmount = Math.max(0, (membership.paidAmount || 0) - amountPaid);
+            membership.balanceAmount = Math.max(0, membership.finalPrice - membership.paidAmount);
+
+            let paymentStatus = "Pending";
+            if (membership.paidAmount >= membership.finalPrice && membership.finalPrice > 0) paymentStatus = "Paid";
+            else if (membership.paidAmount > 0) paymentStatus = "Partial";
+            if (membership.finalPrice === 0) paymentStatus = "Paid";
+
+            membership.paymentStatus = paymentStatus;
+
+            if (paymentStatus === 'Paid') {
+                membership.paidUntilDate = membership.endDate;
+            } else if (paymentStatus === 'Partial' && membership.finalPrice > 0) {
+                const startMs = new Date(membership.startDate).getTime();
+                const endMs = new Date(membership.endDate).getTime();
+                const totalMs = endMs - startMs;
+                const paidRatio = membership.paidAmount / membership.finalPrice;
+                membership.paidUntilDate = new Date(startMs + (totalMs * paidRatio));
+            } else if (paymentStatus === 'Pending') {
+                membership.paidUntilDate = new Date(membership.startDate);
+            }
+
+            await membership.save();
+        }
+
+        // Refund wallet balance if applicable
+        if (walletAmount > 0) {
+            const member = await Member.findById(transaction.memberId);
+            if (member) {
+                member.walletBalance = (member.walletBalance || 0) + walletAmount;
+                await member.save();
+            }
+        }
+
+        await transaction.deleteOne();
+        res.status(200).json({ message: 'Transaction deleted and payments reverted', id: req.params.id });
+    } catch (error) {
+        console.error('Error deleting transaction:', error);
         res.status(500).json({ message: 'Server error' });
     }
 };
@@ -306,6 +397,7 @@ module.exports = {
     getMembers,
     getMemberById,
     getTransactions,
+    deleteTransaction,
     updateMember,
     deleteMember
 };

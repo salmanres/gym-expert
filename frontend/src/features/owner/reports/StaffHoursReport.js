@@ -1,16 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SummaryCards from '../../../components/page/SummaryCards';
 import DataTable from '../../../components/page/DataTable';
 import EmptyState from '../../../components/page/EmptyState';
 import { FiUsers, FiCheckCircle, FiClock, FiActivity, FiEye, FiX, FiCalendar } from 'react-icons/fi';
+import apiClient from '../../../api/apiClient';
 
 export default function StaffHoursReport({ 
-    staffAttendance = [],
-    filterBar = null
+    staffAttendance = []
 }) {
     const [selectedStaff, setSelectedStaff] = useState(null);
     const [modalStartDate, setModalStartDate] = useState('');
     const [modalEndDate, setModalEndDate] = useState('');
+    const [loadingLogs, setLoadingLogs] = useState(false);
+    const [fetchedLogs, setFetchedLogs] = useState([]);
+
+    const fetchLogs = async (staff, start, end) => {
+        if (!staff) return;
+        setLoadingLogs(true);
+        try {
+            const userId = staff.user?._id || staff.userId?._id || staff._id;
+            let url = `/attendance/history/${userId}`;
+            const params = new URLSearchParams();
+            if (start) params.append('startDate', start);
+            if (end) params.append('endDate', end);
+            if (params.toString()) url += `?${params.toString()}`;
+            
+            const res = await apiClient.get(url);
+            setFetchedLogs(res.data || []);
+        } catch (error) {
+            console.error("Failed to fetch logs", error);
+        } finally {
+            setLoadingLogs(false);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedStaff) {
+            fetchLogs(selectedStaff, modalStartDate, modalEndDate);
+        }
+    }, [modalStartDate, modalEndDate, selectedStaff]);
 
     const totalStaffCount = staffAttendance.length;
     const presentTodayStaff = staffAttendance.filter(s => s.attendance?.checkInTime || s.attendanceStatus === 'Present');
@@ -117,103 +145,28 @@ export default function StaffHoursReport({
         );
     };
 
-    // Helper to generate full daily attendance records (Real backend data OR sample data)
-    const getStaffDailyLogs = (staffObj) => {
-        if (!staffObj) return [];
-        
-        // 1. Check if real backend attendance logs array exists
-        const realLogs = staffObj.attendanceLogs || staffObj.attendanceHistory || staffObj.history || staffObj.user?.attendanceHistory;
-        if (realLogs && Array.isArray(realLogs) && realLogs.length > 0) {
-            return realLogs.filter(log => {
-                const dateStr = new Date(log.date || log.checkInTime || log.createdAt).toISOString().split('T')[0];
-                if (modalStartDate && dateStr < modalStartDate) return false;
-                if (modalEndDate && dateStr > modalEndDate) return false;
-                return true;
-            }).map(log => {
-                const checkIn = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-                const checkOut = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-                
-                let hrs = '0h 0m';
-                let ot = '0h 0m';
-                if (log.checkInTime && log.checkOutTime) {
-                    const mins = Math.floor((new Date(log.checkOutTime) - new Date(log.checkInTime)) / (1000 * 60));
-                    hrs = `${Math.floor(mins / 60)}h ${mins % 60}m`;
-                    if (mins > 480) {
-                        const otM = mins - 480;
-                        ot = `${Math.floor(otM / 60)}h ${otM % 60}m`;
-                    }
-                }
-                return {
-                    date: new Date(log.date || log.checkInTime || log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                    checkIn,
-                    checkOut,
-                    workingHours: hrs,
-                    overtime: ot,
-                    status: log.status || (log.checkInTime ? 'Present' : 'Absent')
-                };
-            });
-        }
-
-        // 2. Fallback sample demonstration logs with Present, Absent, Late, Off
-        const logs = [];
-        const today = new Date();
-
-        for (let i = 0; i < 15; i++) {
-            const d = new Date();
-            d.setDate(today.getDate() - i);
-            const dateStr = d.toISOString().split('T')[0];
-
-            // Filter by selected modal date range
-            if (modalStartDate && dateStr < modalStartDate) continue;
-            if (modalEndDate && dateStr > modalEndDate) continue;
-
-            const isSunday = d.getDay() === 0;
-            const isAbsentDay = !isSunday && (i === 4 || i === 9);
-            const isLateDay = !isSunday && !isAbsentDay && (i === 2 || i === 8);
-
-            let status = 'Present';
-            let checkIn = '--:--';
-            let checkOut = '--:--';
-            let workingHours = '0h 0m';
-            let overtime = '0h 0m';
-
-            if (isSunday) {
-                status = 'Off';
-                workingHours = 'Weekly Off';
-            } else if (isAbsentDay) {
-                status = 'Absent';
-                workingHours = '0h 0m';
-            } else if (isLateDay) {
-                status = 'Late';
-                const inTime = new Date(d.setHours(9, 45, 0));
-                const outTime = new Date(d.setHours(18, 30, 0));
-                checkIn = inTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                checkOut = outTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                workingHours = '8h 45m';
-                overtime = '0h 45m';
-            } else {
-                status = 'Present';
-                const inTime = new Date(d.setHours(9, 15, 0));
-                const outTime = new Date(d.setHours(18, 30, 0));
-                checkIn = inTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                checkOut = outTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                workingHours = '9h 15m';
-                overtime = '1h 15m';
+    const modalDailyLogs = selectedStaff ? fetchedLogs.map(log => {
+        const checkIn = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+        const checkOut = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+        let hrs = '0h 0m';
+        let ot = '0h 0m';
+        if (log.checkInTime && log.checkOutTime) {
+            const mins = Math.floor((new Date(log.checkOutTime) - new Date(log.checkInTime)) / (1000 * 60));
+            hrs = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+            if (mins > 480) {
+                const otM = mins - 480;
+                ot = `${Math.floor(otM / 60)}h ${otM % 60}m`;
             }
-
-            logs.push({
-                date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                checkIn,
-                checkOut,
-                workingHours,
-                overtime,
-                status
-            });
         }
-        return logs;
-    };
-
-    const modalDailyLogs = selectedStaff ? getStaffDailyLogs(selectedStaff) : [];
+        return {
+            date: new Date(log.date || log.checkInTime || log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            checkIn,
+            checkOut,
+            workingHours: hrs,
+            overtime: ot,
+            status: log.status || (log.checkInTime ? 'Present' : 'Absent')
+        };
+    }) : [];
 
     return (
         <div className="space-y-4 w-full m-0 p-0">
@@ -222,8 +175,6 @@ export default function StaffHoursReport({
                 <SummaryCards cards={cards} />
             </div>
 
-            {/* FilterBar Component AFTER Cards */}
-            {filterBar}
 
             {/* Attendance Table */}
             <div className="px-4 pb-4">
@@ -347,6 +298,8 @@ export default function StaffHoursReport({
                                     ))}
                                 </tbody>
                             </table>
+                            {loadingLogs && <div className="text-center py-6 text-slate-500 font-medium text-xs">Loading attendance records...</div>}
+                            {!loadingLogs && modalDailyLogs.length === 0 && <div className="text-center py-6 text-slate-500 font-medium text-xs">No records found for the selected period.</div>}
                         </div>
 
                         {/* Modal Footer */}

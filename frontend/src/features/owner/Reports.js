@@ -6,6 +6,7 @@ import FilterBar from '../../components/page/FilterBar';
 import Loader from '../../components/page/Loader';
 import { FiDownload } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
+import { toast } from 'react-toastify';
 
 // Modular Report Components
 import DailyCollectionsReport from './reports/DailyCollectionsReport';
@@ -164,11 +165,14 @@ export default function Reports() {
     const thirtyDaysLater = new Date();
     thirtyDaysLater.setDate(today.getDate() + 30);
 
-    const expiring30 = activePlans.filter(p => p.endDate && new Date(p.endDate) >= today && new Date(p.endDate) <= thirtyDaysLater);
+    const expiring30 = activePlans.filter(p => {
+        const relevantEndDate = p.paidUntilDate || p.endDate;
+        return relevantEndDate && new Date(relevantEndDate) >= today && new Date(relevantEndDate) <= thirtyDaysLater;
+    });
 
     const filteredExpiring = filterBySearchAndDate(
         expiring30,
-        p => p.endDate,
+        p => p.paidUntilDate || p.endDate,
         p => `${p.memberId?.memberId || ''} ${p.memberId?.firstName || ''} ${p.memberId?.lastName || ''} ${p.membershipPlanId?.name || ''} ${p.memberId?.contactNumber || p.memberId?.phone || p.memberId?.mobile || ''}`,
         null,
         p => p.membershipStatus
@@ -240,16 +244,17 @@ export default function Reports() {
     const handleExportCSV = () => {
         if (activeTab === 'Expiring Plans') {
             exportCSV(filteredExpiring.map(p => {
-                const endDate = new Date(p.endDate);
+                const relevantEndDate = p.paidUntilDate || p.endDate;
+                const endDate = new Date(relevantEndDate);
                 const daysLeft = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
                 const phone = p.memberId?.contactNumber || p.memberId?.phone || p.memberId?.mobile || p.memberId?.contactNo || p.contactNumber || p.phone || p.mobile || 'N/A';
                 return {
                     'Member ID': p.memberId?.memberId || 'N/A',
                     'Member Name': `${p.memberId?.firstName || ''} ${p.memberId?.lastName || ''}`.trim() || 'Gym Member',
                     'Contact Number': phone,
-                    'Membership Plan': p.membershipPlanId?.name || p.planName || 'Standard Plan',
+                    'Membership Plan': p.membershipPlanId?.name || p.planName || 'General Plan',
                     'Start Date': p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A',
-                    'Expiry Date': p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A',
+                    'Expiry Date': relevantEndDate ? new Date(relevantEndDate).toLocaleDateString() : 'N/A',
                     'Days Left': daysLeft <= 0 ? 'Expired' : `${daysLeft} Days`,
                     'Renewal Amount': p.finalPrice || p.originalPrice || 0,
                     'Assigned Trainer': p.assignedTrainer?.name || p.assignedBy?.name || 'General Trainer',
@@ -261,7 +266,7 @@ export default function Reports() {
                 'Receipt No': t.transactionId || `REC-${(t._id || '').substring(0, 6).toUpperCase()}`,
                 'Member ID': t.memberId?.memberId || 'N/A',
                 'Member Name': t.memberName || (t.memberId?.firstName ? `${t.memberId.firstName} ${t.memberId.lastName || ''}`.trim() : t.memberId?.name) || 'Gym Member',
-                'Membership Plan': t.planId?.name || t.planName || 'Standard Plan',
+                'Membership Plan': t.planId?.name || t.planName || 'Membership Payment',
                 'Amount': t.amountPaid,
                 'Payment Mode': t.paymentMode || 'Cash',
                 'Collected By': t.collectedBy?.name || (typeof t.collectedBy === 'string' ? t.collectedBy : null) || t.collectedByName || (JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Harjeet'),
@@ -509,7 +514,9 @@ export default function Reports() {
                 }}
             />
 
-            <div className="flex-1 overflow-y-auto space-y-4 pb-6">
+            {filterBarElement}
+
+            <div className="flex-1 overflow-y-auto space-y-4 pb-6 pt-4">
                 {activeTab === 'Daily Collections' && (
                     <DailyCollectionsReport 
                         transactions={filteredTransactions}
@@ -520,7 +527,6 @@ export default function Reports() {
                             totalOutstandingDue
                         }}
                         feeReceivedLinePoints={feeReceivedLinePoints}
-                        filterBar={filterBarElement}
                     />
                 )}
 
@@ -528,14 +534,12 @@ export default function Reports() {
                     <ExpiringPlansReport 
                         expiringPlans={filteredExpiring}
                         allActivePlans={activePlans}
-                        filterBar={filterBarElement}
                     />
                 )}
 
                 {activeTab === 'Staff Attendance' && (
                     <StaffHoursReport 
                         staffAttendance={filteredStaffAttendance}
-                        filterBar={filterBarElement}
                         filterStartDate={filterStartDate}
                         filterEndDate={filterEndDate}
                     />
@@ -544,7 +548,7 @@ export default function Reports() {
                 {activeTab === 'Member Attendance' && (
                     <MemberAttendanceReport 
                         memberAttendance={filteredMemberAttendance}
-                        filterBar={filterBarElement}
+                        activePlans={activePlans}
                         filterStartDate={filterStartDate}
                         filterEndDate={filterEndDate}
                     />

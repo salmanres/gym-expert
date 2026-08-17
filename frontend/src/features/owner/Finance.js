@@ -8,7 +8,7 @@ import DataTable from '../../components/page/DataTable';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import Button from '../../components/form/Button';
-import { FiCreditCard, FiCheckCircle, FiClock, FiAlertCircle, FiEye } from 'react-icons/fi';
+import { FiCreditCard, FiCheckCircle, FiClock, FiAlertCircle, FiEye, FiTrash2 } from 'react-icons/fi';
 
 export default function Finance() {
 
@@ -57,6 +57,19 @@ export default function Finance() {
         } catch (error) {
             toast.error("Failed to fetch finance records");
             setLoading(false);
+        }
+    };
+
+    const handleDeleteTransaction = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this transaction record? This action cannot be undone.")) {
+            return;
+        }
+        try {
+            await apiClient.delete(`/members/transactions/${id}`);
+            toast.success("Transaction deleted successfully");
+            fetchData();
+        } catch (error) {
+            toast.error("Failed to delete transaction");
         }
     };
 
@@ -171,6 +184,9 @@ export default function Finance() {
                     <div className="flex flex-wrap items-center justify-center gap-2">
                         <button onClick={() => navigate(`/dashboard/owner/finance/receipt/${member._id}`)} className="w-8 h-8 rounded bg-slate-50 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="View Receipt">
                             <FiEye className="text-base" />
+                        </button>
+                        <button onClick={() => handleDeleteTransaction(t._id)} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Delete Transaction">
+                            <FiTrash2 className="text-base" />
                         </button>
                     </div>
                 </td>

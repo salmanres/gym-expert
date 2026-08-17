@@ -9,8 +9,7 @@ import { FiDollarSign, FiCalendar, FiTrendingUp, FiAlertCircle, FiEye, FiPieChar
 export default function DailyCollectionsReport({ 
     transactions = [], 
     summaryMetrics = {}, 
-    feeReceivedLinePoints = [],
-    filterBar = null
+    feeReceivedLinePoints = []
 }) {
     const { 
         todayCollection = 0, 
@@ -60,7 +59,7 @@ export default function DailyCollectionsReport({
         const receiptNo = tx.transactionId || `REC-${(tx._id || '').substring(0, 6).toUpperCase()}`;
         const memberCustomId = tx.memberId?.memberId || 'N/A';
         const memberName = tx.memberName || (tx.memberId?.firstName ? `${tx.memberId.firstName} ${tx.memberId.lastName || ''}`.trim() : tx.memberId?.name) || 'Gym Member';
-        const planName = tx.planId?.name || tx.planName || 'Standard Plan';
+        const planName = tx.planId?.name || tx.planName || 'Membership Payment';
         const status = tx.paymentStatus || 'Paid';
         const collectedBy = tx.collectedBy?.name || (typeof tx.collectedBy === 'string' ? tx.collectedBy : null) || tx.collectedByName || activeUserName;
 
@@ -217,9 +216,6 @@ export default function DailyCollectionsReport({
                     </div>
                 </div>
             </div>
-
-            {/* 3. FilterBar Component AFTER Charts */}
-            {filterBar}
 
             {/* 4. App Theme Data Table */}
             <div className="px-4 pb-4">

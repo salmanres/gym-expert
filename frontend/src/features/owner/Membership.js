@@ -41,7 +41,13 @@ function Memberships() {
                     member.membershipPlan = membership.membershipPlanId;
                     member.activeMembership = membership;
                     member.planStartDate = membership.startDate;
-                    member.planEndDate = membership.endDate;
+                    
+                    if (membership.paymentStatus !== 'Paid' && membership.paidUntilDate) {
+                        member.planEndDate = membership.paidUntilDate;
+                    } else {
+                        member.planEndDate = membership.endDate;
+                    }
+                    
                     member.paymentStatus = membership.paymentStatus;
                 }
                 return member;

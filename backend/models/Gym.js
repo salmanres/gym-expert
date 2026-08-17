@@ -89,6 +89,21 @@ const gymSchema = new mongoose.Schema({
         default: 30
     },
 
+    // Attendance & Schedule Settings
+    weeklyOff: {
+        type: [String],
+        enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        default: ['Sunday']
+    },
+    workingHours: {
+        start: { type: String, default: '06:00' },
+        end: { type: String, default: '22:00' }
+    },
+    holidays: [{
+        date: { type: Date, required: true },
+        reason: { type: String, required: true }
+    }],
+
     // Coupon & Offer Management
     couponOffers: [couponSchema]
 }, { timestamps: true });

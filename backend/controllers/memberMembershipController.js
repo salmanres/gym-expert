@@ -84,6 +84,12 @@ exports.assignMembership = async (req, res) => {
             calculatedPaidUntilDate = end;
         } else if (paidUntilDate) {
             calculatedPaidUntilDate = new Date(paidUntilDate);
+        } else if (paymentStatus === 'Partial' && finalPrice > 0) {
+            const totalMs = end.getTime() - start.getTime();
+            const paidRatio = totalPaid / finalPrice;
+            calculatedPaidUntilDate = new Date(start.getTime() + (totalMs * paidRatio));
+        } else if (paymentStatus === 'Pending') {
+            calculatedPaidUntilDate = new Date(start.getTime()); // Valid for 0 days technically
         }
 
         const calculatedMembershipStatus = start <= new Date() ? "Active" : "Scheduled";
@@ -294,6 +300,14 @@ exports.addPayment = async (req, res) => {
             membership.paidUntilDate = membership.endDate;
         } else if (paidUntilDate) {
             membership.paidUntilDate = new Date(paidUntilDate);
+        } else if (paymentStatus === 'Partial' && membership.finalPrice > 0) {
+            const startMs = new Date(membership.startDate).getTime();
+            const endMs = new Date(membership.endDate).getTime();
+            const totalMs = endMs - startMs;
+            const paidRatio = membership.paidAmount / membership.finalPrice;
+            membership.paidUntilDate = new Date(startMs + (totalMs * paidRatio));
+        } else if (paymentStatus === 'Pending') {
+            membership.paidUntilDate = new Date(membership.startDate);
         }
 
         await membership.save();

@@ -8,8 +8,7 @@ import { FiAlertCircle, FiCalendar, FiDollarSign, FiCheckCircle, FiMessageSquare
 
 export default function ExpiringPlansReport({ 
     expiringPlans = [], 
-    allActivePlans = [],
-    filterBar = null
+    allActivePlans = []
 }) {
     const today = new Date();
     const sevenDaysLater = new Date();
@@ -67,7 +66,7 @@ export default function ExpiringPlansReport({
     // Calculate Plan-Wise Grouping Breakdown
     const planBreakdownMap = {};
     expiringPlans.forEach(p => {
-        const planName = p.membershipPlanId?.name || p.planName || 'Standard Plan';
+        const planName = p.membershipPlanId?.name || p.planName || 'General Plan';
         const price = Number(p.finalPrice || p.originalPrice || p.totalAmount) || 0;
 
         if (!planBreakdownMap[planName]) {
@@ -95,14 +94,15 @@ export default function ExpiringPlansReport({
     ];
 
     const renderRow = (p) => {
-        const endDate = new Date(p.endDate);
+        const relevantEndDateStr = p.paidUntilDate || p.endDate;
+        const endDate = new Date(relevantEndDateStr);
         const daysLeft = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
         const memberCustomId = p.memberId?.memberId || 'N/A';
         const memberName = p.memberId?.firstName ? `${p.memberId.firstName} ${p.memberId.lastName || ''}`.trim() : 'Gym Member';
         const phone = p.memberId?.contactNumber || 'N/A';
-        const planName = p.membershipPlanId?.name || p.planName || 'Standard Plan';
+        const planName = p.membershipPlanId?.name || p.planName || 'General Plan';
         const startDateStr = p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A';
-        const expiryDateStr = p.endDate ? new Date(p.endDate).toLocaleDateString() : 'N/A';
+        const expiryDateStr = relevantEndDateStr ? new Date(relevantEndDateStr).toLocaleDateString() : 'N/A';
         const renewalAmount = p.finalPrice || p.originalPrice || 0;
         const trainerName = p.assignedTrainer?.name || p.assignedBy?.name || 'General Trainer';
         const statusLabel = daysLeft <= 0 ? 'Expired' : daysLeft <= 7 ? 'Critical' : 'Active';
@@ -266,8 +266,6 @@ export default function ExpiringPlansReport({
                 </div>
             </div>
 
-            {/* 3. FilterBar Component AFTER Chart & Plans Breakdown Table */}
-            {filterBar}
 
             {/* 4. Full Data Table */}
             <div className="px-4 pb-4">

@@ -21,6 +21,39 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
     return R * c;
 };
 
+// Helper to check if gym is closed based on weekly off or holidays
+const isGymClosed = (gym, date) => {
+    if (!gym) return { closed: false };
+    
+    // Check weekly off
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = days[date.getDay()];
+    
+    if (gym.weeklyOff && gym.weeklyOff.includes(dayName)) {
+        return { closed: true, reason: 'Weekly Off (' + dayName + ')' };
+    }
+
+    // Check holidays
+    if (gym.holidays && gym.holidays.length > 0) {
+        // We compare in local time / YYYY-MM-DD
+        const d = new Date(date);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        
+        const holiday = gym.holidays.find(h => {
+            if (!h.date) return false;
+            const hd = new Date(h.date);
+            const hdStr = `${hd.getFullYear()}-${String(hd.getMonth() + 1).padStart(2, '0')}-${String(hd.getDate()).padStart(2, '0')}`;
+            return hdStr === dateStr;
+        });
+
+        if (holiday) {
+            return { closed: true, reason: holiday.reason || 'Public Holiday' };
+        }
+    }
+
+    return { closed: false };
+};
+
 // @desc    Mark Attendance (Manual, QR, Biometric)
 // @route   POST /api/attendance/mark
 // @access  Private
@@ -59,6 +92,10 @@ exports.markAttendance = async (req, res) => {
         }
 
         const gymId = targetUser.gymId;
+        const gym = await Gym.findById(gymId);
+        if (!gym) {
+            return res.status(404).json({ message: 'Gym not found' });
+        }
 
         let activeMembership = null;
         if (!isStaff && !isTrial) {
@@ -103,7 +140,6 @@ exports.markAttendance = async (req, res) => {
 
         // If QR source, validate location
         if (source === 'QR') {
-            const gym = await Gym.findById(gymId);
             if (!gym.qrAttendanceEnabled) {
                 return res.status(400).json({ message: 'QR Attendance is disabled for this gym' });
             }
@@ -126,6 +162,20 @@ exports.markAttendance = async (req, res) => {
             recordDate = new Date(req.body.date);
         }
         recordDate.setHours(0, 0, 0, 0);
+
+        // --- Weekly Off & Holiday Validation ---
+        // Only block if marking 'Present' or creating a new record via QR/Biometric
+        if (status !== 'Absent') {
+            const closedCheck = isGymClosed(gym, recordDate);
+            if (closedCheck.closed) {
+                // Allow manual override for specific edge cases only if it's source Manual
+                if (source !== 'Manual') {
+                    return res.status(403).json({ 
+                        message: `Gym is closed today due to ${closedCheck.reason}. Attendance cannot be marked.` 
+                    });
+                }
+            }
+        }
 
         let attendance = await Attendance.findOne({
             userId: targetUserId,
@@ -232,6 +282,40 @@ exports.getMyAttendance = async (req, res) => {
     }
 };
 
+// @desc    Get User Attendance History
+// @route   GET /api/attendance/history/:userId
+// @access  Private (Owner/Admin)
+exports.getUserAttendanceHistory = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { startDate, endDate } = req.query;
+
+        let query = { userId, gymId: req.user.gymId };
+
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) {
+                const sDate = new Date(startDate);
+                sDate.setHours(0, 0, 0, 0);
+                query.date.$gte = sDate;
+            }
+            if (endDate) {
+                const eDate = new Date(endDate);
+                eDate.setHours(23, 59, 59, 999);
+                query.date.$lte = eDate;
+            }
+        }
+
+        const records = await Attendance.find(query)
+            .sort({ date: -1 });
+        
+        res.json(records);
+    } catch (error) {
+        console.error("Get user attendance history error:", error);
+        res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+};
+
 // @desc    Get Daily Attendance Sheet (All members/staff with their status)
 // @route   GET /api/attendance/daily-sheet
 // @access  Private (Gym Owner/Admin)
@@ -240,6 +324,9 @@ exports.getDailySheet = async (req, res) => {
         const { date, type = 'members' } = req.query;
         const queryDate = date ? new Date(date) : new Date();
         queryDate.setHours(0, 0, 0, 0);
+
+        const gym = await Gym.findById(req.user.gymId);
+        const closedCheck = isGymClosed(gym, queryDate);
 
         let users = [];
         if (type === 'staff') {
@@ -301,7 +388,11 @@ exports.getDailySheet = async (req, res) => {
             };
         });
 
-        res.json(sheet);
+        res.json({
+            sheet,
+            isClosed: closedCheck.closed,
+            closedReason: closedCheck.reason
+        });
     } catch (error) {
         console.error("Get daily sheet error:", error);
         res.status(500).json({ message: 'Server Error', error: error.message });
@@ -359,7 +450,7 @@ exports.getCheckInStatus = async (req, res) => {
 // @access  Public
 exports.selfCheckIn = async (req, res) => {
     try {
-        const { gymId, deviceToken, fingerprint, latitude, longitude } = req.body;
+        const { gymId, deviceToken, latitude, longitude } = req.body;
 
         if (!gymId || !deviceToken || !latitude || !longitude) {
             return res.status(400).json({ message: 'Gym ID, Device Token, and Location are required' });
@@ -371,9 +462,16 @@ exports.selfCheckIn = async (req, res) => {
             return res.status(404).json({ message: 'Gym not found' });
         }
 
-
         if (!gym.qrAttendanceEnabled) {
             return res.status(400).json({ message: 'QR Attendance is not enabled for this gym' });
+        }
+
+        // --- Weekly Off & Holiday Validation ---
+        const closedCheck = isGymClosed(gym, new Date());
+        if (closedCheck.closed) {
+            return res.status(403).json({ 
+                message: `Gym is closed today due to ${closedCheck.reason}. Check-in not allowed.` 
+            });
         }
 
         // 2. Validate Location (Distance Check)
@@ -547,7 +645,7 @@ exports.requestOTP = async (req, res) => {
 // @access  Public
 exports.verifyOTP = async (req, res) => {
     try {
-        const { gymId, phone, otp, browserFingerprint } = req.body;
+        const { gymId, phone, otp } = req.body;
         
         if (!gymId || !phone || !otp) {
             return res.status(400).json({ message: 'Missing required fields' });
@@ -581,8 +679,7 @@ exports.verifyOTP = async (req, res) => {
         await MemberDevice.create({
             memberId: member._id,
             gymId: gymId,
-            deviceToken,
-            browserFingerprint: browserFingerprint || 'unknown'
+            deviceToken
         });
 
         res.json({ 

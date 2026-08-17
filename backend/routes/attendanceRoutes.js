@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { markAttendance, getGymAttendance, getMyAttendance, getDailySheet, selfCheckIn, requestOTP, verifyOTP } = require('../controllers/attendanceController');
+const { markAttendance, getGymAttendance, getMyAttendance, getDailySheet, getUserAttendanceHistory, selfCheckIn, requestOTP, verifyOTP } = require('../controllers/attendanceController');
 const { protect } = require('../middleware/authMiddleware');
 
 // @route   POST /api/attendance/request-otp
@@ -40,5 +40,10 @@ router.get('/', protect, getGymAttendance);
 // @desc    Get logged in user's attendance
 // @access  Private
 router.get('/my', protect, getMyAttendance);
+
+// @route   GET /api/attendance/history/:userId
+// @desc    Get attendance history for a specific user (member or staff)
+// @access  Private (Owner/Admin)
+router.get('/history/:userId', protect, getUserAttendanceHistory);
 
 module.exports = router;

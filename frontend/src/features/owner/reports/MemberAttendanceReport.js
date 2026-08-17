@@ -1,25 +1,56 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SummaryCards from '../../../components/page/SummaryCards';
 import DataTable from '../../../components/page/DataTable';
 import EmptyState from '../../../components/page/EmptyState';
 import { FiUsers, FiCheckCircle, FiClock, FiActivity, FiEye, FiX, FiCalendar, FiDownload } from 'react-icons/fi';
+import apiClient from '../../../api/apiClient';
 
 export default function MemberAttendanceReport({ 
     memberAttendance = [],
-    filterBar = null,
+    activePlans = [],
     filterStartDate = '',
     filterEndDate = ''
 }) {
     const [selectedMember, setSelectedMember] = useState(null);
     const [modalStartDate, setModalStartDate] = useState('');
     const [modalEndDate, setModalEndDate] = useState('');
+    const [loadingLogs, setLoadingLogs] = useState(false);
+    const [fetchedLogs, setFetchedLogs] = useState([]);
 
     // Sync modal date pickers with main filter bar when opening modal
     const handleOpenModal = (member) => {
         setSelectedMember(member);
         setModalStartDate(filterStartDate || '');
         setModalEndDate(filterEndDate || '');
+        setFetchedLogs([]);
+        fetchLogs(member, filterStartDate || '', filterEndDate || '');
     };
+
+    const fetchLogs = async (member, start, end) => {
+        if (!member) return;
+        setLoadingLogs(true);
+        try {
+            const userId = member.user?._id || member.userId?._id || member.memberId?._id || member._id;
+            let url = `/attendance/history/${userId}`;
+            const params = new URLSearchParams();
+            if (start) params.append('startDate', start);
+            if (end) params.append('endDate', end);
+            if (params.toString()) url += `?${params.toString()}`;
+            
+            const res = await apiClient.get(url);
+            setFetchedLogs(res.data || []);
+        } catch (error) {
+            console.error("Failed to fetch logs", error);
+        } finally {
+            setLoadingLogs(false);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedMember) {
+            fetchLogs(selectedMember, modalStartDate, modalEndDate);
+        }
+    }, [modalStartDate, modalEndDate]);
 
     const totalMemberCount = memberAttendance.length;
     const presentTodayMembers = memberAttendance.filter(m => m.attendance?.checkInTime || m.attendanceStatus === 'Present');
@@ -58,7 +89,7 @@ export default function MemberAttendanceReport({
         
         // Robust multi-key fallback for contact number
         const phone = item.memberId?.contactNumber || item.memberId?.phone || item.memberId?.mobile || item.memberId?.contactNo || item.contactNumber || item.phone || item.mobile || item.contactNo || 'N/A';
-        const planName = item.membershipPlanId?.name || item.planName || 'Standard Plan';
+        const planName = item.membershipPlanId?.name || item.planName || 'General Plan';
         
         const today = new Date();
         const startDate = item.startDate || item.membershipPlanId?.startDate || item.memberId?.startDate;
@@ -120,101 +151,31 @@ export default function MemberAttendanceReport({
         );
     };
 
-    // Helper to generate full daily attendance records for Member
-    const getMemberDailyLogs = (memberObj) => {
-        if (!memberObj) return [];
-        
-        // 1. Check if real backend attendance logs array exists
-        const realLogs = memberObj.attendanceLogs || memberObj.attendanceHistory || memberObj.history || memberObj.memberId?.attendanceHistory;
-        if (realLogs && Array.isArray(realLogs) && realLogs.length > 0) {
-            return realLogs.filter(log => {
-                const dateStr = new Date(log.date || log.checkInTime || log.createdAt).toISOString().split('T')[0];
-                if (modalStartDate && dateStr < modalStartDate) return false;
-                if (modalEndDate && dateStr > modalEndDate) return false;
-                return true;
-            }).map(log => {
-                const checkIn = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-                const checkOut = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
-                
-                let workoutTime = '0h 0m';
-                if (log.checkInTime && log.checkOutTime) {
-                    const mins = Math.floor((new Date(log.checkOutTime) - new Date(log.checkInTime)) / (1000 * 60));
-                    workoutTime = `${Math.floor(mins / 60)}h ${mins % 60}m`;
-                } else if (log.checkInTime) {
-                    workoutTime = '1h 30m (Session)';
-                }
-                return {
-                    date: new Date(log.date || log.checkInTime || log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                    checkIn,
-                    checkOut,
-                    workoutTime,
-                    status: log.status || (log.checkInTime ? 'Present' : 'Absent')
-                };
-            });
+    const modalDailyLogs = selectedMember ? fetchedLogs.map(log => {
+        const checkIn = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+        const checkOut = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+        let workoutTime = '0h 0m';
+        if (log.checkInTime && log.checkOutTime) {
+            const mins = Math.floor((new Date(log.checkOutTime) - new Date(log.checkInTime)) / (1000 * 60));
+            workoutTime = `${Math.floor(mins / 60)}h ${mins % 60}m`;
+        } else if (log.checkInTime) {
+            workoutTime = '1h 30m (Session)';
         }
-
-        // 2. Fallback demonstration logs with Present, Absent, Off for Member
-        const logs = [];
-        const today = new Date();
-
-        // Calculate days difference or default to 30 days
-        let numDays = 30;
-        if (modalStartDate && modalEndDate) {
-            const diffTime = Math.abs(new Date(modalEndDate) - new Date(modalStartDate));
-            numDays = Math.min(Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1, 90);
-        }
-
-        for (let i = 0; i < numDays; i++) {
-            const d = new Date();
-            d.setDate(today.getDate() - i);
-            const dateStr = d.toISOString().split('T')[0];
-
-            // Filter by selected modal date range
-            if (modalStartDate && dateStr < modalStartDate) continue;
-            if (modalEndDate && dateStr > modalEndDate) continue;
-
-            const isSunday = d.getDay() === 0;
-            const isAbsentDay = !isSunday && (i % 5 === 3);
-
-            let status = 'Present';
-            let checkIn = '--:--';
-            let checkOut = '--:--';
-            let workoutTime = '0h 0m';
-
-            if (isSunday) {
-                status = 'Off';
-                workoutTime = 'Gym Closed';
-            } else if (isAbsentDay) {
-                status = 'Absent';
-                workoutTime = '0h 0m';
-            } else {
-                status = 'Present';
-                const inTime = new Date(d.setHours(7, 15 + (i % 20), 0));
-                const outTime = new Date(d.setHours(8, 45 + (i % 15), 0));
-                checkIn = inTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                checkOut = outTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                workoutTime = '1h 30m';
-            }
-
-            logs.push({
-                date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                checkIn,
-                checkOut,
-                workoutTime,
-                status
-            });
-        }
-        return logs;
-    };
-
-    const modalDailyLogs = selectedMember ? getMemberDailyLogs(selectedMember) : [];
+        return {
+            date: new Date(log.date || log.checkInTime || log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            checkIn,
+            checkOut,
+            workoutTime,
+            status: log.status || (log.checkInTime ? 'Present' : 'Absent')
+        };
+    }) : [];
 
     const exportMemberLogCSV = () => {
         if (!selectedMember || !modalDailyLogs.length) return;
 
         const memberName = selectedMember.memberId?.firstName ? `${selectedMember.memberId.firstName} ${selectedMember.memberId.lastName || ''}`.trim() : selectedMember.memberName || selectedMember.name || 'Gym Member';
         const phone = selectedMember.memberId?.contactNumber || selectedMember.memberId?.phone || selectedMember.memberId?.mobile || selectedMember.memberId?.contactNo || selectedMember.contactNumber || selectedMember.phone || selectedMember.mobile || selectedMember.contactNo || 'N/A';
-        const planName = selectedMember.membershipPlanId?.name || selectedMember.planName || 'Standard Plan';
+        const planName = selectedMember.membershipPlanId?.name || selectedMember.planName || 'General Plan';
         const startDate = selectedMember.startDate || selectedMember.membershipPlanId?.startDate || selectedMember.memberId?.startDate;
         const endDate = selectedMember.endDate || selectedMember.membershipPlanId?.endDate || selectedMember.memberId?.endDate;
 
@@ -261,8 +222,6 @@ export default function MemberAttendanceReport({
                 <SummaryCards cards={cards} />
             </div>
 
-            {/* FilterBar Component AFTER Cards */}
-            {filterBar}
 
             {/* Member Attendance Table */}
             <div className="px-4 pb-4">
@@ -278,7 +237,18 @@ export default function MemberAttendanceReport({
             </div>
 
             {/* View Attendance Full Day Table Modal with Date Picker for Member */}
-            {selectedMember && (
+            {selectedMember && (() => {
+                const memberIdStr = selectedMember.user?._id || selectedMember.userId?._id || selectedMember.memberId?._id || selectedMember._id;
+                const activePlan = activePlans.find(p => {
+                    const pid = p.memberId?._id || p.memberId;
+                    return pid === memberIdStr || pid === selectedMember.memberId;
+                });
+                const planName = activePlan?.membershipPlanId?.name || selectedMember.membershipPlanId?.name || selectedMember.planName || 'General Plan';
+                const selectedMemberPhone = selectedMember.memberId?.contactNumber || selectedMember.memberId?.phone || selectedMember.memberId?.mobile || selectedMember.phone || selectedMember.mobile || 'N/A';
+                const selectedMemberStartDate = (activePlan?.startDate || selectedMember.createdAt) ? new Date(activePlan?.startDate || selectedMember.createdAt).toLocaleDateString('en-US') : '--/--/----';
+                const selectedMemberEndDate = (activePlan?.endDate || selectedMember.endDate) ? new Date(activePlan?.endDate || selectedMember.endDate).toLocaleDateString('en-US') : '--/--/----';
+
+                return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col relative animate-in fade-in zoom-in-95 overflow-hidden">
                         
@@ -293,7 +263,7 @@ export default function MemberAttendanceReport({
                                         Member Workout & Attendance Log — {selectedMember.memberId?.firstName ? `${selectedMember.memberId.firstName} ${selectedMember.memberId.lastName || ''}`.trim() : selectedMember.memberName || selectedMember.name || 'Gym Member'}
                                     </h3>
                                     <p className="text-xs text-slate-500 font-medium flex items-center gap-2 mt-0.5">
-                                        <span>Plan: <strong className="text-slate-800">{selectedMember.membershipPlanId?.name || selectedMember.planName || 'Standard Plan'}</strong></span>
+                                        <span>Plan: <strong className="text-slate-800">{planName}</strong></span>
                                         <span>• Phone: <strong className="text-slate-800 font-semibold">{selectedMemberPhone}</strong></span>
                                         <span>• ID: <strong className="font-mono text-indigo-600">{selectedMember.memberId?.memberId || selectedMember.memberId || 'MEM-001'}</strong></span>
                                     </p>
@@ -399,6 +369,8 @@ export default function MemberAttendanceReport({
                                     ))}
                                 </tbody>
                             </table>
+                            {loadingLogs && <div className="text-center py-6 text-slate-500 font-medium text-xs">Loading attendance records...</div>}
+                            {!loadingLogs && modalDailyLogs.length === 0 && <div className="text-center py-6 text-slate-500 font-medium text-xs">No records found for the selected period.</div>}
                         </div>
 
                         {/* Modal Footer */}
@@ -423,7 +395,8 @@ export default function MemberAttendanceReport({
                         </div>
                     </div>
                 </div>
-            )}
+                );
+            })()}
         </div>
     );
 }

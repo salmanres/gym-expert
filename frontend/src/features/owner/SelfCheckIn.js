@@ -117,8 +117,7 @@ export default function SelfCheckIn() {
             const res = await apiClient.post(`/attendance/verify-otp`, { 
                 gymId, 
                 phone, 
-                otp,
-                browserFingerprint: navigator.userAgent
+                otp
             });
             
             localStorage.setItem(`deviceToken_${gymId}`, res.data.deviceToken);

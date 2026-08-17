@@ -11,6 +11,7 @@ import { toast } from 'react-toastify';
 
 export default function AttendanceDashboard() {
     const [sheet, setSheet] = useState([]);
+    const [gymStatus, setGymStatus] = useState({ isClosed: false, closedReason: '' });
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [activeTab, setActiveTab] = useState('Members');
@@ -19,7 +20,11 @@ export default function AttendanceDashboard() {
         setLoading(true);
         try {
             const res = await apiClient.get(`/attendance/daily-sheet?date=${selectedDate}&type=${activeTab.toLowerCase()}`);
-            setSheet(res.data);
+            setSheet(res.data.sheet || []);
+            setGymStatus({
+                isClosed: res.data.isClosed || false,
+                closedReason: res.data.closedReason || ''
+            });
         } catch (error) {
             toast.error("Failed to load attendance sheet");
         } finally {
@@ -68,7 +73,10 @@ export default function AttendanceDashboard() {
         const todayStr = new Date().toISOString().split('T')[0];
         const isPastDate = selectedDate < todayStr;
         
-        if (currentStatus === 'Unmarked' && isPastDate) {
+        // Check for holiday/weekly off
+        if (currentStatus === 'Unmarked' && gymStatus.isClosed) {
+            currentStatus = 'Holiday';
+        } else if (currentStatus === 'Unmarked' && isPastDate) {
             currentStatus = 'Absent';
         }
         
@@ -96,6 +104,7 @@ export default function AttendanceDashboard() {
                     {currentStatus === 'Absent' && <span className="inline-flex px-2 py-1 bg-rose-50 text-rose-700 border-rose-200 rounded text-xs font-bold uppercase tracking-wide border">Absent</span>}
                     {currentStatus === 'Late' && <span className="inline-flex px-2 py-1 bg-amber-50 text-amber-700 border-amber-200 rounded text-xs font-bold uppercase tracking-wide border">Late</span>}
                     {currentStatus === 'Half-Day' && <span className="inline-flex px-2 py-1 bg-orange-50 text-orange-700 border-orange-200 rounded text-xs font-bold uppercase tracking-wide border">Half-Day</span>}
+                    {currentStatus === 'Holiday' && <span className="inline-flex px-2 py-1 bg-indigo-50 text-indigo-700 border-indigo-200 rounded text-xs font-bold uppercase tracking-wide border">Off ({gymStatus.closedReason})</span>}
                     {currentStatus === 'Unmarked' && <span className="inline-flex px-2 py-1 bg-slate-100 text-slate-500 border-slate-200 rounded text-xs font-bold uppercase tracking-wide border">Not Marked</span>}
                 </td>
                 <td className="py-3 px-4">
@@ -114,7 +123,7 @@ export default function AttendanceDashboard() {
                 </td>
                 <td className="py-3 px-4">
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                        {(currentStatus === 'Unmarked' || currentStatus === 'Absent') && (
+                        {(currentStatus === 'Unmarked' || currentStatus === 'Absent' || currentStatus === 'Holiday') && (
                             <button 
                                 onClick={() => handleMarkAttendance(user._id, 'Present')}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-colors shadow-sm text-xs font-bold"
@@ -124,7 +133,7 @@ export default function AttendanceDashboard() {
                             </button>
                         )}
 
-                        {currentStatus === 'Unmarked' && (
+                        {(currentStatus === 'Unmarked' || currentStatus === 'Holiday') && (
                             <button 
                                 onClick={() => handleMarkAttendance(user._id, 'Absent')}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white transition-colors shadow-sm text-xs font-bold"
@@ -179,6 +188,23 @@ export default function AttendanceDashboard() {
             />
 
             <div className="p-4 sm:p-6 lg:p-8 flex-1 overflow-y-auto">
+                {gymStatus.isClosed && (
+                    <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                        <div>
+                            <h4 className="text-indigo-900 font-extrabold text-sm flex items-center gap-2">
+                                <span className="relative flex h-3 w-3">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+                                </span>
+                                Gym is Closed Today
+                            </h4>
+                            <p className="text-indigo-700 text-xs font-medium mt-1">
+                                Reason: <strong className="font-extrabold">{gymStatus.closedReason}</strong>. All unmarked attendance is displayed as "Off".
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                     <div className="flex items-center gap-4 w-full sm:w-auto">
                         <div>
@@ -201,10 +227,16 @@ export default function AttendanceDashboard() {
                             <div className="text-xl font-black text-rose-600">{sheet.filter(s => {
                                 const currentStatus = s.attendance?.status || 'Unmarked';
                                 const todayStr = new Date().toISOString().split('T')[0];
-                                return currentStatus === 'Absent' || (currentStatus === 'Unmarked' && selectedDate < todayStr);
+                                return currentStatus === 'Absent' || (!gymStatus.isClosed && currentStatus === 'Unmarked' && selectedDate < todayStr);
                             }).length}</div>
                             <div className="text-[10px] font-bold text-rose-800 uppercase tracking-wider">Absent</div>
                         </div>
+                        {gymStatus.isClosed && (
+                            <div className="text-center px-4 py-2 bg-indigo-50 rounded-lg">
+                                <div className="text-xl font-black text-indigo-600">{sheet.filter(s => !s.attendance?.status).length}</div>
+                                <div className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider">Off</div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

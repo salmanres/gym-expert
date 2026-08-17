@@ -290,13 +290,15 @@ export default function Members() {
             </FilterBar>
 
             {filteredMembers.length > 0 ? (
-                <DataTable 
-                    columns={columns} 
-                    data={filteredMembers} 
-                    loading={loading}
-                    emptyMessage="No members found."
-                    renderRow={renderRow} 
-                />
+                <div className="px-4 py-4 flex-1 overflow-y-auto w-full">
+                    <DataTable 
+                        columns={columns} 
+                        data={filteredMembers} 
+                        loading={loading}
+                        emptyMessage="No members found."
+                        renderRow={renderRow} 
+                    />
+                </div>
             ) : (
                 <div className="flex-1 overflow-y-auto">
                     <EmptyState 
