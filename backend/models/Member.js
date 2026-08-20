@@ -20,6 +20,7 @@ const memberSchema = new mongoose.Schema({
 
     // Referral Details
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Member' },
+    referredByStaff: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     referralBonusGranted: { type: Boolean, default: false },
 
     // Inherited Lead Fields

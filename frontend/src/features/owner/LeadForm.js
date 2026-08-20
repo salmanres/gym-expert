@@ -71,9 +71,22 @@ export default function LeadForm() {
                             const matchedOffer = gymRes.data.couponOffers?.find(o => o.title === location.state.lead.offerDetails);
                             matchedOfferId = matchedOffer ? matchedOffer._id : (location.state.lead.offerDetails ? 'Custom' : '');
                         }
-                        setFormData({ ...location.state.lead, selectedOffer: matchedOfferId, sendTextAndEmail: false, sendWhatsApp: false });
+                        setFormData({ 
+                            ...location.state.lead, 
+                            selectedOffer: matchedOfferId, 
+                            sendTextAndEmail: false, 
+                            sendWhatsApp: false,
+                            response: '',
+                            followUpTime: ''
+                        });
                     } catch (err) {
-                        setFormData({ ...location.state.lead, sendTextAndEmail: false, sendWhatsApp: false });
+                        setFormData({ 
+                            ...location.state.lead, 
+                            sendTextAndEmail: false, 
+                            sendWhatsApp: false,
+                            response: '',
+                            followUpTime: ''
+                        });
                     }
                     setLoading(false);
                 };
@@ -92,7 +105,14 @@ export default function LeadForm() {
                             const matchedOffer = gymRes.data.couponOffers?.find(o => o.title === leadRes.data.offerDetails);
                             matchedOfferId = matchedOffer ? matchedOffer._id : (leadRes.data.offerDetails ? 'Custom' : '');
                         }
-                        setFormData({ ...leadRes.data, selectedOffer: matchedOfferId, sendTextAndEmail: false, sendWhatsApp: false });
+                        setFormData({ 
+                            ...leadRes.data, 
+                            selectedOffer: matchedOfferId, 
+                            sendTextAndEmail: false, 
+                            sendWhatsApp: false,
+                            response: '',
+                            followUpTime: ''
+                        });
                         setLoading(false);
                     } catch (error) {
                         toast.error("Failed to fetch lead details");
@@ -221,6 +241,7 @@ export default function LeadForm() {
             
             // Check if current form inputs are different from the latest history item
             let isDifferent = true;
+            let statusChanged = false;
             if (submitData.followUpHistory && submitData.followUpHistory.length > 0) {
                 const latest = submitData.followUpHistory[submitData.followUpHistory.length - 1];
                 const latestNextDate = latest.nextFollowUpDate ? new Date(latest.nextFollowUpDate).toISOString().split('T')[0] : '';
@@ -229,13 +250,20 @@ export default function LeadForm() {
                 if (latest.response === submitData.response && latestNextDate === currentNextDate && latest.nextFollowUpTime === submitData.followUpTime) {
                     isDifferent = false; // They didn't change the response or date
                 }
+                if (latest.status !== submitData.status) {
+                    statusChanged = true;
+                }
+            } else {
+                statusChanged = true;
             }
 
-            // Auto-add it to history if it's new or changed!
-            if (isDifferent && submitData.response && submitData.response.trim() !== '') {
+            const hasResponse = submitData.response && submitData.response.trim() !== '';
+
+            // Auto-add it to history if it's new/changed, OR if the status changed without a response!
+            if ((isDifferent && hasResponse) || (statusChanged && !hasResponse)) {
                 const autoAddedItem = {
                     contactDate: new Date().toISOString(),
-                    response: submitData.response,
+                    response: hasResponse ? submitData.response : `Status updated to ${submitData.status}`,
                     nextFollowUpDate: submitData.followUpDate || '',
                     nextFollowUpTime: submitData.followUpTime || '',
                     status: submitData.status
@@ -243,13 +271,14 @@ export default function LeadForm() {
                 submitData.followUpHistory = [...(submitData.followUpHistory || []), autoAddedItem];
             }
 
-            // Sync top-level fields for the Leads list view based on the latest history item (in case they deleted the last one)
+            // Sync top-level response for the Leads list view if no new response was provided
             if (submitData.followUpHistory && submitData.followUpHistory.length > 0) {
                 const latestHistory = submitData.followUpHistory[submitData.followUpHistory.length - 1];
-                submitData.response = latestHistory.response;
-                submitData.followUpDate = latestHistory.nextFollowUpDate;
-                submitData.followUpTime = latestHistory.nextFollowUpTime;
-                submitData.status = latestHistory.status;
+                if (!hasResponse) {
+                    submitData.response = latestHistory.response;
+                }
+                // We do NOT overwrite submitData.followUpDate or submitData.status here, 
+                // as the form fields are the source of truth!
             }
 
             let leadId = id;

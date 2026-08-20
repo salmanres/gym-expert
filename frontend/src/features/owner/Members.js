@@ -61,6 +61,22 @@ export default function Members() {
         fetchMembers();
     }, []);
 
+    useEffect(() => {
+        if (searchTerm && members.length > 0) {
+            const lowerSearch = searchTerm.toLowerCase();
+            const firstMatch = members.find(member => {
+                const searchStr = `${member.firstName} ${member.lastName || ''} ${member.contactNumber} ${member.memberId}`.toLowerCase();
+                return searchStr.includes(lowerSearch);
+            });
+
+            if (firstMatch) {
+                if (activeTab !== firstMatch.status && activeTab !== 'All Members') {
+                    setActiveTab(firstMatch.status); // Usually 'Active', 'Inactive', 'Frozen'
+                }
+            }
+        }
+    }, [searchTerm, members, activeTab]);
+
     const handleDelete = async (id) => {
         setConfirmModal({
             isOpen: true,

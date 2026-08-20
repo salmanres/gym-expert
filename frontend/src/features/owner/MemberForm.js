@@ -26,6 +26,7 @@ export default function MemberForm() {
     const [errors, setErrors] = useState({});
     
     const [existingMembers, setExistingMembers] = useState([]);
+    const [staffMembers, setStaffMembers] = useState([]);
     const [gymSettings, setGymSettings] = useState(null);
     const [customizeReward, setCustomizeReward] = useState(false);
 
@@ -37,6 +38,7 @@ export default function MemberForm() {
         attendedBy: 'Admin', response: '',
         joiningDate: new Date().toISOString().split('T')[0], status: 'Active',
         referredBy: '',
+        referredByStaff: '',
         referralRewardType: 'Both', // 'Bonus Days' | 'Wallet Cash' | 'Both'
         referralBonusDays: 7,
         referralWalletAmount: 200,
@@ -75,13 +77,15 @@ export default function MemberForm() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [plansRes, membersRes, gymRes] = await Promise.all([
+                const [plansRes, membersRes, gymRes, staffRes] = await Promise.all([
                     apiClient.get('/membership-plans').catch(() => ({ data: [] })),
                     apiClient.get('/members').catch(() => ({ data: [] })),
-                    apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
+                    apiClient.get('/gyms/my-gym').catch(() => ({ data: null })),
+                    apiClient.get('/staff').catch(() => ({ data: [] }))
                 ]);
                 setMemberships((plansRes.data || []).filter(m => m.isActive));
                 setExistingMembers(membersRes.data || []);
+                setStaffMembers(staffRes.data || []);
                 setGymSettings(gymRes.data);
 
                 if (gymRes.data) {
@@ -117,6 +121,7 @@ export default function MemberForm() {
             setFormData({
                 ...member,
                 referredBy: member.referredBy?._id || member.referredBy || '',
+                referredByStaff: member.referredByStaff?._id || member.referredByStaff || '',
                 followUpDate: member.followUpDate ? new Date(member.followUpDate).toISOString().split('T')[0] : ''
             });
             setLoading(false);
@@ -212,8 +217,8 @@ export default function MemberForm() {
                 navigate('/dashboard/owner/members');
             } else {
                 const res = await apiClient.post('/members', formData);
-                if (formData.referredBy) {
-                    toast.success("Member registered & Referral Rewards (Wallet/Bonus Days) credited to Referrer!");
+                if (formData.referredBy || formData.referredByStaff) {
+                    toast.success("Member registered & Referral Rewards (Wallet/Bonus) credited to Referrer!");
                 } else {
                     toast.success("Member registered successfully");
                 }
@@ -221,7 +226,8 @@ export default function MemberForm() {
                 navigate('/dashboard/owner/membership/assign', { state: { member: res.data } });
             }
         } catch (error) {
-            toast.error(isEdit ? "Failed to update member" : "Failed to register member");
+            const errorMsg = error.response?.data?.message || (isEdit ? "Failed to update member" : "Failed to register member");
+            toast.error(errorMsg);
             setSubmitting(false);
         }
     };
@@ -323,7 +329,7 @@ export default function MemberForm() {
                         </FormSection>
 
                         {/* Dedicated Referral Section */}
-                        <FormSection title="Referral Source" icon={<FiGift className="text-emerald-600" />} className="grid grid-cols-1 gap-4">
+                        <FormSection title="Referral Source" icon={<FiGift className="text-emerald-600" />} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="flex flex-col justify-end">
                                 <Select
                                     label="Referred By Existing Member (Optional)"
@@ -331,7 +337,7 @@ export default function MemberForm() {
                                     value={formData.referredBy || ''}
                                     onChange={handleChange}
                                     options={[
-                                        { value: '', label: '-- Direct Registration / No Referral --' },
+                                        { value: '', label: '-- Direct Registration / No Member Referral --' },
                                         ...existingMembers.map(m => {
                                             const name = `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Gym Member';
                                             const code = m.memberId || 'MEM';
@@ -339,6 +345,25 @@ export default function MemberForm() {
                                             return {
                                                 value: m._id,
                                                 label: `${code} - ${name} ${phone ? `(${phone})` : ''}`
+                                            };
+                                        })
+                                    ]}
+                                />
+                            </div>
+                            <div className="flex flex-col justify-end">
+                                <Select
+                                    label="Referred By Staff/Agent (Optional)"
+                                    name="referredByStaff"
+                                    value={formData.referredByStaff || ''}
+                                    onChange={handleChange}
+                                    options={[
+                                        { value: '', label: '-- Direct Registration / No Staff Referral --' },
+                                        ...staffMembers.map(s => {
+                                            const name = s.name || 'Staff Member';
+                                            const role = s.role === 'STAFF' ? 'Staff' : s.role === 'TRAINER' ? 'Trainer' : s.role;
+                                            return {
+                                                value: s._id,
+                                                label: `${name} (${role})`
                                             };
                                         })
                                     ]}

@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { FiPhone, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2, FiUsers } from 'react-icons/fi';
+import { FiPhone, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2, FiUsers, FiList } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
 // Import components
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import Tabs from '../../components/page/Tabs';
+import FilterBar from '../../components/page/FilterBar';
 import DataTable from '../../components/page/DataTable';
+import FollowUpCalendar from './FollowUpCalendar';
 
 function Leads() {
     const navigate = useNavigate();
@@ -16,6 +18,12 @@ function Leads() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('Enquiries');
     const [searchTerm, setSearchTerm] = useState('');
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [selectedDate, setSelectedDate] = useState(null);
+    const [sourceFilter, setSourceFilter] = useState('');
+    const [priorityFilter, setPriorityFilter] = useState('');
+    const [filterStartDate, setFilterStartDate] = useState('');
+    const [filterEndDate, setFilterEndDate] = useState('');
 
     const fetchLeads = async () => {
         try {
@@ -31,6 +39,31 @@ function Leads() {
     useEffect(() => {
         fetchLeads();
     }, []);
+
+    useEffect(() => {
+        if (searchTerm && leads.length > 0) {
+            const lowerSearch = searchTerm.toLowerCase();
+            const firstMatch = leads.find(lead => {
+                const searchStr = `${lead.firstName || lead.name || ''} ${lead.lastName || ''} ${lead.contactNumber || lead.phone || ''}`.toLowerCase();
+                return searchStr.includes(lowerSearch);
+            });
+
+            if (firstMatch) {
+                let targetTab = 'Leads';
+                if (firstMatch.status === 'Pending') targetTab = 'Enquiries';
+                else if (firstMatch.status === 'Converted') targetTab = 'Converted';
+                else if (firstMatch.status === 'Lost') targetTab = 'Lost';
+                else if (firstMatch.status === 'Negotiation') targetTab = 'Negotiation';
+                else if (firstMatch.status === 'Trial') targetTab = 'Trials';
+                else if (firstMatch.status === 'Contacted') targetTab = 'Follow Ups';
+                else if (firstMatch.status === 'Lead') targetTab = 'Leads';
+
+                if (activeTab !== targetTab) {
+                    setActiveTab(targetTab);
+                }
+            }
+        }
+    }, [searchTerm, leads, activeTab]);
 
     const handleAddNew = () => {
         navigate('/dashboard/owner/leads/add');
@@ -105,7 +138,7 @@ function Leads() {
     const filteredLeads = leads.filter(lead => {
         let tabMatch = true;
         if (activeTab === 'Enquiries') tabMatch = lead.status === 'Pending';
-        else if (activeTab === 'Leads') tabMatch = lead.status === 'Lead' || lead.status === 'Contacted';
+        else if (activeTab === 'Leads') tabMatch = ['Lead', 'Contacted', 'Trial', 'Negotiation'].includes(lead.status);
         else if (activeTab === 'Follow Ups') tabMatch = (!!lead.followUpDate || lead.status === 'Contacted') && lead.status !== 'Converted' && lead.status !== 'Lost';
         else if (activeTab === 'Trials') tabMatch = !!lead.trialDate || !!lead.trialEndDate || lead.status === 'Trial';
         else if (activeTab === 'Negotiation') tabMatch = lead.status === 'Negotiation';
@@ -115,7 +148,57 @@ function Leads() {
         const searchStr = `${lead.firstName || lead.name || ''} ${lead.lastName || ''} ${lead.contactNumber || lead.phone || ''}`.toLowerCase();
         const searchMatch = searchStr.includes(searchTerm.toLowerCase());
         
-        return tabMatch && searchMatch;
+        let dateMatch = true;
+        if (showCalendar && selectedDate) {
+            if (lead.followUpDate) {
+                const leadDateStr = typeof lead.followUpDate === 'string' 
+                    ? lead.followUpDate.split('T')[0] 
+                    : new Date(lead.followUpDate).toISOString().split('T')[0];
+                    
+                const selDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+                dateMatch = leadDateStr === selDateStr;
+            } else {
+                dateMatch = false; // Filter out if no followUpDate and date is selected
+            }
+        }
+
+        let sourceMatch = sourceFilter ? lead.source === sourceFilter : true;
+        let priorityMatch = priorityFilter ? lead.convertibility === priorityFilter : true;
+
+        let dateRangeMatch = true;
+        if (filterStartDate || filterEndDate) {
+            let targetDateValue;
+            
+            if (activeTab === 'Follow Ups') {
+                targetDateValue = lead.followUpDate;
+            } else if (activeTab === 'Trials') {
+                targetDateValue = lead.trialDate || lead.trialEndDate;
+            } else if (activeTab === 'Converted' || activeTab === 'Lost') {
+                targetDateValue = lead.updatedAt;
+            } else {
+                targetDateValue = lead.createdAt || new Date();
+            }
+
+            if (!targetDateValue) {
+                dateRangeMatch = false;
+            } else {
+                const itemDate = new Date(targetDateValue);
+                itemDate.setHours(0,0,0,0);
+                
+                if (filterStartDate) {
+                    const start = new Date(filterStartDate);
+                    start.setHours(0,0,0,0);
+                    if (itemDate < start) dateRangeMatch = false;
+                }
+                if (filterEndDate) {
+                    const end = new Date(filterEndDate);
+                    end.setHours(23,59,59,999);
+                    if (itemDate > end) dateRangeMatch = false;
+                }
+            }
+        }
+
+        return tabMatch && searchMatch && dateMatch && sourceMatch && priorityMatch && dateRangeMatch;
     });
 
     const columns = [
@@ -132,7 +215,9 @@ function Leads() {
             <td className="py-3 px-4">
                 <p className="font-bold text-slate-800 text-sm">{lead.firstName} {lead.lastName}</p>
                 <div className="flex flex-col items-start gap-1.5 mt-0.5">
-                    <p className="text-[10px] text-slate-400 font-medium">{lead.gender}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">
+                        {lead.gender} {lead.createdAt && `• Enquired: ${new Date(lead.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+                    </p>
                     {lead.trialDate && (
                         <div className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded text-[9px] font-bold border border-purple-200 uppercase tracking-wider">
                             Trial: {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} 
@@ -251,8 +336,6 @@ function Leads() {
             <PageHeader 
                 title="Enquiries & Leads"
                 subtitle="Manage and track your prospective members"
-                searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
                 onAdd={handleAddNew}
                 addLabel="Add Enquiry"
             />
@@ -260,17 +343,91 @@ function Leads() {
             <Tabs 
                 tabs={['Enquiries', 'Leads', 'Follow Ups', 'Trials', 'Negotiation', 'Converted', 'Lost']}
                 activeTab={activeTab}
-                onTabChange={setActiveTab}
+                onTabChange={(tab) => {
+                    setActiveTab(tab);
+                }}
             />
+            
+            <FilterBar 
+                searchTerm={searchTerm} 
+                onSearchChange={setSearchTerm} 
+                searchPlaceholder="Search by name or phone..."
+            >
+                <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm h-9 px-2 transition-all focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 w-full sm:w-auto">
+                    <input 
+                        type="date" 
+                        value={filterStartDate}
+                        onChange={(e) => setFilterStartDate(e.target.value)}
+                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
+                        title="Inquiry Date From"
+                    />
+                    <span className="text-slate-300 mx-2 font-medium text-[10px]">TO</span>
+                    <input 
+                        type="date" 
+                        value={filterEndDate}
+                        onChange={(e) => setFilterEndDate(e.target.value)}
+                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
+                        title="Inquiry Date To"
+                    />
+                </div>
 
-            <div className="px-4 py-4 flex-1 overflow-y-auto w-full">
-                <DataTable 
-                    columns={columns}
-                    data={filteredLeads}
-                    loading={loading}
-                    emptyMessage="No inquiries found in this category."
-                    renderRow={renderRow}
-                />
+                <select 
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm w-full sm:w-auto"
+                >
+                    <option value="">All Sources</option>
+                    <option value="Walk-in">Walk-in</option>
+                    <option value="Website">Website</option>
+                    <option value="Reference">Reference</option>
+                    <option value="Just Dial">Just Dial</option>
+                    <option value="Google">Google</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Facebook">Facebook</option>
+                    <option value="Other">Other</option>
+                </select>
+                
+                <select 
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm w-full sm:w-auto"
+                >
+                    <option value="">All Priorities</option>
+                    <option value="Hot">Hot</option>
+                    <option value="Warm">Warm</option>
+                    <option value="Cold">Cold</option>
+                </select>
+
+                <button 
+                    onClick={() => setShowCalendar(!showCalendar)}
+                    className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg font-bold text-xs transition-colors border shadow-sm shrink-0
+                        ${showCalendar ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}
+                    `}
+                >
+                    {showCalendar ? <FiList /> : <FiCalendar />}
+                    <span className="hidden sm:inline">{showCalendar ? 'Hide Calendar' : 'Show Calendar'}</span>
+                </button>
+            </FilterBar>
+
+            <div className="px-4 py-4 flex-1 overflow-y-auto w-full flex flex-col xl:flex-row gap-4">
+                {showCalendar && (
+                    <div className="xl:w-[350px] shrink-0">
+                        <FollowUpCalendar 
+                            leads={leads}
+                            selectedDate={selectedDate}
+                            onSelectDate={setSelectedDate}
+                        />
+                    </div>
+                )}
+                <div className="flex-1 min-w-0">
+                    <DataTable 
+                        columns={columns}
+                        data={filteredLeads}
+                        loading={loading}
+                        emptyMessage="No inquiries found in this category."
+                        renderRow={renderRow}
+                    />
+                </div>
             </div>
         </PageLayout>
     );

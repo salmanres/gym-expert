@@ -50,7 +50,8 @@ const userSchema = new mongoose.Schema({
     shiftStart: { type: String },
     shiftEnd: { type: String },
     status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
-    profilePhoto: { type: String }
+    profilePhoto: { type: String },
+    walletBalance: { type: Number, default: 0 }
 }, { timestamps: true });
 
 // Hash password before saving

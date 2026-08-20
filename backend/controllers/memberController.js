@@ -3,6 +3,7 @@ const Transaction = require('../models/Transaction');
 const Enquiry = require('../models/Enquiry');
 const Gym = require('../models/Gym');
 const MemberMembership = require('../models/MemberMembership');
+const User = require('../models/User');
 
 // @desc    Create new member
 // @route   POST /api/members
@@ -26,6 +27,16 @@ const createMember = async (req, res) => {
         delete memberData.referralBonusGranted;
         delete memberData.otp;
         delete memberData.otpExpiry;
+
+        // Mobile number validation
+        if (!memberData.contactNumber || !/^[6-9]\d{9}$/.test(memberData.contactNumber)) {
+            return res.status(400).json({ message: 'A valid 10-digit mobile number is required.' });
+        }
+
+        const existingMember = await Member.findOne({ contactNumber: memberData.contactNumber, gymId });
+        if (existingMember) {
+            return res.status(400).json({ message: 'A member with this mobile number already exists.' });
+        }
 
         const newMember = new Member({
             ...memberData,
@@ -101,6 +112,29 @@ const createMember = async (req, res) => {
             }
         }
 
+        // Process Staff/Agent Referral Rewards
+        if (req.body.referredByStaff) {
+            try {
+                const gym = await Gym.findById(gymId);
+                const rewardType = gym ? gym.referralRewardType : 'Both';
+                const walletAmt = gym ? gym.referrerWalletAmount : 200;
+
+                const referrerStaff = await User.findOne({
+                    _id: req.body.referredByStaff,
+                    gymId
+                });
+
+                if (referrerStaff) {
+                    if ((rewardType === 'Wallet Cash' || rewardType === 'Both') && walletAmt > 0) {
+                        referrerStaff.walletBalance = (referrerStaff.walletBalance || 0) + walletAmt;
+                        await referrerStaff.save();
+                    }
+                }
+            } catch (refErr) {
+                console.error("Staff Referral reward processing error:", refErr);
+            }
+        }
+
         res.status(201).json(savedMember);
     } catch (error) {
         console.error('Error creating member:', error);
@@ -116,6 +150,7 @@ const getMembers = async (req, res) => {
         const gymId = req.user.gymId;
         const members = await Member.find({ gymId })
             .populate('referredBy', 'firstName lastName memberId contactNumber')
+            .populate('referredByStaff', 'name email role')
             .sort({ createdAt: -1 });
         res.status(200).json(members);
     } catch (error) {
@@ -134,7 +169,8 @@ const getMemberById = async (req, res) => {
             gymId: req.user.gymId
         })
             .populate('gymId')
-            .populate('referredBy', 'firstName lastName memberId contactNumber');
+            .populate('referredBy', 'firstName lastName memberId contactNumber')
+            .populate('referredByStaff', 'name email role');
 
         if (!member) {
             return res.status(404).json({ message: 'Member not found' });
@@ -303,6 +339,20 @@ const updateMember = async (req, res) => {
         delete updateData.referralBonusGranted;
         delete updateData.otp;
         delete updateData.otpExpiry;
+
+        if (updateData.contactNumber) {
+            if (!/^[6-9]\d{9}$/.test(updateData.contactNumber)) {
+                return res.status(400).json({ message: 'A valid 10-digit mobile number is required.' });
+            }
+            const existingMember = await Member.findOne({ 
+                contactNumber: updateData.contactNumber, 
+                gymId: req.user.gymId,
+                _id: { $ne: req.params.id }
+            });
+            if (existingMember) {
+                return res.status(400).json({ message: 'A member with this mobile number already exists.' });
+            }
+        }
 
         const updatedMember = await Member.findByIdAndUpdate(
             req.params.id,
