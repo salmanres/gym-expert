@@ -1,9 +1,9 @@
 const User = require('../models/User');
 const Gym = require('../models/Gym');
 
-// @desc    Get all staff for the logged-in gym owner
+// @desc    Get all staff for the logged-in gym
 // @route   GET /api/staff
-// @access  Private (Gym Owner)
+// @access  Private (Gym Owner & Admin)
 exports.getStaff = async (req, res) => {
     try {
         if (!req.user.gymId) {
@@ -22,9 +22,13 @@ exports.getStaff = async (req, res) => {
 
 // @desc    Add a new staff member (trainer, admin, etc.)
 // @route   POST /api/staff
-// @access  Private (Gym Owner)
+// @access  Private (Gym Owner ONLY - Admin restricted)
 exports.createStaff = async (req, res) => {
     try {
+        if (req.user.role !== 'GYM_OWNER') {
+            return res.status(403).json({ message: 'Access denied. Only the Gym Owner can add or create staff members.' });
+        }
+
         const { 
             name, email, phone, role, password,
             gender, dob, address, emergencyContactName, emergencyContactNumber,
@@ -67,9 +71,13 @@ exports.createStaff = async (req, res) => {
 
 // @desc    Update a staff member
 // @route   PUT /api/staff/:id
-// @access  Private (Gym Owner)
+// @access  Private (Gym Owner ONLY - Admin restricted)
 exports.updateStaff = async (req, res) => {
     try {
+        if (req.user.role !== 'GYM_OWNER') {
+            return res.status(403).json({ message: 'Access denied. Only the Gym Owner can update staff members.' });
+        }
+
         const { 
             name, email, phone, role, password,
             gender, dob, address, emergencyContactName, emergencyContactNumber,
@@ -123,9 +131,13 @@ exports.updateStaff = async (req, res) => {
 
 // @desc    Delete a staff member
 // @route   DELETE /api/staff/:id
-// @access  Private (Gym Owner)
+// @access  Private (Gym Owner ONLY - Admin restricted)
 exports.deleteStaff = async (req, res) => {
     try {
+        if (req.user.role !== 'GYM_OWNER') {
+            return res.status(403).json({ message: 'Access denied. Only the Gym Owner can delete staff members.' });
+        }
+
         const staff = await User.findOne({ _id: req.params.id, gymId: req.user.gymId });
         if (!staff) {
             return res.status(404).json({ message: 'Staff member not found' });

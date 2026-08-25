@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import SummaryCards from '../../../components/page/SummaryCards';
 import DataTable from '../../../components/page/DataTable';
 import EmptyState from '../../../components/page/EmptyState';
-import { FiUsers, FiCheckCircle, FiClock, FiActivity, FiEye, FiX, FiCalendar } from 'react-icons/fi';
+import { FiUsers, FiCheckCircle, FiClock, FiActivity, FiEye, FiX, FiCalendar, FiDownload } from 'react-icons/fi';
 import apiClient from '../../../api/apiClient';
 
 export default function StaffHoursReport({ 
@@ -168,6 +168,39 @@ export default function StaffHoursReport({
         };
     }) : [];
 
+    const exportStaffLogCSV = () => {
+        if (!selectedStaff || !modalDailyLogs.length) return;
+
+        const staffName = selectedStaff.user?.name || selectedStaff.name || 'Staff Member';
+        const role = selectedStaff.user?.role || selectedStaff.role || 'Staff';
+        const staffId = selectedStaff.staffId || selectedStaff.user?.staffId || selectedStaff.employeeId || 'STF-001';
+
+        const csvData = modalDailyLogs.map(log => ({
+            'Staff ID': staffId,
+            'Staff Name': staffName,
+            'Role': role,
+            'Attendance Date': log.date,
+            'Daily Check In': log.checkIn,
+            'Daily Check Out': log.checkOut,
+            'Working Hours': log.workingHours,
+            'Overtime': log.overtime,
+            'Attendance Status': log.status
+        }));
+
+        const headers = Object.keys(csvData[0]).join(',');
+        const rows = csvData.map(row => Object.values(row).map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
+        const csvContent = "\uFEFF" + [headers, ...rows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `${staffName.replace(/\s+/g, '_')}_Daily_Attendance_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
     return (
         <div className="space-y-4 w-full m-0 p-0">
             {/* 4 App Theme Summary Cards */}
@@ -191,29 +224,29 @@ export default function StaffHoursReport({
 
             {/* View Attendance Full Day Table Modal with Date Picker */}
             {selectedStaff && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col relative animate-in fade-in zoom-in-95 overflow-hidden">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col relative overflow-hidden">
                         
-                        {/* Modal Header */}
-                        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                        {/* Dark Premium Header */}
+                        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-base border border-emerald-200">
-                                    <FiCheckCircle size={20} />
+                                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black text-lg shadow-inner shrink-0">
+                                    {(selectedStaff.user?.name || selectedStaff.name || 'S').charAt(0).toUpperCase()}
                                 </div>
                                 <div>
-                                    <h3 className="text-base font-extrabold text-slate-900">
+                                    <h3 className="text-lg font-extrabold text-white">
                                         Full Day Attendance Log — {selectedStaff.user?.name || selectedStaff.name || 'Staff Member'}
                                     </h3>
-                                    <p className="text-xs text-slate-500 font-medium">
-                                        Role: <span className="font-semibold text-slate-700">{selectedStaff.user?.role || selectedStaff.role || 'Staff'}</span> • ID: <span className="font-mono text-indigo-600 font-bold">{selectedStaff.staffId || 'STF-001'}</span>
+                                    <p className="text-xs text-slate-300 font-medium mt-0.5">
+                                        Role: {selectedStaff.user?.role || selectedStaff.role || 'Staff'} • ID: {selectedStaff.staffId || 'STF-001'}
                                     </p>
                                 </div>
                             </div>
                             <button 
                                 onClick={() => { setSelectedStaff(null); setModalStartDate(''); setModalEndDate(''); }}
-                                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
                             >
-                                <FiX className="text-xl" />
+                                <FiX size={20} />
                             </button>
                         </div>
 
@@ -307,12 +340,20 @@ export default function StaffHoursReport({
                             <span className="text-xs text-slate-500 font-medium">
                                 Showing <span className="font-bold text-slate-800">{modalDailyLogs.length} Log Entries</span>
                             </span>
-                            <button 
-                                onClick={() => { setSelectedStaff(null); setModalStartDate(''); setModalEndDate(''); }}
-                                className="px-5 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-xl transition-colors shadow-sm"
-                            >
-                                Close Log
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={exportStaffLogCSV}
+                                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors shadow-sm"
+                                >
+                                    <FiDownload className="text-sm" /> Export Log CSV
+                                </button>
+                                <button 
+                                    onClick={() => { setSelectedStaff(null); setModalStartDate(''); setModalEndDate(''); }}
+                                    className="px-5 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-xl transition-colors shadow-sm"
+                                >
+                                    Close Log
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

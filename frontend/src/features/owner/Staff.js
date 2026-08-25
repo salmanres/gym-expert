@@ -7,7 +7,7 @@ import ConfirmModal from '../../components/modal/ConfirmModal';
 import EmptyState from '../../components/page/EmptyState';
 import Loader from '../../components/page/Loader';
 import FilterBar from '../../components/page/FilterBar';
-import { FiUsers, FiEdit2, FiTrash2, FiPhone, FiMail } from 'react-icons/fi';
+import { FiUsers, FiEdit2, FiTrash2, FiPhone, FiMail, FiEye, FiLock } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 
@@ -18,6 +18,11 @@ export default function Staff() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('All');
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDestructive: false });
+
+    // Check Current User Role
+    const userStr = localStorage.getItem('user');
+    const currentUser = userStr ? JSON.parse(userStr) : null;
+    const isOwner = currentUser?.role === 'GYM_OWNER';
 
     const fetchStaff = async () => {
         try {
@@ -35,6 +40,11 @@ export default function Staff() {
     }, []);
 
     const handleDelete = async (id) => {
+        if (!isOwner) {
+            toast.error("Only Gym Owner can delete staff members.");
+            return;
+        }
+
         setConfirmModal({
             isOpen: true,
             title: 'Delete Staff Member',
@@ -46,13 +56,17 @@ export default function Staff() {
                     toast.success("Staff member deleted successfully");
                     setStaffList(staffList.filter(s => s._id !== id));
                 } catch (error) {
-                    toast.error("Failed to delete staff member");
+                    toast.error(error.response?.data?.message || "Failed to delete staff member");
                 }
             }
         });
     };
 
     const handleEdit = (staff) => {
+        if (!isOwner) {
+            toast.error("Only Gym Owner can edit staff members.");
+            return;
+        }
         navigate(`/dashboard/owner/staff/edit/${staff._id}`, { state: { staff } });
     };
 
@@ -67,6 +81,7 @@ export default function Staff() {
         { label: 'Name' },
         { label: 'Contact Info' },
         { label: 'Role' },
+        { label: 'Wallet (Rewards)' },
         { label: 'Status' },
         { label: 'Actions', className: 'text-center' }
     ];
@@ -121,18 +136,31 @@ export default function Staff() {
                 </span>
             </td>
             <td className="py-3 px-4">
+                <div className="flex items-center gap-1.5 font-black text-slate-800">
+                    <span className="text-emerald-500 font-bold">₹</span>
+                    {staff.walletBalance || 0}
+                </div>
+            </td>
+            <td className="py-3 px-4">
                 <span className={`inline-flex px-2 py-1 rounded text-xs font-bold uppercase tracking-wide border ${staff.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
                     {staff.status || 'Active'}
                 </span>
             </td>
             <td className="py-3 px-4">
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button onClick={() => handleEdit(staff)} className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Edit Record">
-                        <FiEdit2 className="text-sm" />
+                    <button onClick={() => navigate(`/dashboard/owner/staff/view/${staff._id}`, { state: { staff } })} className="w-8 h-8 rounded bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="View Profile">
+                        <FiEye className="text-sm" />
                     </button>
-                    <button onClick={() => handleDelete(staff._id)} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Delete Record">
-                        <FiTrash2 className="text-sm" />
-                    </button>
+                    {isOwner && (
+                        <>
+                            <button onClick={() => handleEdit(staff)} className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Edit Record">
+                                <FiEdit2 className="text-sm" />
+                            </button>
+                            <button onClick={() => handleDelete(staff._id)} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Delete Record">
+                                <FiTrash2 className="text-sm" />
+                            </button>
+                        </>
+                    )}
                 </div>
             </td>
         </tr>
@@ -145,9 +173,16 @@ export default function Staff() {
             <PageHeader 
                 title="Staff Management" 
                 subtitle="Manage trainers, admins, and other staff members"
-                onAdd={() => navigate('/dashboard/owner/staff/add')}
-                addLabel="Add Staff"
+                onAdd={isOwner ? () => navigate('/dashboard/owner/staff/add') : null}
+                addLabel={isOwner ? "Add Staff" : null}
             />
+
+            {!isOwner && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold flex items-center gap-2">
+                    <FiLock className="text-amber-600 text-sm shrink-0" />
+                    <span>Admin Mode: You have full access to view and manage leads, members, memberships, and reports. Staff creation & editing is reserved for Gym Owner.</span>
+                </div>
+            )}
 
             <FilterBar 
                 searchTerm={searchTerm} 
@@ -180,8 +215,8 @@ export default function Staff() {
                         icon={<FiUsers size={48} />}
                         title={searchTerm ? "No staff found" : "No staff yet"}
                         description={searchTerm ? `No staff match "${searchTerm}"` : "Get started by adding your first trainer or admin."}
-                        actionLabel={!searchTerm ? "Add Staff" : null}
-                        onAction={!searchTerm ? () => navigate('/dashboard/owner/staff/add') : null}
+                        actionLabel={!searchTerm && isOwner ? "Add Staff" : null}
+                        onAction={!searchTerm && isOwner ? () => navigate('/dashboard/owner/staff/add') : null}
                     />
                 </div>
             )}

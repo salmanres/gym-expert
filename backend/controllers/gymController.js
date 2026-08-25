@@ -57,7 +57,10 @@ exports.updateMyGym = async (req, res) => {
             refereeBonusDays,
             refereeDiscountPercent,
             minPlanDurationDays,
-            couponOffers
+            couponOffers,
+            weeklyOff,
+            workingHours,
+            holidays
         } = req.body;
         
         const gym = await Gym.findById(req.user.gymId);
@@ -81,6 +84,9 @@ exports.updateMyGym = async (req, res) => {
         if (minPlanDurationDays !== undefined) gym.minPlanDurationDays = Number(minPlanDurationDays);
 
         if (couponOffers !== undefined) gym.couponOffers = couponOffers;
+        if (weeklyOff !== undefined) gym.weeklyOff = weeklyOff;
+        if (workingHours !== undefined) gym.workingHours = workingHours;
+        if (holidays !== undefined) gym.holidays = holidays;
 
         await gym.save();
         res.json(gym);

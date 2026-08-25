@@ -15,6 +15,7 @@ import Leads from './features/owner/Leads';
 import LeadForm from './features/owner/LeadForm';
 import Members from './features/owner/Members';
 import MemberForm from './features/owner/MemberForm';
+import MemberProfilePage from './features/owner/MemberProfilePage';
 import MembershipList from './features/owner/Membership';
 import MembershipForm from './features/owner/MembershipForm';
 import AssignMembershipForm from './features/owner/AssignMembershipForm';
@@ -24,6 +25,7 @@ import FeeReceipt from './features/owner/FeeReceipt';
 import GymSettings from './features/owner/GymSettings';
 import Staff from './features/owner/Staff';
 import StaffForm from './features/owner/StaffForm';
+import StaffProfilePage from './features/owner/StaffProfilePage';
 import AttendanceDashboard from './features/owner/AttendanceDashboard';
 import Reports from './features/owner/Reports';
 import GymQRCode from './features/owner/GymQRCode';
@@ -61,6 +63,7 @@ root.render(
             <Route path="owner/members" element={<Members />} />
             <Route path="owner/members/add" element={<MemberForm />} />
             <Route path="owner/members/edit/:id" element={<MemberForm />} />
+            <Route path="owner/members/view/:id" element={<MemberProfilePage />} />
             <Route path="owner/membership" element={<MembershipList />} />
             <Route path="owner/membership/add" element={<MembershipForm />} />
             <Route path="owner/membership/edit/:id" element={<MembershipForm />} />
@@ -75,6 +78,7 @@ root.render(
             <Route path="owner/staff" element={<Staff />} />
             <Route path="owner/staff/add" element={<StaffForm />} />
             <Route path="owner/staff/edit/:id" element={<StaffForm />} />
+            <Route path="owner/staff/view/:id" element={<StaffProfilePage />} />
             <Route path="owner/branches" element={<div className="p-8 text-2xl font-bold text-slate-800">My Branches (Coming Soon)</div>} />
         </Route>
       </Routes>

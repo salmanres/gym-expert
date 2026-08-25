@@ -15,40 +15,50 @@ export default function ConfirmModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
-            <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 transform transition-all scale-100 opacity-100">
-                <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-slate-100">
+                
+                {/* Dark Header */}
+                <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <div className={`p-2.5 rounded-full ${isDestructive ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'}`}>
-                            <FiAlertCircle size={24} />
+                        <div className={`w-10 h-10 rounded-xl font-black text-lg flex items-center justify-center shadow-inner shrink-0 ${
+                            isDestructive ? 'bg-rose-500 text-white' : 'bg-amber-500 text-white'
+                        }`}>
+                            <FiAlertCircle className="text-xl" />
                         </div>
-                        <h3 className="text-lg font-bold text-slate-800">{title}</h3>
+                        <div>
+                            <h3 className="font-extrabold text-lg text-white">{title}</h3>
+                            <p className="text-xs text-slate-300 font-medium mt-0.5">Confirmation required</p>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+                    <button onClick={onClose} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors">
                         <FiX size={20} />
                     </button>
                 </div>
                 
-                <p className="text-slate-600 text-sm mb-6 ml-14">
-                    {message}
-                </p>
+                {/* Body */}
+                <div className="p-6 bg-slate-50/50 space-y-6">
+                    <p className="text-slate-700 text-sm font-medium leading-relaxed bg-white p-4 rounded-xl border border-slate-200">
+                        {message}
+                    </p>
 
-                <div className="flex justify-end gap-3 mt-8">
-                    <Button variant="secondary" onClick={onClose} className="w-auto">
-                        {cancelText}
-                    </Button>
-                    <Button 
-                        variant={isDestructive ? "danger" : "primary"} 
-                        onClick={() => {
-                            onConfirm();
-                            onClose();
-                        }}
-                        className="w-auto"
-                    >
-                        {confirmText}
-                    </Button>
+                    <div className="flex justify-end gap-3">
+                        <Button variant="secondary" onClick={onClose} className="w-auto px-4 py-2 text-xs">
+                            {cancelText}
+                        </Button>
+                        <Button 
+                            variant={isDestructive ? "danger" : "primary"} 
+                            onClick={() => {
+                                onConfirm();
+                                onClose();
+                            }}
+                            className="w-auto px-5 py-2 text-xs font-bold"
+                        >
+                            {confirmText}
+                        </Button>
+                    </div>
                 </div>
+
             </div>
         </div>
     );

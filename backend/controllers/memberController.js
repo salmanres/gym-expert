@@ -402,10 +402,50 @@ const updateMember = async (req, res) => {
                 if (updateData.paidUntilDate) {
                     activeMembership.paidUntilDate = updateData.paidUntilDate;
                 }
+                if (updateData.planStartDate) {
+                    activeMembership.startDate = updateData.planStartDate;
+                }
+                if (updateData.planEndDate) {
+                    activeMembership.endDate = updateData.planEndDate;
+                }
                 
                 const finalPrice = activeMembership.finalPrice || 0;
                 const paidAmt = activeMembership.paidAmount || 0;
-                activeMembership.balanceAmount = Math.max(0, finalPrice - paidAmt);
+                
+                let paymentStatus = "Pending";
+                if (paidAmt >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
+                else if (paidAmt > 0) paymentStatus = "Partial";
+                if (finalPrice === 0) paymentStatus = "Paid";
+
+                activeMembership.paymentStatus = paymentStatus;
+
+                if (paymentStatus === 'Paid') {
+                    activeMembership.paidUntilDate = activeMembership.endDate;
+                    activeMembership.balanceAmount = 0;
+                } else if (paymentStatus === 'Partial' && finalPrice > 0 && !updateData.paidUntilDate) {
+                    const startMs = new Date(activeMembership.startDate).getTime();
+                    const endMs = new Date(activeMembership.endDate).getTime();
+                    const totalMs = endMs - startMs;
+                    const totalDays = Math.max(1, Math.round(totalMs / (1000 * 60 * 60 * 24)));
+                    
+                    const perDayCost = finalPrice / totalDays;
+                    const exactDays = paidAmt / perDayCost;
+                    const floorDays = Math.floor(exactDays);
+                    
+                    const costForFloorDays = Number((floorDays * perDayCost).toFixed(2));
+                    const extraAmountToWallet = Number((paidAmt - costForFloorDays).toFixed(2));
+                    
+                    activeMembership.paidAmount = costForFloorDays;
+                    activeMembership.balanceAmount = Math.max(0, finalPrice - costForFloorDays);
+                    activeMembership.paidUntilDate = new Date(startMs + (floorDays * 24 * 60 * 60 * 1000));
+                    
+                    if (extraAmountToWallet > 0) {
+                        updatedMember.walletBalance = (updatedMember.walletBalance || 0) + extraAmountToWallet;
+                        await updatedMember.save();
+                    }
+                } else {
+                    activeMembership.balanceAmount = Math.max(0, finalPrice - paidAmt);
+                }
                 
                 await activeMembership.save();
             }

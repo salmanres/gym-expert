@@ -138,21 +138,22 @@ export default function LeadForm() {
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
+        let finalValue = value;
         
         if (name === 'selectedOffer') {
-            if (value === 'Custom' || value === '') {
+            if (finalValue === 'Custom' || finalValue === '') {
                 setFormData({
                     ...formData,
-                    selectedOffer: value,
+                    selectedOffer: finalValue,
                     offerDetails: '',
                     offerAmount: ''
                 });
             } else {
-                const selectedOffer = gymSettings?.couponOffers?.find(o => o._id === value);
+                const selectedOffer = gymSettings?.couponOffers?.find(o => o._id === finalValue);
                 if (selectedOffer) {
                     setFormData({
                         ...formData,
-                        selectedOffer: value,
+                        selectedOffer: finalValue,
                         offerDetails: selectedOffer.title,
                         offerAmount: selectedOffer.discountType === 'Flat' ? selectedOffer.discountValue : '' 
                     });
@@ -161,9 +162,13 @@ export default function LeadForm() {
             return;
         }
 
+        if (['contactNumber', 'altContact', 'emergencyContactNumber'].includes(name)) {
+            finalValue = finalValue.replace(/\D/g, '').slice(0, 10);
+        }
+
         setFormData({ 
             ...formData, 
-            [name]: type === 'checkbox' ? checked : value 
+            [name]: type === 'checkbox' ? checked : finalValue 
         });
         // Clear error when user types
         if (errors[name]) {
@@ -205,7 +210,7 @@ export default function LeadForm() {
         let newErrors = {};
 
         // Validate mandatory text fields to prevent empty spaces
-        const requiredText = ['firstName', 'dob', 'contactNumber'];
+        const requiredText = ['firstName', 'contactNumber'];
         for (let field of requiredText) {
             if (!formData[field] || String(formData[field]).trim() === '') {
                 newErrors[field] = 'This field is required';
@@ -323,7 +328,7 @@ export default function LeadForm() {
                             <Input label="First Name" name="firstName" value={formData.firstName || ''} onChange={handleChange} required placeholder="First Name" error={errors.firstName} />
                             <Input label="Last Name" name="lastName" value={formData.lastName || ''} onChange={handleChange} placeholder="Last Name" error={errors.lastName} />
                             <Select label="Gender" name="gender" value={formData.gender || ''} onChange={handleChange} options={['Male', 'Female', 'Other']} error={errors.gender} />
-                            <Input type="date" label="Date of Birth" name="dob" value={formData.dob || ''} onChange={handleChange} required error={errors.dob} />
+                            <Input type="date" label="Date of Birth" name="dob" value={formData.dob || ''} onChange={handleChange} error={errors.dob} />
                             <Input type="tel" label="Phone Number" name="contactNumber" value={formData.contactNumber || ''} onChange={handleChange} required placeholder="10-digit mobile" pattern="[6-9][0-9]{9}" maxLength={10} title="Please enter a valid 10-digit Indian mobile number starting with 6-9" error={errors.contactNumber} />
                             <Input type="tel" label="Alt. Phone" name="altContact" value={formData.altContact || ''} onChange={handleChange} placeholder="Secondary Phone" pattern="[6-9][0-9]{9}" maxLength={10} title="Please enter a valid 10-digit Indian mobile number starting with 6-9" error={errors.altContact} />
                             <Input type="email" label="Email Address" name="email" value={formData.email || ''} onChange={handleChange} placeholder="email@example.com" error={errors.email} />
@@ -345,7 +350,7 @@ export default function LeadForm() {
                                 <option value="Yoga">Yoga</option>
                                 <option value="Crossfit">Crossfit</option>
                             </Select>
-                            {['Trial', 'Negotiation', 'Converted'].includes(formData.status) && (
+                            {['Trial', 'Converted'].includes(formData.status) && (
                                 <>
                                     <Input type="date" label="Trial Start Date" name="trialDate" value={formData.trialDate || ''} onChange={handleChange} error={errors.trialDate} inputRef={trialDateRef} />
                                     <Input type="date" label="Trial End Date" name="trialEndDate" value={formData.trialEndDate || ''} onChange={handleChange} min={formData.trialDate || ''} error={errors.trialEndDate} />
@@ -355,12 +360,12 @@ export default function LeadForm() {
                         </FormSection>
 
                         <FormSection title="Feedback & Action" icon={<FiMessageSquare />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Lead', 'Contacted', 'Trial', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
+                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Contacted', 'Trial', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
                             </Select>
                             
-                            {['Contacted', 'Trial', 'Negotiation', 'Lead'].includes(formData.status) && (
+                            {['Pending', 'Contacted', 'Trial', 'Negotiation'].includes(formData.status) && (
                                 <>
-                                    <Input type="date" label="Follow-up Date" name="followUpDate" value={formData.followUpDate || ''} onChange={handleChange} required error={errors.followUpDate} inputRef={followUpDateRef} />
+                                    <Input type="date" label="Follow-up Date" name="followUpDate" value={formData.followUpDate || ''} onChange={handleChange} error={errors.followUpDate} inputRef={followUpDateRef} />
                                     <Input type="time" label="Follow-up Time" name="followUpTime" value={formData.followUpTime || ''} onChange={handleChange} error={errors.followUpTime} />
                                 </>
                             )}
@@ -388,6 +393,8 @@ export default function LeadForm() {
                                         onChange={handleChange} 
                                         placeholder="e.g. 5000" 
                                         error={errors.offerAmount}
+                                        disabled={formData.selectedOffer !== 'Custom'}
+                                        className={formData.selectedOffer !== 'Custom' ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}
                                     />
                                     <Input 
                                         label="Offer Details" 
@@ -397,6 +404,8 @@ export default function LeadForm() {
                                         placeholder="e.g. 3 Months + 1 Month Free" 
                                         error={errors.offerDetails}
                                         inputRef={negotiationRef}
+                                        disabled={formData.selectedOffer !== 'Custom'}
+                                        className={formData.selectedOffer !== 'Custom' ? 'opacity-50 cursor-not-allowed bg-slate-50' : ''}
                                     />
                                 </>
                             )}

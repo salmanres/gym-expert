@@ -206,16 +206,32 @@ export default function PaymentForm() {
             const plan = memberships.find(m => m._id === formData.membershipPlan) || selectedMember?.membershipPlan;
             
             let updatedPaidUntil = selectedMember?.paidUntilDate;
+            let updatedStartDate = selectedMember?.planStartDate;
+            let updatedEndDate = selectedMember?.activeMembership?.endDate;
 
             let totalAmountPaidCalculated = (selectedMember?.amountPaid || 0) + parseFloat(formData.newPaymentAmount || 0) + parseFloat(formData.walletUsed || 0);
             
-            // Recalculate paid until based on new total amount
+            // Recalculate start date if this is the FIRST payment
+            const isFirstPayment = (selectedMember?.amountPaid || 0) === 0 && totalAmountPaidCalculated > 0;
+
+            // Recalculate paid until and dates based on new total amount
             if (plan && plan.price > 0) {
                 let totalDurationDays = 0;
                 if (plan.durationUnit === 'Days') totalDurationDays = plan.duration;
                 else if (plan.durationUnit === 'Weeks') totalDurationDays = plan.duration * 7;
                 else if (plan.durationUnit === 'Months') totalDurationDays = plan.duration * 30;
                 else if (plan.durationUnit === 'Years') totalDurationDays = plan.duration * 365;
+
+                if (isFirstPayment) {
+                    const today = new Date();
+                    updatedStartDate = today.toISOString().split('T')[0];
+                    
+                    if (totalDurationDays > 0) {
+                        const endDt = new Date(today);
+                        endDt.setDate(endDt.getDate() + totalDurationDays);
+                        updatedEndDate = endDt.toISOString().split('T')[0];
+                    }
+                }
 
                 if (totalDurationDays > 0) {
                     if (totalAmountPaidCalculated <= 0) {
@@ -224,7 +240,7 @@ export default function PaymentForm() {
                         const pricePerDay = plan.price / totalDurationDays;
                         const daysPaidFor = Math.floor(totalAmountPaidCalculated / pricePerDay);
                         
-                        let paidUntil = new Date(selectedMember.planStartDate || Date.now());
+                        let paidUntil = new Date(updatedStartDate || Date.now());
                         paidUntil.setDate(paidUntil.getDate() + daysPaidFor);
                         updatedPaidUntil = paidUntil.toISOString().split('T')[0];
                     }
@@ -243,6 +259,8 @@ export default function PaymentForm() {
                 transactionId: formData.transactionId,
                 paymentDate: new Date().toISOString(),
                 paidUntilDate: updatedPaidUntil,
+                planStartDate: updatedStartDate,
+                planEndDate: updatedEndDate,
                 recordTransaction: true,
                 newPaymentAmount: newPaymentAmountValue > 0 ? newPaymentAmountValue : 0,
                 walletUsed: formData.walletUsed

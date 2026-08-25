@@ -2,6 +2,7 @@ const Member = require("../models/Member");
 const MembershipPlan = require("../models/MembershipPlan");
 const MemberMembership = require("../models/MemberMembership");
 const Transaction = require("../models/Transaction");
+const { notifyGym } = require("../socket");
 
 // @desc    Assign Membership to Member
 // @route   POST /api/member-memberships
@@ -80,14 +81,27 @@ exports.assignMembership = async (req, res) => {
         if (finalPrice === 0) paymentStatus = "Paid";
 
         let calculatedPaidUntilDate = null;
+        let extraAmountToWallet = 0;
+        let actualAllocatedPaidAmount = totalPaid;
+
         if (paymentStatus === 'Paid') {
             calculatedPaidUntilDate = end;
         } else if (paidUntilDate) {
             calculatedPaidUntilDate = new Date(paidUntilDate);
         } else if (paymentStatus === 'Partial' && finalPrice > 0) {
             const totalMs = end.getTime() - start.getTime();
-            const paidRatio = totalPaid / finalPrice;
-            calculatedPaidUntilDate = new Date(start.getTime() + (totalMs * paidRatio));
+            const totalDays = Math.max(1, Math.round(totalMs / (1000 * 60 * 60 * 24)));
+            
+            const perDayCost = finalPrice / totalDays;
+            const exactDays = totalPaid / perDayCost;
+            const floorDays = Math.floor(exactDays);
+            
+            const costForFloorDays = Number((floorDays * perDayCost).toFixed(2));
+            
+            extraAmountToWallet = Number((totalPaid - costForFloorDays).toFixed(2));
+            actualAllocatedPaidAmount = costForFloorDays;
+            
+            calculatedPaidUntilDate = new Date(start.getTime() + (floorDays * 24 * 60 * 60 * 1000));
         } else if (paymentStatus === 'Pending') {
             calculatedPaidUntilDate = new Date(start.getTime()); // Valid for 0 days technically
         }
@@ -113,8 +127,8 @@ exports.assignMembership = async (req, res) => {
             discount: discountAmount,
             finalPrice: finalPrice,
 
-            paidAmount: totalPaid,
-            balanceAmount: Math.max(0, finalPrice - totalPaid),
+            paidAmount: actualAllocatedPaidAmount,
+            balanceAmount: Math.max(0, finalPrice - actualAllocatedPaidAmount),
 
             paidUntilDate: calculatedPaidUntilDate,
 
@@ -130,8 +144,9 @@ exports.assignMembership = async (req, res) => {
             }] : []
         });
 
-        if (walletVal > 0) {
-            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal);
+        if (walletVal > 0 || extraAmountToWallet > 0) {
+            // Deduct what they used, ADD what was leftover from fraction
+            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal) + extraAmountToWallet;
             await member.save();
         }
 
@@ -296,24 +311,45 @@ exports.addPayment = async (req, res) => {
 
         membership.paymentStatus = paymentStatus;
 
+        let calculatedPaidUntilDate = null;
+        let extraAmountToWallet = 0;
+        let actualAllocatedPaidAmount = totalPaid; // we add this to existing paidAmount
+
         if (paymentStatus === 'Paid') {
-            membership.paidUntilDate = membership.endDate;
+            calculatedPaidUntilDate = membership.endDate;
         } else if (paidUntilDate) {
-            membership.paidUntilDate = new Date(paidUntilDate);
+            calculatedPaidUntilDate = new Date(paidUntilDate);
         } else if (paymentStatus === 'Partial' && membership.finalPrice > 0) {
             const startMs = new Date(membership.startDate).getTime();
             const endMs = new Date(membership.endDate).getTime();
             const totalMs = endMs - startMs;
-            const paidRatio = membership.paidAmount / membership.finalPrice;
-            membership.paidUntilDate = new Date(startMs + (totalMs * paidRatio));
+            const totalDays = Math.max(1, Math.round(totalMs / (1000 * 60 * 60 * 24)));
+            
+            const perDayCost = membership.finalPrice / totalDays;
+            const totalCumulativePaid = membership.paidAmount; // includes totalPaid added on line 302
+            
+            const exactDays = totalCumulativePaid / perDayCost;
+            const floorDays = Math.floor(exactDays);
+            
+            const costForFloorDays = Number((floorDays * perDayCost).toFixed(2));
+            
+            extraAmountToWallet = Number((totalCumulativePaid - costForFloorDays).toFixed(2));
+            
+            // Override membership paidAmount to only include what was actually allocated for whole days
+            membership.paidAmount = costForFloorDays;
+            membership.balanceAmount = Math.max(0, membership.finalPrice - membership.paidAmount);
+            
+            calculatedPaidUntilDate = new Date(startMs + (floorDays * 24 * 60 * 60 * 1000));
         } else if (paymentStatus === 'Pending') {
-            membership.paidUntilDate = new Date(membership.startDate);
+            calculatedPaidUntilDate = new Date(membership.startDate);
         }
+
+        membership.paidUntilDate = calculatedPaidUntilDate;
 
         await membership.save();
 
-        if (walletVal > 0) {
-            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal);
+        if (walletVal > 0 || extraAmountToWallet > 0) {
+            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal) + extraAmountToWallet;
             await member.save();
         }
 
@@ -383,6 +419,49 @@ exports.addBonusDays = async (req, res) => {
             message: `Successfully added ${days} bonus days.`,
             membership
         });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+exports.getLatestMemberships = async (req, res) => {
+    try {
+        const memberships = await MemberMembership.find({
+            gymId: req.user.gymId
+        })
+            .populate("memberId")
+            .populate("membershipPlanId")
+            .sort({ createdAt: -1 });
+
+        const latestMap = new Map();
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        memberships.forEach(m => {
+            const memberIdStr = m.memberId?._id?.toString() || m.memberId?.toString();
+            if (memberIdStr && !latestMap.has(memberIdStr)) {
+                const endDate = m.paidUntilDate ? new Date(m.paidUntilDate) : new Date(m.endDate);
+                endDate.setHours(23, 59, 59, 999);
+
+                let computedStatus = m.membershipStatus;
+                if (computedStatus !== 'Frozen' && computedStatus !== 'Cancelled') {
+                    if (endDate < now) {
+                        computedStatus = 'Expired';
+                    } else if (new Date(m.startDate) > now) {
+                        computedStatus = 'Scheduled';
+                    } else {
+                        computedStatus = 'Active';
+                    }
+                }
+
+                const mObj = m.toObject();
+                mObj.computedStatus = computedStatus;
+                latestMap.set(memberIdStr, mObj);
+            }
+        });
+
+        res.json(Array.from(latestMap.values()));
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Server Error" });

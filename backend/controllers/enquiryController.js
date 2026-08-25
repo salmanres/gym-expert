@@ -1,4 +1,5 @@
 const Enquiry = require('../models/Enquiry');
+const { notifyGym } = require('../socket');
 
 exports.createEnquiry = async (req, res) => {
     try {
@@ -21,6 +22,16 @@ exports.createEnquiry = async (req, res) => {
         });
 
         await enquiry.save();
+
+        // Broadcast real-time Socket notification
+        notifyGym(gymId, {
+            title: enquiry.status === 'Trial' ? 'New Trial Registered' : 'New Lead Enquiry Added',
+            description: `${enquiry.firstName} ${enquiry.lastName || ''} — Status: ${enquiry.status || 'Pending'} (${enquiry.source || 'Walk-in'})`,
+            type: 'LEAD',
+            targetId: enquiry._id,
+            link: '/dashboard/owner/leads'
+        });
+
         res.status(201).json(enquiry);
     } catch (error) {
         console.error(error);
@@ -65,6 +76,16 @@ exports.updateEnquiry = async (req, res) => {
         if (!enquiry.inquiryFor) enquiry.inquiryFor = 'Gym';
 
         await enquiry.save();
+
+        // Broadcast real-time Socket notification
+        notifyGym(req.user.gymId, {
+            title: `Lead Updated: ${enquiry.firstName} ${enquiry.lastName || ''}`,
+            description: `Status: ${enquiry.status} • Follow-up: ${enquiry.followUpDate ? new Date(enquiry.followUpDate).toLocaleDateString() : 'N/A'}`,
+            type: 'LEAD',
+            targetId: enquiry._id,
+            link: '/dashboard/owner/leads'
+        });
+
         res.json(enquiry);
     } catch (error) {
         console.error(error);

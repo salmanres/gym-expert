@@ -1,7 +1,10 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const { initSocket } = require('./socket');
+
 const authRoutes = require('./routes/authRoutes');
 const gymRoutes = require('./routes/gymRoutes');
 const branchRoutes = require('./routes/branchRoutes');
@@ -12,9 +15,13 @@ const memberMembershipRoutes = require('./routes/memberMembershipRoutes');
 const staffRoutes = require('./routes/staffRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const trialAttendanceRoutes = require('./routes/trialAttendanceRoutes');
+const activityLogRoutes = require('./routes/activityLogRoutes');
 
 const app = express();
+const server = http.createServer(app);
 
+// Initialize Socket.io
+initSocket(server);
 
 // Middleware
 app.use(cors());
@@ -40,6 +47,7 @@ app.use('/api/member-memberships', memberMembershipRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/trial-attendance', trialAttendanceRoutes);
+app.use('/api/activity-logs', activityLogRoutes);
 
 // Basic Route for testing
 app.get('/', (req, res) => {
@@ -47,6 +55,6 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+server.listen(PORT, () => {
+    console.log(`Server & Socket.io running on port ${PORT}`);
 });

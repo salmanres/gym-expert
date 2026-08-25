@@ -16,7 +16,7 @@ import MemberAttendanceReport from './reports/MemberAttendanceReport';
 
 export default function Reports() {
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('Daily Collections');
+    const [activeTab, setActiveTab] = useState('Member Attendance');
     const [searchTerm, setSearchTerm] = useState('');
     
     // Rich Filter States
@@ -31,6 +31,7 @@ export default function Reports() {
     const [activePlans, setActivePlans] = useState([]);
     const [staffAttendance, setStaffAttendance] = useState([]);
     const [memberAttendance, setMemberAttendance] = useState([]);
+    const [gymSettings, setGymSettings] = useState(null);
 
     useEffect(() => {
         fetchReportData();
@@ -39,16 +40,66 @@ export default function Reports() {
     const fetchReportData = async () => {
         setLoading(true);
         try {
-            const [txRes, activeRes, staffRes, memberRes] = await Promise.all([
+            const todayStr = new Date().toISOString().split('T')[0];
+            const [txRes, activeRes, latestRes, staffRes, memberRes, attendanceRes, gymRes] = await Promise.all([
                 apiClient.get('/members/transactions/all').catch(() => ({ data: [] })),
                 apiClient.get('/member-memberships/active').catch(() => ({ data: [] })),
+                apiClient.get('/member-memberships/latest').catch(() => ({ data: [] })),
                 apiClient.get('/staff').catch(() => ({ data: [] })),
-                apiClient.get('/members').catch(() => ({ data: [] }))
+                apiClient.get('/members').catch(() => ({ data: [] })),
+                apiClient.get(`/attendance?date=${todayStr}`).catch(() => ({ data: [] })),
+                apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
             ]);
             setTransactions(txRes.data || []);
             setActivePlans(activeRes.data || []);
             setStaffAttendance(staffRes.data || []);
-            setMemberAttendance(memberRes.data || activeRes.data || []);
+            const membersData = memberRes.data || [];
+            const latestPlansData = latestRes.data || [];
+            const todaysAttendance = attendanceRes.data || [];
+            setGymSettings(gymRes.data || null);
+            
+            const latestPlansMap = new Map();
+            latestPlansData.forEach(plan => {
+                const memberIdStr = plan.memberId?._id?.toString() || plan.memberId?.toString();
+                if (memberIdStr) {
+                    latestPlansMap.set(memberIdStr, plan);
+                }
+            });
+
+            const todaysAttendanceMap = new Map();
+            todaysAttendance.forEach(att => {
+                const userIdStr = att.userId?._id?.toString() || att.userId?.toString();
+                if (userIdStr) {
+                    todaysAttendanceMap.set(userIdStr, att);
+                }
+            });
+
+            const mergedMemberAttendance = membersData.map(member => {
+                const latestPlan = latestPlansMap.get(member._id?.toString());
+                const todayAtt = todaysAttendanceMap.get(member._id?.toString());
+                
+                let updatedMember = { ...member };
+                
+                if (todayAtt) {
+                    updatedMember.attendanceStatus = todayAtt.status;
+                    updatedMember.attendance = { checkInTime: todayAtt.checkInTime, checkOutTime: todayAtt.checkOutTime };
+                }
+
+                if (latestPlan) {
+                    return {
+                        ...updatedMember,
+                        startDate: latestPlan.startDate,
+                        endDate: latestPlan.paidUntilDate || latestPlan.endDate,
+                        membershipStatus: latestPlan.computedStatus || latestPlan.membershipStatus,
+                        totalPresentDays: latestPlan.usedSessions || 0,
+                        planName: latestPlan.planName || latestPlan.membershipPlanId?.name,
+                        membershipPlanId: latestPlan.membershipPlanId
+                    };
+                }
+                return updatedMember;
+            });
+
+            setMemberAttendance(mergedMemberAttendance);
         } catch (err) {
             console.error("Failed to load report analytics", err);
         } finally {
@@ -551,6 +602,7 @@ export default function Reports() {
                         activePlans={activePlans}
                         filterStartDate={filterStartDate}
                         filterEndDate={filterEndDate}
+                        gymSettings={gymSettings}
                     />
                 )}
             </div>

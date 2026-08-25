@@ -83,7 +83,7 @@ export default function FollowUpCalendar({ leads, onSelectDate, selectedDate }) 
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-max">
             <div className="p-3 sm:p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
                 <div className="flex items-center gap-2">
                     <FiCalendar className="text-indigo-600" />
@@ -103,7 +103,7 @@ export default function FollowUpCalendar({ leads, onSelectDate, selectedDate }) 
             </div>
             
             <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
-                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day, idx) => (
                     <div key={day} className="py-2 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider border-r border-slate-100 last:border-r-0">
                         {day}
                     </div>

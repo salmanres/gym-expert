@@ -14,7 +14,7 @@ const enquirySchema = new mongoose.Schema({
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, trim: true },
     contactNumber: { type: String, required: true },
-    dob: { type: Date, required: true },
+    dob: { type: Date },
     altContact: { type: String },
     email: { type: String, trim: true },
     gender: { type: String, enum: ['Male', 'Female', 'Other'] },

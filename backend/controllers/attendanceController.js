@@ -6,6 +6,7 @@ const MemberDevice = require('../models/MemberDevice');
 const MemberMembership = require('../models/MemberMembership');
 const Enquiry = require('../models/Enquiry');
 const crypto = require('crypto');
+const { notifyGym } = require('../socket');
 
 // Helper to calculate distance using Haversine formula (returns distance in meters)
 const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -98,7 +99,7 @@ exports.markAttendance = async (req, res) => {
         }
 
         let activeMembership = null;
-        if (!isStaff && !isTrial) {
+        if (status !== 'Absent' && status !== 'Clear' && status !== null && !isStaff && !isTrial) {
             // Check if member has an active membership
             const currentDate = new Date();
             currentDate.setHours(0, 0, 0, 0);
@@ -186,6 +187,11 @@ exports.markAttendance = async (req, res) => {
         if (attendance) {
             // If the request specifically wants to update the status (Manual override)
             if (source === 'Manual' && status) {
+                if (status === 'Clear') {
+                    await attendance.deleteOne();
+                    return res.json({ message: 'Attendance cleared successfully', attendance: null });
+                }
+                
                 attendance.status = status;
                 if (status === 'Absent') {
                     attendance.checkInTime = null;
@@ -206,6 +212,9 @@ exports.markAttendance = async (req, res) => {
                 return res.status(400).json({ message: 'Attendance already completed for today' });
             }
         } else {
+            if (source === 'Manual' && status === 'Clear') {
+                return res.json({ message: 'Attendance already cleared', attendance: null });
+            }
             // Check in / Create new record
             attendance = await Attendance.create({
                 userId: targetUserId,
@@ -218,6 +227,18 @@ exports.markAttendance = async (req, res) => {
                 location: latitude ? { latitude, longitude } : undefined,
                 notes: notes,
                 markedBy: req.user._id
+            });
+
+            const titleRole = attendanceType === 'Trial' 
+                ? 'Trial' 
+                : (attendanceType === 'Staff' || targetUser?.role ? 'Staff' : 'Member');
+
+            notifyGym(gymId, {
+                title: `${titleRole} Checked In`,
+                description: `${targetUser.name || `${targetUser.firstName || ''} ${targetUser.lastName || ''}`.trim() || 'Person'} marked attendance via ${source || 'Manual'}`,
+                type: 'ATTENDANCE',
+                targetId: attendance._id,
+                link: '/dashboard/owner/attendance'
             });
             
             if (attendanceType === 'Member' && activeMembership) {

@@ -8,7 +8,7 @@ import DataTable from '../../components/page/DataTable';
 import ConfirmModal from '../../components/modal/ConfirmModal';
 import EmptyState from '../../components/page/EmptyState';
 import Loader from '../../components/page/Loader';
-import { FiUsers, FiPhone, FiMail, FiEdit2, FiTrash2, FiPlus, FiCreditCard, FiPauseCircle, FiPlayCircle } from 'react-icons/fi';
+import { FiUsers, FiPhone, FiMail, FiEdit2, FiTrash2, FiPlus, FiCreditCard, FiPauseCircle, FiPlayCircle, FiEye } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 
@@ -29,23 +29,46 @@ export default function Members() {
 
     const fetchMembers = async () => {
         try {
-            const [membersRes, activeMembershipsRes] = await Promise.all([
+            const [membersRes, latestMembershipsRes] = await Promise.all([
                 apiClient.get('/members'),
-                apiClient.get('/member-memberships/active')
+                apiClient.get('/member-memberships/latest')
             ]);
             
-            const activeMemberships = activeMembershipsRes.data;
+            const latestMemberships = latestMembershipsRes.data || [];
             const membersWithPlans = membersRes.data.map(member => {
-                // Find active membership for this member
-                const membership = activeMemberships.find(m => m.memberId?._id === member._id);
+                const membership = latestMemberships.find(m => (m.memberId?._id || m.memberId) === member._id);
+                let computedStatus = member.status || 'Inactive';
+
+                if (computedStatus !== 'Frozen') {
+                    if (!membership) {
+                        computedStatus = 'Inactive';
+                    } else {
+                        const today = new Date();
+                        today.setHours(0,0,0,0);
+                        
+                        const validityDate = membership.paidUntilDate ? new Date(membership.paidUntilDate) : new Date(membership.endDate);
+                        validityDate.setHours(23,59,59,999);
+                        
+                        const hasPaid = membership.paidAmount > 0;
+                        const isExpired = validityDate < today;
+
+                        if (!hasPaid || isExpired) {
+                            computedStatus = 'Inactive';
+                        } else {
+                            computedStatus = 'Active';
+                        }
+                    }
+                }
+
                 if (membership) {
-                    // Re-attach necessary plan fields so the UI continues working normally
-                    member.membershipPlan = membership.membershipPlanId;
+                    member.membershipPlan = membership.membershipPlanId || { name: membership.planName };
                     member.activeMembership = membership;
                     member.planEndDate = membership.endDate;
                     member.paymentStatus = membership.paymentStatus;
                     member.amountPaid = membership.paidAmount;
                 }
+                
+                member.status = computedStatus;
                 return member;
             });
 
@@ -209,33 +232,44 @@ export default function Members() {
             </td>
             <td className="py-3 px-4">
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                    {!member.membershipPlan ? (
-                        <button onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })} className="w-8 h-8 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Assign Plan">
-                            <FiPlus className="text-sm" />
+                    <button onClick={() => navigate(`/dashboard/owner/members/view/${member._id}`, { state: { member } })} className="w-8 h-8 rounded bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="View Profile">
+                        <FiEye className="text-sm" />
+                    </button>
+                    <button 
+                        onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: member } })} 
+                        className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${!member.membershipPlan || member.paymentStatus === 'Paid' ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'}`} 
+                        title={!member.membershipPlan ? 'No Active Plan' : member.paymentStatus === 'Paid' ? 'Fee Fully Paid' : 'Collect Fee'}
+                        disabled={!member.membershipPlan || member.paymentStatus === 'Paid'}
+                    >
+                        <FiCreditCard className="text-sm" />
+                    </button>
+                    
+                    <button 
+                        onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })} 
+                        className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${!member.membershipPlan ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white'}`}
+                        title={member.membershipPlan ? "Renew or Upgrade Plan" : "Assign Plan"}
+                    >
+                        <FiPlus className="text-sm" />
+                    </button>
+                    
+                    {member.status === 'Frozen' ? (
+                        <button 
+                            onClick={() => handleFreezeStatus(member, 'Active')} 
+                            className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${!member.membershipPlan ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'}`} 
+                            title={!member.membershipPlan ? "No Active Plan" : "Unfreeze Membership"}
+                            disabled={!member.membershipPlan}
+                        >
+                            <FiPlayCircle className="text-sm" />
                         </button>
                     ) : (
-                        <>
-                            <button 
-                                onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: member } })} 
-                                className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${member.paymentStatus === 'Paid' ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'}`} 
-                                title={member.paymentStatus === 'Paid' ? 'Fee Fully Paid' : 'Collect Fee'}
-                                disabled={member.paymentStatus === 'Paid'}
-                            >
-                                <FiCreditCard className="text-sm" />
-                            </button>
-                            <button onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })} className="w-8 h-8 rounded bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Renew or Upgrade Plan">
-                                <FiPlus className="text-sm" />
-                            </button>
-                            {member.status === 'Frozen' ? (
-                                <button onClick={() => handleFreezeStatus(member, 'Active')} className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Unfreeze Membership">
-                                    <FiPlayCircle className="text-sm" />
-                                </button>
-                            ) : (
-                                <button onClick={() => handleFreezeStatus(member, 'Frozen')} className="w-8 h-8 rounded bg-cyan-50 text-cyan-600 hover:bg-cyan-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Freeze Membership">
-                                    <FiPauseCircle className="text-sm" />
-                                </button>
-                            )}
-                        </>
+                        <button 
+                            onClick={() => handleFreezeStatus(member, 'Frozen')} 
+                            className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${!member.membershipPlan ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-600 hover:text-white'}`} 
+                            title={!member.membershipPlan ? "No Active Plan" : "Freeze Membership"}
+                            disabled={!member.membershipPlan}
+                        >
+                            <FiPauseCircle className="text-sm" />
+                        </button>
                     )}
                     <button onClick={() => handleEdit(member)} className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Edit Record">
                         <FiEdit2 className="text-sm" />

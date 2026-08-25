@@ -4,6 +4,7 @@ const router = express.Router();
 const {
     assignMembership,
     getActiveMemberships,
+    getLatestMemberships,
     getMemberMembershipHistory,
     updateAssignedMembership,
     addBonusDays,
@@ -18,6 +19,7 @@ router.post("/:id/payment", protect, addPayment);
 router.post("/:id/bonus", protect, addBonusDays);
 
 router.get("/active", protect, getActiveMemberships);
+router.get("/latest", protect, getLatestMemberships);
 
 router.get(
     "/member/:memberId",

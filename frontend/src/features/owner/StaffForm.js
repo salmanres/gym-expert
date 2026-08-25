@@ -33,6 +33,14 @@ export default function StaffForm() {
     });
 
     useEffect(() => {
+        const userStr = localStorage.getItem('user');
+        const currentUser = userStr ? JSON.parse(userStr) : null;
+        if (currentUser?.role !== 'GYM_OWNER') {
+            toast.error("Only Gym Owner can add or edit staff members.");
+            navigate('/dashboard/owner/staff');
+            return;
+        }
+
         if (isEdit && location.state?.staff) {
             const staff = location.state.staff;
             setFormData({

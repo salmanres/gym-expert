@@ -25,20 +25,20 @@ function Memberships() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [memRes, memberRes, activeMembershipsRes, gymRes] = await Promise.all([
+            const [memRes, memberRes, latestMembershipsRes, gymRes] = await Promise.all([
                 apiClient.get('/membership-plans'),
                 apiClient.get('/members'),
-                apiClient.get('/member-memberships/active'),
+                apiClient.get('/member-memberships/latest'),
                 apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
             ]);
             
             if (gymRes?.data) setGymSettings(gymRes.data);
 
-            const activeMemberships = activeMembershipsRes.data;
+            const latestMemberships = latestMembershipsRes.data || [];
             const membersWithPlans = memberRes.data.map(member => {
-                const membership = activeMemberships.find(m => m.memberId?._id === member._id);
+                const membership = latestMemberships.find(m => (m.memberId?._id || m.memberId) === member._id);
                 if (membership) {
-                    member.membershipPlan = membership.membershipPlanId;
+                    member.membershipPlan = membership.membershipPlanId || { name: membership.planName };
                     member.activeMembership = membership;
                     member.planStartDate = membership.startDate;
                     

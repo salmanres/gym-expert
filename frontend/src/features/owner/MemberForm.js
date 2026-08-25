@@ -181,6 +181,10 @@ export default function MemberForm() {
                 }
             }
         }
+
+        if (['contactNumber', 'altContact', 'emergencyContactNumber'].includes(name)) {
+            updates[name] = value.replace(/\D/g, '').slice(0, 10);
+        }
         
         setFormData(prev => ({ ...prev, ...updates }));
         if (errors[name]) setErrors({ ...errors, [name]: null });
@@ -259,6 +263,33 @@ export default function MemberForm() {
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                 <div className="w-full">
+                    {/* Read-Only Active Membership Info for Context */}
+                    {isEdit && location.state?.member?.activeMembership && (
+                        <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-sm font-black text-indigo-800 uppercase tracking-wider mb-1">Active Membership</h3>
+                                <p className="text-lg font-bold text-slate-800">{location.state.member.activeMembership.membershipPlanId?.name || 'Unknown Plan'}</p>
+                                <p className="text-xs font-medium text-slate-600 mt-0.5">
+                                    Valid till: <span className="font-bold text-indigo-700">{new Date(location.state.member.activeMembership.endDate).toLocaleDateString()}</span>
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <h3 className="text-sm font-black text-indigo-800 uppercase tracking-wider mb-1">Payment Status</h3>
+                                <span className={`inline-flex px-3 py-1 rounded text-xs font-bold uppercase tracking-wide border ${location.state.member.activeMembership.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200'}`}>
+                                    {location.state.member.activeMembership.paymentStatus}
+                                </span>
+                                {location.state.member.activeMembership.remainingBalance > 0 && (
+                                    <p className="text-xs font-bold text-rose-600 mt-1.5">Due: ₹{location.state.member.activeMembership.remainingBalance}</p>
+                                )}
+                            </div>
+                            <div className="w-full sm:w-auto">
+                                <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member: location.state.member } })} className="w-full sm:w-auto !bg-white border-indigo-200 text-indigo-700 hover:!bg-indigo-600 hover:text-white">
+                                    Manage Plan & Payment
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
                         <div className="w-24 h-24 shrink-0 rounded-full bg-slate-100 flex items-center justify-center border-2 border-dashed border-slate-300 text-slate-400 overflow-hidden relative group">
                             {formData.profilePhoto ? (
@@ -322,8 +353,9 @@ export default function MemberForm() {
                             <Input label="Last Name" name="lastName" value={formData.lastName || ''} onChange={handleChange} placeholder="Last Name" error={errors.lastName} />
                             <Select label="Gender" name="gender" value={formData.gender || ''} onChange={handleChange} required error={errors.gender} options={['Male', 'Female', 'Other']} />
                             <Input type="date" label="Date of Birth" name="dob" value={formData.dob || ''} onChange={handleChange} error={errors.dob} />
-                            <Input type="tel" label="Phone Number" name="contactNumber" value={formData.contactNumber || ''} onChange={handleChange} required placeholder="10-digit mobile" error={errors.contactNumber} />
-                            <Input type="tel" label="Alt. Phone" name="altContact" value={formData.altContact || ''} onChange={handleChange} placeholder="Secondary Phone" error={errors.altContact} />
+                            <Input type="date" label="Joining Date" name="joiningDate" value={formData.joiningDate || ''} onChange={handleChange} required error={errors.joiningDate} />
+                            <Input type="tel" label="Phone Number" name="contactNumber" value={formData.contactNumber || ''} onChange={handleChange} required placeholder="10-digit mobile" error={errors.contactNumber} maxLength={10} />
+                            <Input type="tel" label="Alt. Phone" name="altContact" value={formData.altContact || ''} onChange={handleChange} placeholder="Secondary Phone" error={errors.altContact} maxLength={10} />
                             <Input type="email" label="Email Address" name="email" value={formData.email || ''} onChange={handleChange} placeholder="email@example.com" error={errors.email} />
                             <Select label="Blood Group" name="bloodGroup" value={formData.bloodGroup || ''} onChange={handleChange} error={errors.bloodGroup} options={['', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']} />
                         </FormSection>
@@ -374,7 +406,7 @@ export default function MemberForm() {
                         <FormSection title="Address & Emergency" icon={<FiMapPin />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             <Input containerClassName="sm:col-span-2" label="Residential Address" name="address" value={formData.address || ''} onChange={handleChange} placeholder="Full address" error={errors.address} />
                             <Input label="Emergency Contact Name" name="emergencyContactName" value={formData.emergencyContactName || ''} onChange={handleChange} placeholder="Relative Name" error={errors.emergencyContactName} />
-                            <Input type="tel" label="Emergency Phone" name="emergencyContactNumber" value={formData.emergencyContactNumber || ''} onChange={handleChange} placeholder="10-digit mobile" error={errors.emergencyContactNumber} />
+                            <Input type="tel" label="Emergency Phone" name="emergencyContactNumber" value={formData.emergencyContactNumber || ''} onChange={handleChange} placeholder="10-digit mobile" error={errors.emergencyContactNumber} maxLength={10} />
                         </FormSection>
 
                         <FormSection title="Body Metrics & Health" icon={<FiActivity />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -386,9 +418,15 @@ export default function MemberForm() {
                             <Input containerClassName="sm:col-span-3" label="Medical Conditions / Injuries" name="medicalConditions" value={formData.medicalConditions || ''} onChange={handleChange} placeholder="Any prior injuries or health conditions to be aware of" error={errors.medicalConditions} />
                         </FormSection>
 
-                        <FormSection title="Feedback & Notes" icon={<FiMessageSquare />} className="grid grid-cols-1 gap-4">
-                            <Textarea containerClassName="col-span-full" label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
+                        <FormSection title="Lead / Enquiry Details" icon={<FiMessageSquare />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            <Select label="Source" name="source" value={formData.source || ''} onChange={handleChange} options={['--Select--', 'Walk-in', 'Website', 'Reference', 'Just Dial', 'Other']} />
+                            <Select label="Interest/For" name="interest" value={formData.interest || ''} onChange={handleChange} options={['--Select--', 'Gym', 'Zumba', 'Yoga', 'Crossfit']} />
+                            <Select label="Convertibility" name="convertibility" value={formData.convertibility || ''} onChange={handleChange} options={['Warm', 'Hot', 'Cold']} />
+                            <Input label="Attended By" name="attendedBy" value={formData.attendedBy || ''} onChange={handleChange} placeholder="Staff Name" />
+                            <Textarea containerClassName="sm:col-span-2 lg:col-span-3 xl:col-span-4" label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
                         </FormSection>
+
+
 
                         <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-4 pt-6 border-t border-slate-200">
                             <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/members')} className="w-full sm:w-auto">

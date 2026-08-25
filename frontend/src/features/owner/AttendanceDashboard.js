@@ -5,7 +5,7 @@ import DataTable from '../../components/page/DataTable';
 import EmptyState from '../../components/page/EmptyState';
 import Loader from '../../components/page/Loader';
 import Tabs from '../../components/page/Tabs';
-import { FiCheckCircle, FiXCircle, FiClock, FiUserCheck, FiPhone } from 'react-icons/fi';
+import { FiCheckCircle, FiXCircle, FiClock, FiUserCheck, FiPhone, FiX } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 
@@ -123,7 +123,9 @@ export default function AttendanceDashboard() {
                 </td>
                 <td className="py-3 px-4">
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                        {(currentStatus === 'Unmarked' || currentStatus === 'Absent' || currentStatus === 'Holiday') && (
+                        {!(selectedDate > todayStr) && (
+                            <>
+                                {(currentStatus === 'Unmarked' || currentStatus === 'Absent' || currentStatus === 'Holiday') && (
                             <button 
                                 onClick={() => handleMarkAttendance(user._id, 'Present')}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white transition-colors shadow-sm text-xs font-bold"
@@ -163,8 +165,23 @@ export default function AttendanceDashboard() {
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white transition-colors shadow-sm text-xs font-bold"
                                 title="Override to Absent"
                             >
-                                <FiXCircle /> 
+                                    <FiXCircle /> 
+                                </button>
+                            )}
+
+                        {currentStatus !== 'Unmarked' && (
+                            <button 
+                                onClick={() => handleMarkAttendance(user._id, 'Clear')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800 transition-colors shadow-sm text-xs font-bold"
+                                title="Clear Attendance"
+                            >
+                                <FiX /> 
                             </button>
+                        )}
+                            </>
+                        )}
+                        {(selectedDate > todayStr) && (
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Future Date</span>
                         )}
                     </div>
                 </td>
@@ -212,6 +229,7 @@ export default function AttendanceDashboard() {
                             <input 
                                 type="date" 
                                 value={selectedDate}
+                                max={new Date().toISOString().split('T')[0]}
                                 onChange={(e) => setSelectedDate(e.target.value)}
                                 className="h-10 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-700 font-medium w-full sm:w-auto"
                             />
