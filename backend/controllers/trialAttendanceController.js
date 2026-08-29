@@ -18,6 +18,34 @@ const getDistance = (lat1, lon1, lat2, lon2) => {
     return R * c;
 };
 
+const getTrialDates = (enquiry) => {
+    let trialStart = null;
+    let trialEnd = null;
+
+    if (enquiry.trialDate) {
+        const startDateStr = typeof enquiry.trialDate === 'string' 
+            ? enquiry.trialDate.split('T')[0] 
+            : new Date(enquiry.trialDate).toISOString().split('T')[0];
+        
+        const [sy, sm, sd] = startDateStr.split('-').map(Number);
+        trialStart = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+    }
+
+    if (enquiry.trialEndDate) {
+        const endDateStr = typeof enquiry.trialEndDate === 'string' 
+            ? enquiry.trialEndDate.split('T')[0] 
+            : new Date(enquiry.trialEndDate).toISOString().split('T')[0];
+        
+        const [ey, em, ed] = endDateStr.split('-').map(Number);
+        trialEnd = new Date(ey, em - 1, ed, 23, 59, 59, 999);
+    } else if (trialStart) {
+        trialEnd = new Date(trialStart);
+        trialEnd.setHours(23, 59, 59, 999);
+    }
+
+    return { trialStart, trialEnd };
+};
+
 // @desc    Identify Trial Person and generate Device Token
 // @route   POST /api/trial-attendance/identify
 // @access  Public
@@ -39,10 +67,18 @@ exports.identifyTrial = async (req, res) => {
             });
         }
 
-        const enquiry = await Enquiry.findOne({
+        let enquiry = await Enquiry.findOne({
             gymId,
-            contactNumber
-        });
+            contactNumber,
+            status: 'Trial'
+        }).sort({ createdAt: -1 });
+
+        if (!enquiry) {
+            enquiry = await Enquiry.findOne({
+                gymId,
+                contactNumber
+            }).sort({ createdAt: -1 });
+        }
 
         if (!enquiry) {
             return res.status(404).json({
@@ -51,33 +87,17 @@ exports.identifyTrial = async (req, res) => {
         }
 
         // Check trial dates
+        const { trialStart, trialEnd } = getTrialDates(enquiry);
         const now = new Date();
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const trialStart = enquiry.trialDate
-            ? new Date(enquiry.trialDate)
-            : null;
-
-        const trialEnd = enquiry.trialEndDate
-            ? new Date(enquiry.trialEndDate)
-            : null;
-
-        if (trialStart) {
-            trialStart.setHours(0, 0, 0, 0);
+        let isTrialActive = false;
+        if (trialStart && trialEnd) {
+            isTrialActive = now >= trialStart && now <= trialEnd;
+        } else if (enquiry.status === 'Trial') {
+            isTrialActive = true;
         }
 
-        if (trialEnd) {
-            trialEnd.setHours(23, 59, 59, 999);
-        }
-
-        if (
-            !trialStart ||
-            !trialEnd ||
-            now < trialStart ||
-            now > trialEnd
-        ) {
+        if (!isTrialActive) {
             return res.status(403).json({
                 message: 'Your trial period is not active.'
             });
@@ -96,7 +116,7 @@ exports.identifyTrial = async (req, res) => {
             enquiryId: enquiry._id,
             gymId,
             deviceToken,
-            expiresAt: trialEnd
+            expiresAt: trialEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         });
 
         res.json({
@@ -114,8 +134,6 @@ exports.identifyTrial = async (req, res) => {
         });
     }
 };
-
-
 
 // @desc    Trial Self Check-in
 // @route   POST /api/trial-attendance/self-checkin
@@ -172,31 +190,17 @@ exports.selfCheckInTrial = async (req, res) => {
         const enquiry = device.enquiryId;
         if (!enquiry) return res.status(404).json({ message: 'No trial person found for this device.' });
 
+        const { trialStart, trialEnd } = getTrialDates(enquiry);
         const now = new Date();
 
-        const trialStart = enquiry.trialDate
-            ? new Date(enquiry.trialDate)
-            : null;
-
-        const trialEnd = enquiry.trialEndDate
-            ? new Date(enquiry.trialEndDate)
-            : null;
-
-        if (trialStart) {
-            trialStart.setHours(0, 0, 0, 0);
+        let isTrialActive = false;
+        if (trialStart && trialEnd) {
+            isTrialActive = now >= trialStart && now <= trialEnd;
+        } else if (enquiry.status === 'Trial') {
+            isTrialActive = true;
         }
 
-        if (trialEnd) {
-            trialEnd.setHours(23, 59, 59, 999);
-        }
-
-        const isValidTrial =
-            trialStart &&
-            trialEnd &&
-            now >= trialStart &&
-            now <= trialEnd;
-
-        if (!isValidTrial) {
+        if (!isTrialActive) {
             return res.status(400).json({ message: 'Active trial period has expired. Attendance cannot be marked.' });
         }
 
@@ -268,16 +272,17 @@ exports.getTrialCheckInStatus = async (req, res) => {
             });
         }
 
+        const { trialStart, trialEnd } = getTrialDates(enquiry);
         const now = new Date();
-        const trialStart = enquiry.trialDate ? new Date(enquiry.trialDate) : null;
-        const trialEnd = enquiry.trialEndDate ? new Date(enquiry.trialEndDate) : null;
 
-        if (trialStart) trialStart.setHours(0, 0, 0, 0);
-        if (trialEnd) trialEnd.setHours(23, 59, 59, 999);
+        let isTrialActive = false;
+        if (trialStart && trialEnd) {
+            isTrialActive = now >= trialStart && now <= trialEnd;
+        } else if (enquiry.status === 'Trial') {
+            isTrialActive = true;
+        }
 
-        const isValidTrial = trialStart && trialEnd && now >= trialStart && now <= trialEnd;
-
-        if (!isValidTrial) {
+        if (!isTrialActive) {
             return res.status(403).json({ message: 'Your trial period is not active.', requiresReauth: true });
         }
 

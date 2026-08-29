@@ -309,23 +309,27 @@ function Memberships() {
                 )}
             </FilterBar>
 
-            {activeTab === 'Plans' ? (
-                <DataTable 
-                    columns={planColumns} 
-                    data={filteredMemberships} 
-                    loading={loading} 
-                    emptyMessage="No membership plans found." 
-                    renderRow={renderPlanRow} 
-                />
-            ) : (
-                <DataTable 
-                    columns={memberColumns} 
-                    data={filteredMembers} 
-                    loading={loading} 
-                    emptyMessage={`No ${activeTab.toLowerCase()} members found.`} 
-                    renderRow={renderMemberRow} 
-                />
-            )}
+            <div className="flex-1 min-h-0 p-4 lg:p-6 w-full">
+                {activeTab === 'Plans' ? (
+                    <DataTable 
+                        className="h-full"
+                        columns={planColumns} 
+                        data={filteredMemberships} 
+                        loading={loading} 
+                        emptyMessage="No membership plans found." 
+                        renderRow={renderPlanRow} 
+                    />
+                ) : (
+                    <DataTable 
+                        className="h-full"
+                        columns={memberColumns} 
+                        data={filteredMembers} 
+                        loading={loading} 
+                        emptyMessage={`No ${activeTab.toLowerCase()} members found.`} 
+                        renderRow={renderMemberRow} 
+                    />
+                )}
+            </div>
 
             {/* Bonus Days Modal */}
             {bonusModal.open && (

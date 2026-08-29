@@ -14,6 +14,19 @@ import Button from '../../components/form/Button';
 import Loader from '../../components/page/Loader';
 import { useRef } from 'react';
 
+const toInputDateFormat = (dateVal) => {
+    if (!dateVal) return '';
+    if (typeof dateVal === 'string' && dateVal.includes('T')) {
+        return dateVal.split('T')[0];
+    }
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 export default function LeadForm() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -23,6 +36,7 @@ export default function LeadForm() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [gymSettings, setGymSettings] = useState(null);
+    const [membershipPlans, setMembershipPlans] = useState([]);
     const [logNewFollowUp, setLogNewFollowUp] = useState(false);
     
     const [formData, setFormData] = useState({
@@ -59,82 +73,46 @@ export default function LeadForm() {
     }, [loading, location.state]);
 
     useEffect(() => {
-        if (isEdit) {
-            if (location.state?.lead) {
-                // We still need to fetch gym settings for the dropdowns
-                const fetchGymOnly = async () => {
-                    try {
-                        const gymRes = await apiClient.get('/gyms/my-gym');
-                        let matchedOfferId = '';
-                        if (gymRes?.data) {
-                            setGymSettings(gymRes.data);
-                            const matchedOffer = gymRes.data.couponOffers?.find(o => o.title === location.state.lead.offerDetails);
-                            matchedOfferId = matchedOffer ? matchedOffer._id : (location.state.lead.offerDetails ? 'Custom' : '');
-                        }
+        const fetchGymAndPlans = async () => {
+            try {
+                const [gymRes, plansRes] = await Promise.all([
+                    apiClient.get('/gyms/my-gym').catch(() => ({ data: null })),
+                    apiClient.get('/membership-plans').catch(() => ({ data: [] }))
+                ]);
+                if (gymRes?.data) setGymSettings(gymRes.data);
+                if (plansRes?.data) setMembershipPlans(plansRes.data);
+
+                if (isEdit) {
+                    let leadData = location.state?.lead;
+                    if (!leadData) {
+                        const leadRes = await apiClient.get(`/enquiries/${id}`);
+                        leadData = leadRes.data;
+                    }
+                    if (leadData) {
+                        const matchedOffer = gymRes?.data?.couponOffers?.find(o => o.title === leadData.offerDetails);
+                        const matchedOfferId = matchedOffer ? matchedOffer._id : (leadData.offerDetails ? 'Custom' : '');
                         setFormData({ 
-                            ...location.state.lead, 
+                            ...leadData, 
+                            dob: toInputDateFormat(leadData.dob),
+                            followUpDate: toInputDateFormat(leadData.followUpDate),
+                            trialDate: toInputDateFormat(leadData.trialDate),
+                            trialEndDate: toInputDateFormat(leadData.trialEndDate),
                             selectedOffer: matchedOfferId, 
                             sendTextAndEmail: false, 
                             sendWhatsApp: false,
                             response: '',
-                            followUpTime: ''
-                        });
-                    } catch (err) {
-                        setFormData({ 
-                            ...location.state.lead, 
-                            sendTextAndEmail: false, 
-                            sendWhatsApp: false,
-                            response: '',
-                            followUpTime: ''
+                            followUpTime: leadData.followUpTime || ''
                         });
                     }
-                    setLoading(false);
-                };
-                fetchGymOnly();
-            } else {
-                // Otherwise fetch it from the backend
-                const fetchData = async () => {
-                    try {
-                        const [leadRes, gymRes] = await Promise.all([
-                            apiClient.get(`/enquiries/${id}`),
-                            apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
-                        ]);
-                        let matchedOfferId = '';
-                        if (gymRes?.data) {
-                            setGymSettings(gymRes.data);
-                            const matchedOffer = gymRes.data.couponOffers?.find(o => o.title === leadRes.data.offerDetails);
-                            matchedOfferId = matchedOffer ? matchedOffer._id : (leadRes.data.offerDetails ? 'Custom' : '');
-                        }
-                        setFormData({ 
-                            ...leadRes.data, 
-                            selectedOffer: matchedOfferId, 
-                            sendTextAndEmail: false, 
-                            sendWhatsApp: false,
-                            response: '',
-                            followUpTime: ''
-                        });
-                        setLoading(false);
-                    } catch (error) {
-                        toast.error("Failed to fetch lead details");
-                        navigate('/dashboard/owner/leads');
-                    }
-                };
-                fetchData();
-            }
-        } else {
-            // New Lead - just fetch gym settings
-            const fetchGym = async () => {
-                try {
-                    const gymRes = await apiClient.get('/gyms/my-gym');
-                    if (gymRes?.data) setGymSettings(gymRes.data);
-                    setLoading(false);
-                } catch (error) {
-                    setLoading(false);
                 }
-            };
-            fetchGym();
-        }
-    }, [id, navigate, isEdit, location.state]);
+            } catch (err) {
+                console.error("Error loading lead data", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchGymAndPlans();
+    }, [id, isEdit, location.state]);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -242,7 +220,11 @@ export default function LeadForm() {
 
         setSubmitting(true);
         try {
-            let submitData = { ...formData };
+            const todayStr = toInputDateFormat(new Date());
+            let submitData = { 
+                ...formData,
+                followUpDate: formData.followUpDate || todayStr
+            };
             
             // Check if current form inputs are different from the latest history item
             let isDifferent = true;
@@ -343,12 +325,22 @@ export default function LeadForm() {
                                 <option value="Reference">Reference</option>
                                 <option value="Just Dial">Just Dial</option>
                             </Select>
-                            <Select label="Interest/For" name="inquiryFor" value={formData.inquiryFor || ''} onChange={handleChange} error={errors.inquiryFor}>
-                                <option value="">--Select--</option>
-                                <option value="Gym">Gym</option>
-                                <option value="Zumba">Zumba</option>
-                                <option value="Yoga">Yoga</option>
-                                <option value="Crossfit">Crossfit</option>
+                            <Select label="Enquiry For / Target Plan" name="inquiryFor" value={formData.inquiryFor || ''} onChange={handleChange} error={errors.inquiryFor}>
+                                <option value="">-- Select Target Plan or Service --</option>
+                                {membershipPlans && membershipPlans.length > 0 && (
+                                    <optgroup label="Gym Membership Plans">
+                                        {membershipPlans.filter(p => p.isActive !== false).map(plan => (
+                                            <option key={plan._id} value={plan.planName}>{plan.planName} (₹{plan.price})</option>
+                                        ))}
+                                    </optgroup>
+                                )}
+                                <optgroup label="General Services / Categories">
+                                    <option value="Gym (General)">Gym (General)</option>
+                                    <option value="Personal Training (PT)">Personal Training (PT)</option>
+                                    <option value="Zumba">Zumba</option>
+                                    <option value="Yoga">Yoga</option>
+                                    <option value="Crossfit">Crossfit</option>
+                                </optgroup>
                             </Select>
                             {['Trial', 'Converted'].includes(formData.status) && (
                                 <>

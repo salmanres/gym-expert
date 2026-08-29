@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 import { FiMapPin, FiMail, FiPhone } from 'react-icons/fi';
 
@@ -10,12 +10,7 @@ function GymsList() {
     useEffect(() => {
         const fetchGyms = async () => {
             try {
-                const token = localStorage.getItem('token');
-                const { data } = await axios.get('http://localhost:5000/api/gyms', {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
+                const { data } = await apiClient.get('/gyms');
                 setGyms(data);
             } catch (error) {
                 toast.error("Failed to fetch gyms");

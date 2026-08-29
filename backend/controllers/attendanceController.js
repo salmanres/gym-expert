@@ -55,11 +55,40 @@ const isGymClosed = (gym, date) => {
     return { closed: false };
 };
 
+// Helper: Auto check-out any active check-in older than 3 hours (180 minutes)
+const autoCheckoutOverdueAttendance = async (gymId = null) => {
+    try {
+        const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+        const query = {
+            checkInTime: { $ne: null, $lte: threeHoursAgo },
+            checkOutTime: null,
+            status: { $ne: 'Absent' }
+        };
+        if (gymId) query.gymId = gymId;
+
+        const overdueRecords = await Attendance.find(query);
+        for (const record of overdueRecords) {
+            if (record.checkInTime) {
+                record.checkOutTime = new Date(new Date(record.checkInTime).getTime() + 3 * 60 * 60 * 1000);
+                if (!record.notes || !record.notes.includes('Auto checked-out')) {
+                    record.notes = (record.notes ? record.notes + ' | ' : '') + 'Auto checked-out after 3 hours';
+                }
+                await record.save();
+            }
+        }
+    } catch (err) {
+        console.error("Auto checkout error:", err);
+    }
+};
+
+exports.autoCheckoutOverdueAttendance = autoCheckoutOverdueAttendance;
+
 // @desc    Mark Attendance (Manual, QR, Biometric)
 // @route   POST /api/attendance/mark
 // @access  Private
 exports.markAttendance = async (req, res) => {
     try {
+        await autoCheckoutOverdueAttendance(req.user?.gymId);
         const { userId, source, latitude, longitude, status, notes } = req.body;
         
         let targetUserId = userId || req.user._id; 
@@ -124,10 +153,17 @@ exports.markAttendance = async (req, res) => {
                 let isValidTrial = false;
                 if (targetUser.enquiryId) {
                     const enquiry = await Enquiry.findById(targetUser.enquiryId);
-                    if (enquiry && enquiry.trialEndDate) {
-                        const trialEndDate = new Date(enquiry.trialEndDate);
-                        trialEndDate.setHours(23, 59, 59, 999);
-                        if (currentDate <= trialEndDate) {
+                    if (enquiry) {
+                        const now = new Date();
+                        const startDate = enquiry.trialDate ? new Date(enquiry.trialDate) : null;
+                        const endDate = enquiry.trialEndDate ? new Date(enquiry.trialEndDate) : startDate;
+                        
+                        if (startDate) startDate.setHours(0,0,0,0);
+                        if (endDate) endDate.setHours(23,59,59,999);
+
+                        if (startDate && endDate && now >= startDate && now <= endDate) {
+                            isValidTrial = true;
+                        } else if (enquiry.status === 'Trial') {
                             isValidTrial = true;
                         }
                     }
@@ -263,11 +299,9 @@ exports.markAttendance = async (req, res) => {
     }
 };
 
-// @desc    Get Gym Attendance (For Owner/Admin)
-// @route   GET /api/attendance
-// @access  Private (Gym Owner/Admin)
 exports.getGymAttendance = async (req, res) => {
     try {
+        await autoCheckoutOverdueAttendance(req.user?.gymId);
         const { date } = req.query;
         let query = { gymId: req.user.gymId };
         
@@ -431,6 +465,8 @@ exports.getCheckInStatus = async (req, res) => {
             return res.status(400).json({ message: 'Gym ID and Device Token are required' });
         }
 
+        await autoCheckoutOverdueAttendance(gymId);
+
         const device = await MemberDevice.findOne({ deviceToken, gymId }).populate('memberId');
         if (!device) {
             return res.status(401).json({ message: 'Invalid token', requiresReauth: true });
@@ -476,6 +512,8 @@ exports.selfCheckIn = async (req, res) => {
         if (!gymId || !deviceToken || !latitude || !longitude) {
             return res.status(400).json({ message: 'Gym ID, Device Token, and Location are required' });
         }
+
+        await autoCheckoutOverdueAttendance(gymId);
 
         // 1. Validate Gym
         const gym = await Gym.findById(gymId);

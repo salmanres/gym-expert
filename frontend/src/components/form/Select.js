@@ -10,14 +10,32 @@ export default function Select({ label, required, error, options = [], children,
         return { value: val, label: displayLabel };
     });
 
-    // Parse options from `children` (e.g. <option value="...">...</option>)
+    // Parse options from `children` (e.g. <option value="...">...</option> or <optgroup label="...">...</optgroup>)
     if (children) {
         React.Children.forEach(children, (child) => {
-            if (React.isValidElement(child) && child.type === 'option') {
+            if (!React.isValidElement(child)) return;
+
+            if (child.type === 'option') {
                 if (child.props.value !== '') { // Skip the default empty option if present
                     parsedOptions.push({
                         value: child.props.value,
                         label: child.props.children
+                    });
+                }
+            } else if (child.type === 'optgroup') {
+                const groupOptions = [];
+                React.Children.forEach(child.props.children, (subChild) => {
+                    if (React.isValidElement(subChild) && subChild.type === 'option' && subChild.props.value !== '') {
+                        groupOptions.push({
+                            value: subChild.props.value,
+                            label: subChild.props.children
+                        });
+                    }
+                });
+                if (groupOptions.length > 0) {
+                    parsedOptions.push({
+                        label: child.props.label,
+                        options: groupOptions
                     });
                 }
             }
@@ -80,7 +98,20 @@ export default function Select({ label, required, error, options = [], children,
     };
 
     // Find the currently selected option object to pass to ReactSelect
-    const selectedOption = parsedOptions.find(opt => opt.value === value) || null;
+    const findSelectedOption = (opts, val) => {
+        if (!val) return null;
+        for (const item of opts) {
+            if (item.options) {
+                const found = item.options.find(o => o.value === val);
+                if (found) return found;
+            } else if (item.value === val) {
+                return item;
+            }
+        }
+        return null;
+    };
+
+    const selectedOption = findSelectedOption(parsedOptions, value);
 
     return (
         <div className={containerClassName}>

@@ -316,13 +316,16 @@ export default function Finance() {
                 )}
             </FilterBar>
 
-            <DataTable 
-                columns={columns} 
-                data={activeTab === 'Transactions' ? filteredTransactions : filteredMembers} 
-                loading={loading} 
-                emptyMessage="No records found for the selected filter." 
-                renderRow={activeTab === 'Transactions' ? renderTransactionRow : renderRow} 
-            />
+            <div className="flex-1 min-h-0 p-4 lg:p-6 w-full">
+                <DataTable 
+                    className="h-full"
+                    columns={columns} 
+                    data={activeTab === 'Transactions' ? filteredTransactions : filteredMembers} 
+                    loading={loading} 
+                    emptyMessage="No records found for the selected filter." 
+                    renderRow={activeTab === 'Transactions' ? renderTransactionRow : renderRow} 
+                />
+            </div>
 
         </PageLayout>
     );

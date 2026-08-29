@@ -54,7 +54,16 @@ app.get('/', (req, res) => {
     res.send('Gym Management API is running...');
 });
 
+const { autoCheckoutOverdueAttendance } = require('./controllers/attendanceController');
+
+// Background job: Auto checkout open attendances older than 3 hours (runs every 60s)
+setInterval(() => {
+    autoCheckoutOverdueAttendance().catch(err => console.error('Auto checkout interval error:', err));
+}, 60000);
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
     console.log(`Server & Socket.io running on port ${PORT}`);
+    // Run an initial check on startup
+    autoCheckoutOverdueAttendance().catch(err => console.error('Initial auto checkout check error:', err));
 });

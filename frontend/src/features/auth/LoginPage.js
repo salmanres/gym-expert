@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CgGym } from 'react-icons/cg';
-import axios from 'axios';
+import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 
 function LoginPage() {
@@ -14,7 +14,7 @@ function LoginPage() {
         e.preventDefault();
         setLoading(true);
         try {
-            const { data } = await axios.post('http://localhost:5000/api/auth/login', {
+            const { data } = await apiClient.post('/auth/login', {
                 email,
                 password
             });

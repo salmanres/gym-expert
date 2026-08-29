@@ -16,6 +16,12 @@ exports.createEnquiry = async (req, res) => {
             return res.status(400).json({ message: 'Invalid alternate contact number format.' });
         }
         
+        const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+        
+        if (!req.body.followUpDate) {
+            req.body.followUpDate = todayStr;
+        }
+
         const enquiry = new Enquiry({
             gymId,
             ...req.body
@@ -64,6 +70,12 @@ exports.updateEnquiry = async (req, res) => {
         }
         if (req.body.altContact && !phoneRegex.test(req.body.altContact)) {
             return res.status(400).json({ message: 'Invalid alternate contact number format.' });
+        }
+
+        // If followUpDate is empty or not provided in update payload, default to today's date
+        const todayStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+        if (req.body.followUpDate === '' || req.body.followUpDate === null || (!req.body.followUpDate && !enquiry.followUpDate)) {
+            req.body.followUpDate = todayStr;
         }
 
         Object.assign(enquiry, req.body);

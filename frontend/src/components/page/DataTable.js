@@ -1,16 +1,16 @@
 import React from 'react';
 import Loader from './Loader';
 
-export default function DataTable({ columns, data, loading, emptyMessage, renderRow, darkHeader = false }) {
+export default function DataTable({ columns, data, loading, emptyMessage, renderRow, darkHeader = false, className = '' }) {
     if (loading) {
         return <Loader text="Loading data..." />;
     }
 
     return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden w-full">
-            <div className="overflow-x-auto w-full custom-scrollbar">
-                <table className="w-full text-left border-collapse min-w-[800px]">
-                    <thead className={darkHeader ? "bg-[#162544] text-white" : "bg-slate-50 text-slate-600 border-b border-slate-200"}>
+        <div className={`bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden w-full flex flex-col ${className}`}>
+            <div className="overflow-auto w-full custom-scrollbar flex-1 min-h-0">
+                <table className="w-full text-left border-collapse min-w-[800px] relative">
+                    <thead className={`sticky top-0 z-10 ${darkHeader ? "bg-[#162544] text-white" : "bg-slate-50 text-slate-600 shadow-[inset_0_-1px_0_0_#e2e8f0]"}`}>
                         <tr>
                             {columns.map((col, index) => (
                                 <th key={index} className={`py-3.5 px-4 font-bold uppercase text-[11px] tracking-wider whitespace-nowrap ${darkHeader ? 'text-slate-100' : 'text-slate-600'} ${col.className || ''}`}>

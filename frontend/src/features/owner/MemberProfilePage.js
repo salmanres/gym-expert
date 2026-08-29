@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { 
     FiUser, FiPhone, FiMail, FiMapPin, FiCalendar, FiActivity, FiAward, 
     FiEdit2, FiUsers, FiCreditCard, FiClock, FiCheckCircle, FiXCircle, 
@@ -7,12 +7,18 @@ import {
 } from 'react-icons/fi';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
+import Loader from '../../components/page/Loader';
 import apiClient from '../../api/apiClient';
 
 export default function MemberProfilePage() {
+    const { id } = useParams();
     const location = useLocation();
     const navigate = useNavigate();
-    const rawMember = location.state?.member;
+
+    const [fetchedMember, setFetchedMember] = useState(null);
+    const [loadingMember, setLoadingMember] = useState(!location.state?.member && !!id);
+
+    const rawMember = fetchedMember || location.state?.member;
 
     const member = rawMember?.memberId && typeof rawMember.memberId === 'object' 
         ? { ...rawMember.memberId, ...rawMember, memberIdObj: rawMember.memberId } 
@@ -22,7 +28,23 @@ export default function MemberProfilePage() {
     const [activeMembership, setActiveMembership] = useState(rawMember?.activeMembership || (rawMember?.membershipPlanId ? rawMember : null));
     const [transactions, setTransactions] = useState([]);
     
-    const memberIdVal = member?._id || rawMember?._id;
+    const memberIdVal = member?._id || rawMember?._id || id;
+
+    useEffect(() => {
+        if (!location.state?.member && id) {
+            setLoadingMember(true);
+            apiClient.get(`/members/${id}`)
+                .then(res => {
+                    setFetchedMember(res.data);
+                })
+                .catch(err => {
+                    console.error("Failed to fetch member by ID", err);
+                })
+                .finally(() => {
+                    setLoadingMember(false);
+                });
+        }
+    }, [id, location.state]);
 
     useEffect(() => {
         if (memberIdVal) {
@@ -50,6 +72,10 @@ export default function MemberProfilePage() {
                 .catch(err => console.error("Failed to fetch transactions", err));
         }
     }, [memberIdVal, activeMembership]);
+
+    if (loadingMember) {
+        return <Loader text="Loading member profile..." />;
+    }
 
     if (!member) {
         return (

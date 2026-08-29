@@ -108,10 +108,23 @@ function Leads() {
         setViewModalOpen(true);
     };
 
+    const toInputDateFormat = (dateVal) => {
+        if (!dateVal) return '';
+        if (typeof dateVal === 'string' && dateVal.includes('T')) {
+            return dateVal.split('T')[0];
+        }
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return '';
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const handleEdit = (lead) => {
-        const formattedDate = lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '';
-        const formattedTrial = lead.trialDate ? new Date(lead.trialDate).toISOString().split('T')[0] : '';
-        const formattedTrialEnd = lead.trialEndDate ? new Date(lead.trialEndDate).toISOString().split('T')[0] : '';
+        const formattedDate = lead.followUpDate ? toInputDateFormat(lead.followUpDate) : '';
+        const formattedTrial = lead.trialDate ? toInputDateFormat(lead.trialDate) : '';
+        const formattedTrialEnd = lead.trialEndDate ? toInputDateFormat(lead.trialEndDate) : '';
         const formattedLead = {
             ...lead,
             firstName: lead.firstName || lead.name || '',
@@ -137,10 +150,10 @@ function Leads() {
             setStatusFormData({
                 status: newStatus,
                 response: '',
-                followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '',
+                followUpDate: toInputDateFormat(lead.followUpDate),
                 followUpTime: lead.followUpTime || '',
-                trialDate: lead.trialDate ? new Date(lead.trialDate).toISOString().split('T')[0] : '',
-                trialEndDate: lead.trialEndDate ? new Date(lead.trialEndDate).toISOString().split('T')[0] : '',
+                trialDate: toInputDateFormat(lead.trialDate),
+                trialEndDate: toInputDateFormat(lead.trialEndDate),
                 lostReason: lead.lostReason || '',
                 selectedOffer: matchedOfferId,
                 offerAmount: lead.offerAmount || '',
@@ -178,13 +191,19 @@ function Leads() {
         e.preventDefault();
         setSubmittingStatus(true);
         try {
-            let submitData = { ...selectedLead, ...statusFormData };
+            const todayStr = toInputDateFormat(new Date());
+            const finalFollowUpDate = statusFormData.followUpDate || todayStr;
+            let submitData = { 
+                ...selectedLead, 
+                ...statusFormData,
+                followUpDate: finalFollowUpDate
+            };
             
             const hasResponse = statusFormData.response && statusFormData.response.trim() !== '';
             const autoAddedItem = {
                 contactDate: new Date().toISOString(),
                 response: hasResponse ? statusFormData.response : `Status updated to ${statusFormData.status}`,
-                nextFollowUpDate: statusFormData.followUpDate || '',
+                nextFollowUpDate: finalFollowUpDate,
                 nextFollowUpTime: statusFormData.followUpTime || '',
                 status: statusFormData.status
             };
@@ -223,7 +242,8 @@ function Leads() {
 
     const updateStatus = async (id, newStatus) => {
         try {
-            await apiClient.put(`/enquiries/${id}`, { status: newStatus });
+            const todayStr = toInputDateFormat(new Date());
+            await apiClient.put(`/enquiries/${id}`, { status: newStatus, followUpDate: todayStr });
             toast.success("Status updated");
             fetchLeads();
         } catch (error) {
@@ -266,10 +286,7 @@ function Leads() {
         let dateMatch = true;
         if (showCalendar && selectedDate) {
             if (lead.followUpDate) {
-                const leadDateStr = typeof lead.followUpDate === 'string' 
-                    ? lead.followUpDate.split('T')[0] 
-                    : new Date(lead.followUpDate).toISOString().split('T')[0];
-                    
+                const leadDateStr = toInputDateFormat(lead.followUpDate);
                 const selDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
                 dateMatch = leadDateStr === selDateStr;
             } else {
@@ -372,8 +389,11 @@ function Leads() {
             </td>
             <td className="py-3 px-4">
                 <div className="flex flex-col gap-1 text-[10px] text-slate-600 font-medium">
-                    <div className="flex items-center gap-1"><span className="text-slate-400">Source:</span> <span className="font-bold text-slate-700">{lead.source}</span></div>
-                    <div className="flex items-center gap-1"><span className="text-slate-400">For:</span> <span className="font-bold text-slate-700">{lead.inquiryFor}</span></div>
+                    <div className="flex items-center gap-1"><span className="text-slate-400">Source:</span> <span className="font-bold text-slate-700">{lead.source || 'Walk-in'}</span></div>
+                    <div className="flex items-center gap-1"><span className="text-slate-400">Plan/For:</span> <span className="font-extrabold text-indigo-600">{lead.inquiryFor || 'General'}</span></div>
+                    {lead.offerDetails && (
+                        <div className="flex items-center gap-1"><span className="text-slate-400">Offer:</span> <span className="font-bold text-emerald-600">{lead.offerDetails} {lead.offerAmount ? `(₹${lead.offerAmount})` : ''}</span></div>
+                    )}
                     <div className="flex items-center gap-1">
                         <span className="text-slate-400">Priority:</span> 
                         <span className={`font-bold uppercase tracking-wider ${lead.convertibility === 'Hot' ? 'text-rose-500' : lead.convertibility === 'Warm' ? 'text-amber-500' : 'text-sky-500'}`}>
@@ -399,6 +419,13 @@ function Leads() {
                         <FiCalendar className="text-emerald-500 shrink-0" />
                         Next: {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'None'} {lead.followUpTime}
                     </div>
+                    {lead.trialDate && (
+                        <div className="flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 w-max mt-0.5">
+                            <FiCalendar className="shrink-0 text-teal-600" />
+                            Trial: {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                            {lead.trialEndDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
+                        </div>
+                    )}
                     <div className="text-[10px] font-medium mt-0.5"><span className="text-slate-400">Assigned:</span> {lead.attendedBy}</div>
                 </div>
             </td>
@@ -707,9 +734,15 @@ function Leads() {
                                     </h4>
                                     <div className="text-xs space-y-2">
                                         <div className="flex justify-between">
-                                            <span className="text-slate-400 font-medium">Inquiry For:</span>
+                                            <span className="text-slate-400 font-medium">Inquiry For / Plan:</span>
                                             <span className="font-black text-indigo-600">{viewLead.inquiryFor || 'General Membership'}</span>
                                         </div>
+                                        {viewLead.offerDetails && (
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-400 font-medium">Quoted Offer:</span>
+                                                <span className="font-black text-emerald-600">{viewLead.offerDetails} {viewLead.offerAmount ? `(₹${viewLead.offerAmount})` : ''}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between">
                                             <span className="text-slate-400 font-medium">Source Channel:</span>
                                             <span className="font-bold text-slate-800">{viewLead.source || 'Walk-in'}</span>
@@ -747,9 +780,8 @@ function Leads() {
                                             </div>
                                         )}
                                         {viewLead.trialDate && (() => {
-                                            const todayStr = new Date().toISOString().split('T')[0];
-                                            const endDate = viewLead.trialEndDate ? new Date(viewLead.trialEndDate) : new Date(viewLead.trialDate);
-                                            const endStr = endDate.toISOString().split('T')[0];
+                                            const todayStr = toInputDateFormat(new Date());
+                                            const endStr = toInputDateFormat(viewLead.trialEndDate || viewLead.trialDate);
                                             const isExpired = endStr < todayStr;
 
                                             return (

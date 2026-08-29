@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FiChevronLeft, FiChevronRight, FiCalendar } from 'react-icons/fi';
 
-export default function FollowUpCalendar({ leads, onSelectDate, selectedDate }) {
+export default function FollowUpCalendar({ leads = [], onSelectDate, selectedDate }) {
     const [currentMonth, setCurrentMonth] = useState(new Date());
 
     const nextMonth = () => {
@@ -19,7 +19,7 @@ export default function FollowUpCalendar({ leads, onSelectDate, selectedDate }) 
         const cells = [];
         // Empty cells for the start of the month
         for (let i = 0; i < firstDayOfMonth; i++) {
-            cells.push(<div key={`empty-${i}`} className="h-14 sm:h-16 border border-slate-100 bg-slate-50/50"></div>);
+            cells.push(<div key={`empty-${i}`} className="h-10 sm:h-11 border border-slate-100 bg-slate-50/50"></div>);
         }
 
         // Days of the month
@@ -36,10 +36,11 @@ export default function FollowUpCalendar({ leads, onSelectDate, selectedDate }) 
                 // Only active statuses
                 if (['Converted', 'Lost'].includes(lead.status)) return false;
                 
-                // followUpDate from DB is typically ISO string 'YYYY-MM-DD...'
-                const leadDateStr = typeof lead.followUpDate === 'string' 
+                const leadDateStr = typeof lead.followUpDate === 'string' && lead.followUpDate.includes('T')
                     ? lead.followUpDate.split('T')[0] 
-                    : new Date(lead.followUpDate).toISOString().split('T')[0];
+                    : (typeof lead.followUpDate === 'string' 
+                        ? lead.followUpDate 
+                        : `${new Date(lead.followUpDate).getFullYear()}-${String(new Date(lead.followUpDate).getMonth() + 1).padStart(2, '0')}-${String(new Date(lead.followUpDate).getDate()).padStart(2, '0')}`);
                     
                 return leadDateStr === dateString;
             });
@@ -60,18 +61,18 @@ export default function FollowUpCalendar({ leads, onSelectDate, selectedDate }) 
                 <div 
                     key={d} 
                     onClick={() => onSelectDate(isSelected ? null : date)}
-                    className={`h-14 sm:h-16 border border-slate-100 p-1 flex flex-col relative cursor-pointer transition-all
+                    className={`h-10 sm:h-11 border border-slate-100 p-1 flex flex-col relative cursor-pointer transition-all
                         ${isSelected ? 'bg-indigo-50 border-indigo-300 ring-1 ring-indigo-500 z-10' : 'bg-white hover:bg-slate-50'}
                     `}
                 >
                     <div className="flex justify-between items-start">
-                        <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-emerald-500 text-white' : 'text-slate-600'}`}>
+                        <span className={`text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-emerald-500 text-white' : 'text-slate-600'}`}>
                             {d}
                         </span>
                     </div>
                     {hasFollowUps && (
-                        <div className="mt-auto flex justify-center pb-1">
-                            <span className="flex items-center justify-center bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                        <div className="mt-auto flex justify-center pb-0.5">
+                            <span className="flex items-center justify-center bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0 rounded-full shadow-2xs">
                                 {followUps.length} call{followUps.length > 1 ? 's' : ''}
                             </span>
                         </div>
@@ -83,39 +84,41 @@ export default function FollowUpCalendar({ leads, onSelectDate, selectedDate }) 
     };
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-max">
-            <div className="p-3 sm:p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                <div className="flex items-center gap-2">
-                    <FiCalendar className="text-indigo-600" />
-                    <h3 className="font-bold text-slate-800">Follow-up Calendar</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button onClick={prevMonth} className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors">
-                        <FiChevronLeft />
-                    </button>
-                    <span className="text-sm font-bold w-24 text-center text-slate-700">
-                        {currentMonth.toLocaleDateString('default', { month: 'short', year: 'numeric' })}
-                    </span>
-                    <button onClick={nextMonth} className="p-1.5 hover:bg-slate-200 rounded text-slate-600 transition-colors">
-                        <FiChevronRight />
-                    </button>
-                </div>
-            </div>
-            
-            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
-                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day, idx) => (
-                    <div key={day} className="py-2 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider border-r border-slate-100 last:border-r-0">
-                        {day}
+        <div className="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-hidden flex flex-col h-full justify-between">
+            <div>
+                <div className="p-3 sm:p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                    <div className="flex items-center gap-2">
+                        <FiCalendar className="text-indigo-600" />
+                        <h3 className="font-bold text-slate-800 text-sm">Follow-up Calendar</h3>
                     </div>
-                ))}
-            </div>
-            
-            <div className="grid grid-cols-7 bg-white">
-                {renderCells()}
+                    <div className="flex items-center gap-2">
+                        <button onClick={prevMonth} className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors">
+                            <FiChevronLeft />
+                        </button>
+                        <span className="text-xs font-bold w-24 text-center text-slate-700">
+                            {currentMonth.toLocaleDateString('default', { month: 'short', year: 'numeric' })}
+                        </span>
+                        <button onClick={nextMonth} className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors">
+                            <FiChevronRight />
+                        </button>
+                    </div>
+                </div>
+                
+                <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+                        <div key={day} className="py-1.5 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider border-r border-slate-100 last:border-r-0">
+                            {day}
+                        </div>
+                    ))}
+                </div>
+                
+                <div className="grid grid-cols-7 bg-white">
+                    {renderCells()}
+                </div>
             </div>
 
             {selectedDate && (
-                <div className="p-3 bg-indigo-50 border-t border-indigo-100 flex items-center justify-between">
+                <div className="p-2.5 bg-indigo-50 border-t border-indigo-100 flex items-center justify-between">
                     <span className="text-xs font-bold text-indigo-800">
                         Showing follow-ups for {selectedDate.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>

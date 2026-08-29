@@ -81,8 +81,6 @@ exports.assignMembership = async (req, res) => {
         if (finalPrice === 0) paymentStatus = "Paid";
 
         let calculatedPaidUntilDate = null;
-        let extraAmountToWallet = 0;
-        let actualAllocatedPaidAmount = totalPaid;
 
         if (paymentStatus === 'Paid') {
             calculatedPaidUntilDate = end;
@@ -95,11 +93,6 @@ exports.assignMembership = async (req, res) => {
             const perDayCost = finalPrice / totalDays;
             const exactDays = totalPaid / perDayCost;
             const floorDays = Math.floor(exactDays);
-            
-            const costForFloorDays = Number((floorDays * perDayCost).toFixed(2));
-            
-            extraAmountToWallet = Number((totalPaid - costForFloorDays).toFixed(2));
-            actualAllocatedPaidAmount = costForFloorDays;
             
             calculatedPaidUntilDate = new Date(start.getTime() + (floorDays * 24 * 60 * 60 * 1000));
         } else if (paymentStatus === 'Pending') {
@@ -127,8 +120,8 @@ exports.assignMembership = async (req, res) => {
             discount: discountAmount,
             finalPrice: finalPrice,
 
-            paidAmount: actualAllocatedPaidAmount,
-            balanceAmount: Math.max(0, finalPrice - actualAllocatedPaidAmount),
+            paidAmount: totalPaid,
+            balanceAmount: Math.max(0, finalPrice - totalPaid),
 
             paidUntilDate: calculatedPaidUntilDate,
 
@@ -144,9 +137,8 @@ exports.assignMembership = async (req, res) => {
             }] : []
         });
 
-        if (walletVal > 0 || extraAmountToWallet > 0) {
-            // Deduct what they used, ADD what was leftover from fraction
-            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal) + extraAmountToWallet;
+        if (walletVal > 0) {
+            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal);
             await member.save();
         }
 
@@ -216,12 +208,13 @@ exports.updateAssignedMembership = async (req, res) => {
         const discountAmount = Number(discount) || 0;
         const finalPrice = Math.max(0, originalPrice - discountAmount);
         
-        // Recalculate balance with the new finalPrice (assuming paidAmount stays the same)
-        const balanceAmount = Math.max(0, finalPrice - (membership.paidAmount || 0));
+        const additionalPaid = Number(req.body.amountPaid) || 0;
+        const newPaidAmount = (membership.paidAmount || 0) + additionalPaid;
+        const balanceAmount = Math.max(0, finalPrice - newPaidAmount);
 
         let paymentStatus = "Pending";
-        if (membership.paidAmount >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
-        else if (membership.paidAmount > 0) paymentStatus = "Partial";
+        if (newPaidAmount >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
+        else if (newPaidAmount > 0) paymentStatus = "Partial";
         if (finalPrice === 0) paymentStatus = "Paid";
 
         const calculatedMembershipStatus = start <= new Date() ? "Active" : "Scheduled";
@@ -236,6 +229,7 @@ exports.updateAssignedMembership = async (req, res) => {
         membership.originalPrice = originalPrice;
         membership.discount = discountAmount;
         membership.finalPrice = finalPrice;
+        membership.paidAmount = newPaidAmount;
         membership.balanceAmount = balanceAmount;
         membership.paymentStatus = paymentStatus;
         if (membership.membershipStatus !== "Expired" && membership.membershipStatus !== "Cancelled") {
@@ -243,6 +237,21 @@ exports.updateAssignedMembership = async (req, res) => {
         }
 
         await membership.save();
+
+        if (additionalPaid > 0) {
+            await Transaction.create({
+                gymId,
+                memberId: membership.memberId,
+                planId: membershipPlanId,
+                collectedBy: req.user.id || req.user._id,
+                amountPaid: additionalPaid,
+                cashAmount: additionalPaid,
+                paymentMode: req.body.paymentMode || 'Cash',
+                transactionId: req.body.transactionId || `TRX-${Date.now()}`,
+                paymentStatus: 'Paid',
+                paymentDate: new Date()
+            });
+        }
 
         res.status(200).json({
             message: "Membership updated successfully.",

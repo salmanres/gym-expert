@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CgGym } from 'react-icons/cg';
 import { toast } from 'react-toastify';
-import axios from 'axios';
+import apiClient from '../../api/apiClient';
 
 function RegisterGymPage() {
     const [formData, setFormData] = useState({
@@ -26,24 +26,15 @@ function RegisterGymPage() {
             return toast.error("Passwords do not match");
         }
 
-        const token = localStorage.getItem('token');
-        if (!token) {
-            return toast.error("SuperAdmin token missing. Please log in first.");
-        }
-
         setLoading(true);
         try {
-            await axios.post('http://localhost:5000/api/auth/register-gym', {
+            await apiClient.post('/auth/register-gym', {
                 gymName: formData.gymName,
                 ownerName: formData.ownerName,
                 email: formData.email,
                 phone: formData.phone,
                 address: formData.address,
                 password: formData.password
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
             });
 
             toast.success("Gym registered successfully!");

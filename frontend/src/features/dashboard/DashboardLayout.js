@@ -7,7 +7,7 @@ import {
 } from 'react-icons/fi';
 import { CgGym } from 'react-icons/cg';
 import { toast } from 'react-toastify';
-import axios from 'axios';
+import apiClient from '../../api/apiClient';
 import { io } from 'socket.io-client';
 
 function DashboardLayout() {
@@ -51,11 +51,7 @@ function DashboardLayout() {
     // Fetch 30-Day Activity Logs
     const fetchLogs = async () => {
         try {
-            const token = localStorage.getItem('token');
-            if (!token) return;
-            const res = await axios.get('http://localhost:5000/api/activity-logs', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await apiClient.get('/activity-logs');
             if (res.data) {
                 setLogs(res.data.logs || []);
                 setUnreadCount(res.data.unreadCount || 0);
@@ -105,10 +101,7 @@ function DashboardLayout() {
         if (user?.role === 'SUPERADMIN') {
             const fetchGyms = async () => {
                 try {
-                    const token = localStorage.getItem('token');
-                    const res = await axios.get('http://localhost:5000/api/auth/superadmin/gyms', {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
+                    const res = await apiClient.get('/auth/superadmin/gyms');
                     setGyms(res.data);
                 } catch (err) {
                     console.error("Failed to fetch gyms for sidebar", err);
@@ -134,10 +127,7 @@ function DashboardLayout() {
 
             // Sync with backend DB if saved log
             try {
-                const token = localStorage.getItem('token');
-                await axios.put(`http://localhost:5000/api/activity-logs/read/${log._id}`, {}, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                await apiClient.put(`/activity-logs/read/${log._id}`);
             } catch (err) {
                 console.error("Error marking log read", err);
             }
@@ -153,10 +143,7 @@ function DashboardLayout() {
     // Mark All Read
     const handleMarkAllRead = async () => {
         try {
-            const token = localStorage.getItem('token');
-            await axios.put('http://localhost:5000/api/activity-logs/read/all', {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await apiClient.put('/activity-logs/read/all');
             setUnreadCount(0);
             setLogs(prev => prev.map(l => ({ ...l, isRead: true })));
             toast.success("All notifications marked as read");
@@ -168,14 +155,14 @@ function DashboardLayout() {
     const getLogIcon = (type) => {
         switch (type) {
             case 'LEAD':
-                return <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200"><FiClipboard size={14} /></div>;
+                return <FiClipboard size={15} className="text-amber-500 shrink-0 mt-0.5" />;
             case 'ATTENDANCE':
-                return <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200"><FiCheckSquare size={14} /></div>;
+                return <FiCheckSquare size={15} className="text-emerald-500 shrink-0 mt-0.5" />;
             case 'MEMBERSHIP':
             case 'PAYMENT':
-                return <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-200"><FiCreditCard size={14} /></div>;
+                return <FiCreditCard size={15} className="text-indigo-500 shrink-0 mt-0.5" />;
             default:
-                return <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 border border-slate-200"><FiActivity size={14} /></div>;
+                return <FiActivity size={15} className="text-blue-500 shrink-0 mt-0.5" />;
         }
     };
 
@@ -464,43 +451,42 @@ function DashboardLayout() {
                                                 <p className="text-[10px] text-slate-400 mt-0.5">Live events via Socket.io will pop up here instantly.</p>
                                             </div>
                                         ) : (
-                                            filteredLogsList.slice(0, 15).map(log => (
-                                                <div 
-                                                    key={log._id}
-                                                    onClick={() => handleNotificationClick(log)}
-                                                    className={`p-2.5 rounded-xl transition-all flex items-start gap-2.5 cursor-pointer group border-l-4 ${
-                                                        !log.isRead 
-                                                            ? 'bg-emerald-50/60 border-emerald-500 shadow-2xs' 
-                                                            : 'bg-white border-transparent hover:bg-slate-50 opacity-75 hover:opacity-100'
-                                                    }`}
-                                                >
-                                                    {getLogIcon(log.type)}
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center justify-between gap-1">
-                                                            <h4 className={`text-[11px] truncate transition-colors ${
-                                                                !log.isRead 
-                                                                    ? 'font-extrabold text-slate-900 group-hover:text-emerald-600' 
-                                                                    : 'font-semibold text-slate-600'
-                                                            }`}>
-                                                                {log.title}
-                                                            </h4>
-                                                            <div className="flex items-center gap-1 shrink-0">
+                                            filteredLogsList.slice(0, 20).map(log => {
+                                                const timeAgo = formatTimeAgo(log.createdAt);
+                                                return (
+                                                    <div 
+                                                        key={log._id}
+                                                        onClick={() => handleNotificationClick(log)}
+                                                        className={`p-2.5 transition-colors flex items-start gap-2.5 cursor-pointer ${
+                                                            !log.isRead 
+                                                                ? 'bg-emerald-50/40 hover:bg-emerald-50/70' 
+                                                                : 'bg-white hover:bg-slate-50'
+                                                        }`}
+                                                    >
+                                                        {getLogIcon(log.type)}
+
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-1.5 flex-wrap">
                                                                 {!log.isRead && (
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" title="Unread"></span>
+                                                                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" title="Unread"></span>
                                                                 )}
-                                                                <span className="text-[9px] font-bold text-slate-400">
-                                                                    {formatTimeAgo(log.createdAt)}
-                                                                </span>
+                                                                <h4 className={`text-xs ${
+                                                                    !log.isRead ? 'font-extrabold text-slate-900' : 'font-bold text-slate-700'
+                                                                }`}>
+                                                                    {log.title}
+                                                                </h4>
+                                                                <span className="text-[10px] font-medium text-slate-400">· {timeAgo}</span>
                                                             </div>
+
+                                                            <p className={`text-xs mt-0.5 leading-snug truncate ${
+                                                                !log.isRead ? 'font-semibold text-slate-800' : 'font-normal text-slate-500'
+                                                            }`}>
+                                                                {log.description}
+                                                            </p>
                                                         </div>
-                                                        <p className={`text-[10px] leading-snug mt-0.5 line-clamp-2 ${
-                                                            !log.isRead ? 'font-semibold text-slate-700' : 'font-medium text-slate-400'
-                                                        }`}>
-                                                            {log.description}
-                                                        </p>
                                                     </div>
-                                                </div>
-                                            ))
+                                                );
+                                            })
                                         )}
                                     </div>
 
@@ -614,37 +600,45 @@ function DashboardLayout() {
                                     <p className="text-xs text-slate-400 mt-1">Logs automatically clear 30 days after creation.</p>
                                 </div>
                             ) : (
-                                modalFilteredLogs.map(log => (
-                                    <div 
-                                        key={log._id}
-                                        onClick={() => handleNotificationClick(log)}
-                                        className={`p-3.5 rounded-xl transition-all flex items-start gap-3.5 cursor-pointer group border-l-4 ${
-                                            !log.isRead 
-                                                ? 'bg-emerald-50/60 border-emerald-500 shadow-2xs' 
-                                                : 'bg-white border-slate-100 hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        {getLogIcon(log.type)}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <h4 className="text-xs font-extrabold text-slate-900 group-hover:text-emerald-600 transition-colors">
-                                                    {log.title}
-                                                </h4>
-                                                <div className="flex items-center gap-2">
-                                                    {!log.isRead && (
-                                                        <span className="px-2 py-0.5 bg-emerald-500 text-white text-[9px] font-black rounded-full uppercase tracking-wider">Unread</span>
-                                                    )}
-                                                    <span className="text-[10px] font-bold text-slate-400">
-                                                        {new Date(log.createdAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                modalFilteredLogs.map(log => {
+                                    const timeAgo = formatTimeAgo(log.createdAt);
+                                    return (
+                                        <div 
+                                            key={log._id}
+                                            onClick={() => handleNotificationClick(log)}
+                                            className={`p-3 transition-colors flex items-start gap-3 cursor-pointer ${
+                                                !log.isRead 
+                                                    ? 'bg-emerald-50/40 hover:bg-emerald-50/70' 
+                                                    : 'bg-white hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            {getLogIcon(log.type)}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        {!log.isRead && (
+                                                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" title="Unread"></span>
+                                                        )}
+                                                        <h4 className={`text-xs ${
+                                                            !log.isRead ? 'font-extrabold text-slate-900' : 'font-bold text-slate-700'
+                                                        }`}>
+                                                            {log.title}
+                                                        </h4>
+                                                        <span className="text-[10px] font-medium text-slate-400">· {timeAgo}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                                                        {new Date(log.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                                                     </span>
                                                 </div>
+                                                <p className={`text-xs mt-0.5 leading-snug ${
+                                                    !log.isRead ? 'font-semibold text-slate-800' : 'font-normal text-slate-500'
+                                                }`}>
+                                                    {log.description}
+                                                </p>
                                             </div>
-                                            <p className="text-xs font-medium text-slate-600 mt-1">
-                                                {log.description}
-                                            </p>
                                         </div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
 
