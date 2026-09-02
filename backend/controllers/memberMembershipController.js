@@ -60,8 +60,10 @@ exports.assignMembership = async (req, res) => {
             }
         }
 
-        // Calculate pricing
-        const originalPrice = plan.price;
+        // Calculate pricing (Flexible fee support)
+        const originalPrice = (req.body.originalPrice !== undefined && req.body.originalPrice !== null && req.body.originalPrice !== '')
+            ? Number(req.body.originalPrice)
+            : plan.price;
         const discountAmount = Number(discount) || 0;
         const finalPrice = Math.max(0, originalPrice - discountAmount);
         const paid = Number(amountPaid) || 0;
@@ -204,7 +206,9 @@ exports.updateAssignedMembership = async (req, res) => {
         const start = new Date(planStartDate);
         const end = planEndDate ? new Date(planEndDate) : new Date(start);
 
-        const originalPrice = plan.price;
+        const originalPrice = (req.body.originalPrice !== undefined && req.body.originalPrice !== null && req.body.originalPrice !== '')
+            ? Number(req.body.originalPrice)
+            : plan.price;
         const discountAmount = Number(discount) || 0;
         const finalPrice = Math.max(0, originalPrice - discountAmount);
         

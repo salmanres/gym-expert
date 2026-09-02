@@ -154,6 +154,9 @@ function Leads() {
                 followUpTime: lead.followUpTime || '',
                 trialDate: toInputDateFormat(lead.trialDate),
                 trialEndDate: toInputDateFormat(lead.trialEndDate),
+                trialFeeType: lead.trialFeeType || 'Unpaid',
+                trialFee: lead.trialFee ?? '',
+                trialPaymentStatus: lead.trialPaymentStatus || 'Unpaid',
                 lostReason: lead.lostReason || '',
                 selectedOffer: matchedOfferId,
                 offerAmount: lead.offerAmount || '',
@@ -360,16 +363,26 @@ function Leads() {
                         const endDate = lead.trialEndDate ? new Date(lead.trialEndDate) : new Date(lead.trialDate);
                         const endStr = endDate.toISOString().split('T')[0];
                         const isExpired = endStr < todayStr;
+                        const isPaid = lead.trialFeeType === 'Paid';
 
                         return (
-                            <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${
-                                isExpired 
-                                    ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                                    : 'bg-purple-50 text-purple-700 border-purple-200'
-                            }`}>
-                                {isExpired ? 'Trial Ended: ' : 'Trial: '}
-                                {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} 
-                                {lead.trialEndDate && lead.trialEndDate !== lead.trialDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
+                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${
+                                    isExpired 
+                                        ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                        : 'bg-purple-50 text-purple-700 border-purple-200'
+                                }`}>
+                                    {isExpired ? 'Trial Ended: ' : 'Trial: '}
+                                    {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} 
+                                    {lead.trialEndDate && lead.trialEndDate !== lead.trialDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
+                                </div>
+                                <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase border ${
+                                    isPaid 
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}>
+                                    {isPaid ? `Paid (₹${lead.trialFee || 0} • ${lead.trialPaymentStatus || 'Paid'})` : 'Free Trial'}
+                                </div>
                             </div>
                         );
                     })()}
@@ -390,6 +403,9 @@ function Leads() {
             <td className="py-3 px-4">
                 <div className="flex flex-col gap-1 text-[10px] text-slate-600 font-medium">
                     <div className="flex items-center gap-1"><span className="text-slate-400">Source:</span> <span className="font-bold text-slate-700">{lead.source || 'Walk-in'}</span></div>
+                    {lead.referredBy && (
+                        <div className="flex items-center gap-1"><span className="text-slate-400">Ref By:</span> <span className="font-bold text-indigo-600">{lead.referredBy}</span></div>
+                    )}
                     <div className="flex items-center gap-1"><span className="text-slate-400">Plan/For:</span> <span className="font-extrabold text-indigo-600">{lead.inquiryFor || 'General'}</span></div>
                     {lead.offerDetails && (
                         <div className="flex items-center gap-1"><span className="text-slate-400">Offer:</span> <span className="font-bold text-emerald-600">{lead.offerDetails} {lead.offerAmount ? `(₹${lead.offerAmount})` : ''}</span></div>
@@ -747,6 +763,12 @@ function Leads() {
                                             <span className="text-slate-400 font-medium">Source Channel:</span>
                                             <span className="font-bold text-slate-800">{viewLead.source || 'Walk-in'}</span>
                                         </div>
+                                        {viewLead.referredBy && (
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-400 font-medium">Referred By:</span>
+                                                <span className="font-bold text-indigo-600">{viewLead.referredBy}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between">
                                             <span className="text-slate-400 font-medium">Attended By:</span>
                                             <span className="font-bold text-slate-800">{viewLead.attendedBy || 'N/A'}</span>
@@ -783,15 +805,23 @@ function Leads() {
                                             const todayStr = toInputDateFormat(new Date());
                                             const endStr = toInputDateFormat(viewLead.trialEndDate || viewLead.trialDate);
                                             const isExpired = endStr < todayStr;
+                                            const isPaid = viewLead.trialFeeType === 'Paid';
 
                                             return (
                                                 <div className={`p-3 rounded-lg border ${
                                                     isExpired ? 'bg-rose-50/60 border-rose-200' : 'bg-teal-50/60 border-teal-100'
                                                 }`}>
-                                                    <span className={`text-[10px] font-bold uppercase ${isExpired ? 'text-rose-600' : 'text-teal-600'}`}>
-                                                        {isExpired ? 'Trial Expired' : 'Trial Period'}
-                                                    </span>
-                                                    <p className="text-xs font-black text-slate-800 mt-0.5">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className={`text-[10px] font-bold uppercase ${isExpired ? 'text-rose-600' : 'text-teal-600'}`}>
+                                                            {isExpired ? 'Trial Expired' : 'Trial Period'}
+                                                        </span>
+                                                        <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded border ${
+                                                            isPaid ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-200'
+                                                        }`}>
+                                                            {isPaid ? `Paid Trial (₹${viewLead.trialFee || 0} - ${viewLead.trialPaymentStatus || 'Paid'})` : 'Free / Unpaid Trial'}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs font-black text-slate-800 mt-1">
                                                         {new Date(viewLead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
                                                         {viewLead.trialEndDate ? ` to ${new Date(viewLead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
                                                     </p>
@@ -920,26 +950,69 @@ function Leads() {
                                 )}
 
                                 {['Trial', 'Converted'].includes(statusFormData.status) && (
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="flex flex-col gap-1.5">
-                                            <label className="text-xs font-bold text-slate-700">Trial Start Date</label>
-                                            <input 
-                                                type="date" 
-                                                value={statusFormData.trialDate}
-                                                onChange={(e) => setStatusFormData({...statusFormData, trialDate: e.target.value})}
-                                                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                            />
+                                    <div className="flex flex-col gap-3">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="flex flex-col gap-1.5">
+                                                <label className="text-xs font-bold text-slate-700">Trial Start Date</label>
+                                                <input 
+                                                    type="date" 
+                                                    value={statusFormData.trialDate}
+                                                    onChange={(e) => setStatusFormData({...statusFormData, trialDate: e.target.value})}
+                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1.5">
+                                                <label className="text-xs font-bold text-slate-700">Trial End Date</label>
+                                                <input 
+                                                    type="date" 
+                                                    min={statusFormData.trialDate}
+                                                    value={statusFormData.trialEndDate}
+                                                    onChange={(e) => setStatusFormData({...statusFormData, trialEndDate: e.target.value})}
+                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="flex flex-col gap-1.5">
-                                            <label className="text-xs font-bold text-slate-700">Trial End Date</label>
-                                            <input 
-                                                type="date" 
-                                                min={statusFormData.trialDate}
-                                                value={statusFormData.trialEndDate}
-                                                onChange={(e) => setStatusFormData({...statusFormData, trialEndDate: e.target.value})}
-                                                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                            />
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="flex flex-col gap-1.5">
+                                                <label className="text-xs font-bold text-slate-700">Trial Type</label>
+                                                <select 
+                                                    value={statusFormData.trialFeeType || 'Unpaid'}
+                                                    onChange={(e) => setStatusFormData({...statusFormData, trialFeeType: e.target.value})}
+                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                                >
+                                                    <option value="Unpaid">Unpaid / Free Trial</option>
+                                                    <option value="Paid">Paid Trial</option>
+                                                </select>
+                                            </div>
+                                            {statusFormData.trialFeeType === 'Paid' && (
+                                                <div className="flex flex-col gap-1.5">
+                                                    <label className="text-xs font-bold text-slate-700">Trial Fee (₹)</label>
+                                                    <input 
+                                                        type="number"
+                                                        placeholder="e.g. 500"
+                                                        value={statusFormData.trialFee}
+                                                        onChange={(e) => setStatusFormData({...statusFormData, trialFee: e.target.value})}
+                                                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
+
+                                        {statusFormData.trialFeeType === 'Paid' && (
+                                            <div className="flex flex-col gap-1.5">
+                                                <label className="text-xs font-bold text-slate-700">Trial Payment Status</label>
+                                                <select 
+                                                    value={statusFormData.trialPaymentStatus || 'Paid'}
+                                                    onChange={(e) => setStatusFormData({...statusFormData, trialPaymentStatus: e.target.value})}
+                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                                >
+                                                    <option value="Paid">Paid</option>
+                                                    <option value="Pending">Pending</option>
+                                                    <option value="Unpaid">Unpaid</option>
+                                                </select>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 

@@ -35,6 +35,7 @@ export default function AssignMembershipForm() {
         planStartDate: new Date().toISOString().split('T')[0],
         planEndDate: '',
         totalSessions: '',
+        originalPrice: '',
         discount: 0,
         amountPaid: 0,
         paymentMode: 'Cash',
@@ -73,6 +74,7 @@ export default function AssignMembershipForm() {
                             planStartDate: new Date(activeMem.startDate).toISOString().split('T')[0],
                             planEndDate: new Date(activeMem.endDate).toISOString().split('T')[0],
                             totalSessions: activeMem.totalSessions || '',
+                            originalPrice: activeMem.originalPrice !== undefined ? activeMem.originalPrice : '',
                             discount: activeMem.discount || 0,
                             amountPaid: 0,
                             paymentMode: 'Cash',
@@ -103,7 +105,9 @@ export default function AssignMembershipForm() {
     // Selected plan and member objects
     const selectedMember = members.find(m => m._id === formData.memberId);
     const selectedPlan = memberships.find(p => p._id === formData.membershipPlanId);
-    const planPrice = selectedPlan ? (selectedPlan.price || 0) : 0;
+    const planPrice = formData.originalPrice !== '' && formData.originalPrice !== null && formData.originalPrice !== undefined
+        ? Number(formData.originalPrice)
+        : (selectedPlan ? (selectedPlan.price || 0) : 0);
     const discountAmount = Number(formData.discount) || 0;
     const netPayable = Math.max(0, planPrice - discountAmount);
 
@@ -136,7 +140,9 @@ export default function AssignMembershipForm() {
 
             if (maxEndDate) {
                 const maxEndDateStr = maxEndDate.toISOString().split('T')[0];
-                const currentPlanPrice = plan ? (plan.price || 0) : 0;
+                const currentPlanPrice = formData.originalPrice !== '' && formData.originalPrice !== null && formData.originalPrice !== undefined
+                    ? Number(formData.originalPrice)
+                    : (plan ? (plan.price || 0) : 0);
                 const net = Math.max(0, currentPlanPrice - discountAmount);
 
                 setFormData(prev => ({ 
@@ -170,6 +176,7 @@ export default function AssignMembershipForm() {
                     if (plan) {
                         const price = plan.price || 0;
                         const disc = Number(prev.discount) || 0;
+                        updated.originalPrice = price;
                         updated.amountPaid = Math.max(0, price - disc);
                     }
                 }
@@ -324,6 +331,7 @@ export default function AssignMembershipForm() {
                 planStartDate: formData.planStartDate,
                 planEndDate: formData.planEndDate,
                 totalSessions: formData.totalSessions,
+                originalPrice: formData.originalPrice !== '' ? Number(formData.originalPrice) : undefined,
                 amountPaid: paid,
                 paymentMode: formData.paymentMode || 'Cash',
                 transactionId: formData.transactionId || undefined,
@@ -530,8 +538,28 @@ export default function AssignMembershipForm() {
                             {/* Dynamic Price Summary Header Cards */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200/80">
                                 <div className="bg-white p-3 rounded-lg border border-slate-200">
-                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Plan Price</p>
-                                    <p className="text-lg font-black text-slate-900 mt-0.5">₹{planPrice.toLocaleString()}</p>
+                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Plan Fee (₹)</p>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                        <input 
+                                            type="number"
+                                            name="originalPrice"
+                                            value={formData.originalPrice}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setFormData(prev => {
+                                                    const priceNum = val !== '' ? Number(val) : (selectedPlan ? selectedPlan.price || 0 : 0);
+                                                    const disc = Number(prev.discount) || 0;
+                                                    return {
+                                                        ...prev,
+                                                        originalPrice: val,
+                                                        amountPaid: editMode ? prev.amountPaid : Math.max(0, priceNum - disc)
+                                                    };
+                                                });
+                                            }}
+                                            className="w-full text-sm font-bold text-slate-900 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md focus:outline-none focus:border-emerald-500"
+                                            placeholder={selectedPlan ? String(selectedPlan.price || 0) : "0"}
+                                        />
+                                    </div>
                                 </div>
                                 <div className="bg-white p-3 rounded-lg border border-slate-200">
                                     <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Discount (₹)</p>

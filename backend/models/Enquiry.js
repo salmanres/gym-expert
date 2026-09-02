@@ -23,6 +23,9 @@ const enquirySchema = new mongoose.Schema({
     followUpTime: { type: String },
     trialDate: { type: Date },
     trialEndDate: { type: Date },
+    trialFeeType: { type: String, enum: ['Unpaid', 'Paid'], default: 'Unpaid' },
+    trialFee: { type: Number, default: 0 },
+    trialPaymentStatus: { type: String, enum: ['Paid', 'Unpaid', 'Pending'], default: 'Unpaid' },
     status: { 
         type: String, 
         enum: ['Pending', 'Lead', 'Contacted', 'Trial', 'Negotiation', 'Converted', 'Lost'], 
@@ -31,6 +34,7 @@ const enquirySchema = new mongoose.Schema({
     attendedBy: { type: String },
     convertibility: { type: String, enum: ['Warm', 'Hot', 'Cold'] },
     source: { type: String },
+    referredBy: { type: String },
     inquiryFor: { type: String },
     response: { type: String },
     offerAmount: { type: Number },

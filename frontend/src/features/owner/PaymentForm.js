@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { toast } from 'react-toastify';
+import { toast } from '../../utils/toast';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import FormSection from '../../components/form/FormSection';

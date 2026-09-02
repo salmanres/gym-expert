@@ -7,7 +7,7 @@ import Loader from '../../components/page/Loader';
 import Tabs from '../../components/page/Tabs';
 import { FiCheckCircle, FiXCircle, FiClock, FiUserCheck, FiPhone, FiX } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
-import { toast } from 'react-toastify';
+import { toast } from '../../utils/toast';
 
 export default function AttendanceDashboard() {
     const [sheet, setSheet] = useState([]);

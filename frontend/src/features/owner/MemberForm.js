@@ -10,7 +10,7 @@ import Button from '../../components/form/Button';
 import Loader from '../../components/page/Loader';
 import { FiUser, FiMapPin, FiActivity, FiMessageSquare, FiCamera, FiUpload, FiX, FiTrash2, FiGift, FiAward, FiCheckCircle, FiCalendar, FiCreditCard, FiTag } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
-import { toast } from 'react-toastify';
+import { toast } from '../../utils/toast';
 import Webcam from 'react-webcam';
 
 export default function MemberForm() {
@@ -138,6 +138,7 @@ export default function MemberForm() {
                 email: lead.email || '',
                 address: lead.address || '',
                 source: lead.source || '--Select--',
+                referredBy: lead.referredBy || '',
                 interest: lead.inquiryFor || '--Select--',
                 followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '',
                 followUpTime: lead.followUpTime || '',

@@ -32,6 +32,7 @@ export default function FeeReceipt() {
                     memberData.finalAmount = activePlan.finalPrice;
                     memberData.discount = activePlan.discount;
                     memberData.paidUntilDate = activePlan.paidUntilDate;
+                    memberData.originalPrice = activePlan.originalPrice;
                 }
                 setMember(memberData);
                 setLoading(false);
@@ -56,7 +57,7 @@ export default function FeeReceipt() {
     
     // For calculation display
     const planName = member.planName || member.membershipPlan?.name || "Membership Plan";
-    const basePrice = member.membershipPlan?.price || 0;
+    const basePrice = member.originalPrice || member.membershipPlan?.price || 0;
     const discount = member.discount || 0;
     const amountPaid = member.amountPaid || 0;
     const finalAmount = member.finalAmount || (basePrice - discount);

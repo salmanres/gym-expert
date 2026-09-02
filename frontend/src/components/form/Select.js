@@ -10,6 +10,13 @@ export default function Select({ label, required, error, options = [], children,
         return { value: val, label: displayLabel };
     });
 
+    const formatChildLabel = (c) => {
+        if (Array.isArray(c)) {
+            return c.map(item => (typeof item === 'object' ? '' : item)).join('').trim();
+        }
+        return c;
+    };
+
     // Parse options from `children` (e.g. <option value="...">...</option> or <optgroup label="...">...</optgroup>)
     if (children) {
         React.Children.forEach(children, (child) => {
@@ -19,7 +26,7 @@ export default function Select({ label, required, error, options = [], children,
                 if (child.props.value !== '') { // Skip the default empty option if present
                     parsedOptions.push({
                         value: child.props.value,
-                        label: child.props.children
+                        label: formatChildLabel(child.props.children)
                     });
                 }
             } else if (child.type === 'optgroup') {
@@ -28,7 +35,7 @@ export default function Select({ label, required, error, options = [], children,
                     if (React.isValidElement(subChild) && subChild.type === 'option' && subChild.props.value !== '') {
                         groupOptions.push({
                             value: subChild.props.value,
-                            label: subChild.props.children
+                            label: formatChildLabel(subChild.props.children)
                         });
                     }
                 });
@@ -108,7 +115,7 @@ export default function Select({ label, required, error, options = [], children,
                 return item;
             }
         }
-        return null;
+        return { value: val, label: val };
     };
 
     const selectedOption = findSelectedOption(parsedOptions, value);

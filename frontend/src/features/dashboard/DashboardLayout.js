@@ -6,7 +6,7 @@ import {
     FiBox, FiDollarSign, FiBarChart2, FiSettings, FiCheckSquare, FiMenu, FiX, FiExternalLink, FiSearch
 } from 'react-icons/fi';
 import { CgGym } from 'react-icons/cg';
-import { toast } from 'react-toastify';
+import { toast } from '../../utils/toast';
 import apiClient from '../../api/apiClient';
 import { io } from 'socket.io-client';
 

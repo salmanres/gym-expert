@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { FiUser, FiMapPin, FiMessageSquare, FiEdit2, FiTrash2, FiPlus } from 'react-icons/fi';
-import { toast } from 'react-toastify';
+import { toast } from '../../utils/toast';
 import apiClient from '../../api/apiClient';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
@@ -37,11 +37,14 @@ export default function LeadForm() {
     const [submitting, setSubmitting] = useState(false);
     const [gymSettings, setGymSettings] = useState(null);
     const [membershipPlans, setMembershipPlans] = useState([]);
+    const [existingMembers, setExistingMembers] = useState([]);
+    const [staffMembers, setStaffMembers] = useState([]);
     const [logNewFollowUp, setLogNewFollowUp] = useState(false);
     
     const [formData, setFormData] = useState({
         firstName: '', lastName: '', gender: 'Male', dob: '', contactNumber: '', altContact: '', email: '',
-        address: '', source: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
+        address: '', source: '', referredBy: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
+        trialFeeType: 'Unpaid', trialFee: '', trialPaymentStatus: 'Unpaid',
         convertibility: 'Warm', status: 'Pending', attendedBy: 'Admin',
         response: '', offerAmount: '', offerDetails: '', selectedOffer: '', lostReason: '', sendTextAndEmail: false, sendWhatsApp: false,
         followUpHistory: []
@@ -75,12 +78,16 @@ export default function LeadForm() {
     useEffect(() => {
         const fetchGymAndPlans = async () => {
             try {
-                const [gymRes, plansRes] = await Promise.all([
+                const [gymRes, plansRes, membersRes, staffRes] = await Promise.all([
                     apiClient.get('/gyms/my-gym').catch(() => ({ data: null })),
-                    apiClient.get('/membership-plans').catch(() => ({ data: [] }))
+                    apiClient.get('/membership-plans').catch(() => ({ data: [] })),
+                    apiClient.get('/members').catch(() => ({ data: [] })),
+                    apiClient.get('/staff').catch(() => ({ data: [] }))
                 ]);
                 if (gymRes?.data) setGymSettings(gymRes.data);
                 if (plansRes?.data) setMembershipPlans(plansRes.data);
+                if (membersRes?.data) setExistingMembers(membersRes.data || []);
+                if (staffRes?.data) setStaffMembers(staffRes.data || []);
 
                 if (isEdit) {
                     let leadData = location.state?.lead;
@@ -97,6 +104,10 @@ export default function LeadForm() {
                             followUpDate: toInputDateFormat(leadData.followUpDate),
                             trialDate: toInputDateFormat(leadData.trialDate),
                             trialEndDate: toInputDateFormat(leadData.trialEndDate),
+                            trialFeeType: leadData.trialFeeType || 'Unpaid',
+                            trialFee: leadData.trialFee ?? '',
+                            trialPaymentStatus: leadData.trialPaymentStatus || 'Unpaid',
+                            referredBy: leadData.referredBy || '',
                             selectedOffer: matchedOfferId, 
                             sendTextAndEmail: false, 
                             sendWhatsApp: false,
@@ -325,13 +336,57 @@ export default function LeadForm() {
                                 <option value="Reference">Reference</option>
                                 <option value="Just Dial">Just Dial</option>
                             </Select>
+                            {formData.source === 'Reference' && (
+                                <Select
+                                    label="Reference By (Member / Staff)"
+                                    name="referredBy"
+                                    value={formData.referredBy || ''}
+                                    onChange={handleChange}
+                                    placeholder="-- Select Member or Staff --"
+                                    error={errors.referredBy}
+                                >
+                                    {existingMembers && existingMembers.length > 0 && (
+                                        <optgroup label="Existing Members">
+                                            {existingMembers.map(m => {
+                                                const name = `${m.firstName || ''} ${m.lastName || ''}`.trim() || 'Gym Member';
+                                                const code = m.memberId ? `[${m.memberId}] ` : '';
+                                                const phone = m.contactNumber ? `(${m.contactNumber})` : '';
+                                                const displayVal = `${name} ${phone}`.trim();
+                                                return (
+                                                    <option key={m._id} value={displayVal}>
+                                                        {code}{displayVal} (Member)
+                                                    </option>
+                                                );
+                                            })}
+                                        </optgroup>
+                                    )}
+                                    {staffMembers && staffMembers.length > 0 && (
+                                        <optgroup label="Gym Staff & Trainers">
+                                            {staffMembers.map(s => {
+                                                const role = s.role === 'STAFF' ? 'Staff' : s.role === 'TRAINER' ? 'Trainer' : (s.role || 'Staff');
+                                                const displayVal = `${s.name || 'Staff'} (${role})`;
+                                                return (
+                                                    <option key={s._id} value={displayVal}>
+                                                        {displayVal}
+                                                    </option>
+                                                );
+                                            })}
+                                        </optgroup>
+                                    )}
+                                </Select>
+                            )}
                             <Select label="Enquiry For / Target Plan" name="inquiryFor" value={formData.inquiryFor || ''} onChange={handleChange} error={errors.inquiryFor}>
                                 <option value="">-- Select Target Plan or Service --</option>
                                 {membershipPlans && membershipPlans.length > 0 && (
                                     <optgroup label="Gym Membership Plans">
-                                        {membershipPlans.filter(p => p.isActive !== false).map(plan => (
-                                            <option key={plan._id} value={plan.planName}>{plan.planName} (₹{plan.price})</option>
-                                        ))}
+                                        {membershipPlans.filter(p => p.isActive !== false).map(plan => {
+                                            const title = plan.name || plan.planName || 'Plan';
+                                            return (
+                                                <option key={plan._id} value={title}>
+                                                    {`${title} (₹${plan.price})`}
+                                                </option>
+                                            );
+                                        })}
                                     </optgroup>
                                 )}
                                 <optgroup label="General Services / Categories">
@@ -346,6 +401,13 @@ export default function LeadForm() {
                                 <>
                                     <Input type="date" label="Trial Start Date" name="trialDate" value={formData.trialDate || ''} onChange={handleChange} error={errors.trialDate} inputRef={trialDateRef} />
                                     <Input type="date" label="Trial End Date" name="trialEndDate" value={formData.trialEndDate || ''} onChange={handleChange} min={formData.trialDate || ''} error={errors.trialEndDate} />
+                                    <Select label="Trial Type" name="trialFeeType" value={formData.trialFeeType || 'Unpaid'} onChange={handleChange} options={['Unpaid', 'Paid']} error={errors.trialFeeType} />
+                                    {formData.trialFeeType === 'Paid' && (
+                                        <>
+                                            <Input type="number" label="Trial Fee (₹)" name="trialFee" value={formData.trialFee || ''} onChange={handleChange} placeholder="e.g. 500" error={errors.trialFee} />
+                                            <Select label="Trial Payment Status" name="trialPaymentStatus" value={formData.trialPaymentStatus || 'Paid'} onChange={handleChange} options={['Paid', 'Pending', 'Unpaid']} error={errors.trialPaymentStatus} />
+                                        </>
+                                    )}
                                 </>
                             )}
                             <Select label="Lead Priority" name="convertibility" value={formData.convertibility || ''} onChange={handleChange} required options={['Warm', 'Hot', 'Cold']} error={errors.convertibility} />
