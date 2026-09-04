@@ -105,6 +105,19 @@ exports.updateEnquiry = async (req, res) => {
     }
 };
 
+exports.getEnquiryById = async (req, res) => {
+    try {
+        const enquiry = await Enquiry.findOne({ _id: req.params.id, gymId: req.user.gymId });
+        if (!enquiry) {
+            return res.status(404).json({ message: 'Enquiry not found.' });
+        }
+        res.json(enquiry);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error fetching enquiry.' });
+    }
+};
+
 exports.deleteEnquiry = async (req, res) => {
     try {
         const enquiry = await Enquiry.findOneAndDelete({ _id: req.params.id, gymId: req.user.gymId });

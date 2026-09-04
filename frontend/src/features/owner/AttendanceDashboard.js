@@ -57,12 +57,40 @@ export default function AttendanceDashboard() {
         }
     };
 
-    const columns = [
+    const calculateWorkHours = (checkInTime, checkOutTime) => {
+        if (!checkInTime) return '-';
+        
+        const end = checkOutTime ? new Date(checkOutTime) : new Date();
+        const start = new Date(checkInTime);
+        
+        const diffMins = Math.max(0, Math.floor((end - start) / (1000 * 60)));
+        const hrs = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        
+        if (checkOutTime) {
+            return `${hrs}h ${mins}m`;
+        } else {
+            return `${hrs}h ${mins}m (Active)`;
+        }
+    };
+
+    const columns = activeTab === 'Staff' ? [
+        { label: 'Person' },
+        { label: 'Contact' },
+        { label: 'Shift Hours' },
+        { label: 'Status' },
+        { label: 'Check In' },
+        { label: 'Check Out' },
+        { label: 'Working Hours' },
+        { label: 'Late Deduction' },
+        { label: 'Action', className: 'text-center' }
+    ] : [
         { label: 'Person' },
         { label: 'Contact' },
         { label: 'Status' },
         { label: 'Check In' },
         { label: 'Check Out' },
+        { label: 'Workout Hours' },
         { label: 'Action', className: 'text-center' }
     ];
 
@@ -79,6 +107,9 @@ export default function AttendanceDashboard() {
         } else if (currentStatus === 'Unmarked' && isPastDate) {
             currentStatus = 'Absent';
         }
+
+        const isStaffTab = activeTab === 'Staff';
+        const workHoursStr = calculateWorkHours(attendance?.checkInTime, attendance?.checkOutTime);
         
         return (
             <tr key={user._id} className="hover:bg-slate-50 transition-colors group">
@@ -91,7 +122,12 @@ export default function AttendanceDashboard() {
                                 {user.name.charAt(0).toUpperCase()}
                             </div>
                         )}
-                        <p className="font-bold text-slate-800 text-sm">{user.name}</p>
+                        <div>
+                            <p className="font-bold text-slate-800 text-sm">{user.name}</p>
+                            {isStaffTab && user.role && (
+                                <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wide">{user.role}</p>
+                            )}
+                        </div>
                     </div>
                 </td>
                 <td className="py-3 px-4">
@@ -99,6 +135,17 @@ export default function AttendanceDashboard() {
                         <FiPhone className="text-emerald-500 shrink-0" /> {user.phone || 'N/A'}
                     </div>
                 </td>
+                {isStaffTab && (
+                    <td className="py-3 px-4">
+                        {user.shiftStart && user.shiftEnd ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 text-slate-700 font-bold text-xs rounded-lg border border-slate-200">
+                                <FiClock className="text-slate-500" /> {user.shiftStart} - {user.shiftEnd}
+                            </span>
+                        ) : (
+                            <span className="text-xs text-slate-400 font-medium">Not set</span>
+                        )}
+                    </td>
+                )}
                 <td className="py-3 px-4">
                     {currentStatus === 'Present' && <span className="inline-flex px-2 py-1 bg-emerald-50 text-emerald-700 border-emerald-200 rounded text-xs font-bold uppercase tracking-wide border">Present</span>}
                     {currentStatus === 'Absent' && <span className="inline-flex px-2 py-1 bg-rose-50 text-rose-700 border-rose-200 rounded text-xs font-bold uppercase tracking-wide border">Absent</span>}
@@ -121,6 +168,27 @@ export default function AttendanceDashboard() {
                          </span>
                     ) : '-'}
                 </td>
+                <td className="py-3 px-4">
+                    {attendance?.checkInTime ? (
+                        <span className={`inline-flex px-2 py-1 rounded text-xs font-extrabold ${attendance?.checkOutTime ? 'bg-slate-100 text-slate-700 border border-slate-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse'}`}>
+                            {workHoursStr}
+                        </span>
+                    ) : (
+                        <span className="text-xs text-slate-400 font-medium">-</span>
+                    )}
+                </td>
+                {isStaffTab && (
+                    <td className="py-3 px-4">
+                        {attendance?.lateMinutes > 0 ? (
+                            <div className="inline-flex flex-col bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg">
+                                <span className="text-[11px] font-bold text-rose-700">{attendance.lateMinutes} mins late</span>
+                                <span className="text-xs font-black text-rose-600">-₹{attendance.deductionAmount ? attendance.deductionAmount.toFixed(2) : '0.00'}</span>
+                            </div>
+                        ) : (
+                            <span className="text-xs text-slate-400 font-medium">No deduction</span>
+                        )}
+                    </td>
+                )}
                 <td className="py-3 px-4">
                     <div className="flex flex-wrap items-center justify-center gap-2">
                         {!(selectedDate > todayStr) && (

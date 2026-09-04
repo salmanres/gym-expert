@@ -9,6 +9,7 @@ import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import Loader from '../../components/page/Loader';
 import apiClient from '../../api/apiClient';
+import { toast } from 'react-toastify';
 
 export default function MemberProfilePage() {
     const { id } = useParams();
@@ -25,8 +26,17 @@ export default function MemberProfilePage() {
         : rawMember;
 
     const [referredMembers, setReferredMembers] = useState([]);
-    const [activeMembership, setActiveMembership] = useState(rawMember?.activeMembership || (rawMember?.membershipPlanId ? rawMember : null));
+    const [allMemberships, setAllMemberships] = useState([]);
     const [transactions, setTransactions] = useState([]);
+    const [collectModal, setCollectModal] = useState({
+        open: false,
+        membership: null,
+        amount: '',
+        paymentMode: 'Cash',
+        useWallet: false,
+        walletUsed: 0,
+        submitting: false
+    });
     
     const memberIdVal = member?._id || rawMember?._id || id;
 
@@ -46,6 +56,14 @@ export default function MemberProfilePage() {
         }
     }, [id, location.state]);
 
+    const fetchMembershipData = () => {
+        if (memberIdVal) {
+            apiClient.get(`/member-memberships/member/${memberIdVal}`)
+                .then(res => setAllMemberships(res.data || []))
+                .catch(err => console.error("Failed to fetch membership history", err));
+        }
+    };
+
     useEffect(() => {
         if (memberIdVal) {
             apiClient.get('/members')
@@ -55,14 +73,7 @@ export default function MemberProfilePage() {
                 })
                 .catch(err => console.error("Failed to fetch referred members", err));
             
-            if (!activeMembership) {
-                apiClient.get('/member-memberships/latest')
-                    .then(res => {
-                        const m = (res.data || []).find(x => (x.memberId?._id || x.memberId) === memberIdVal);
-                        if (m) setActiveMembership(m);
-                    })
-                    .catch(err => console.error("Failed to fetch membership", err));
-            }
+            fetchMembershipData();
             
             apiClient.get('/members/transactions/all')
                 .then(res => {
@@ -71,7 +82,61 @@ export default function MemberProfilePage() {
                 })
                 .catch(err => console.error("Failed to fetch transactions", err));
         }
-    }, [memberIdVal, activeMembership]);
+    }, [memberIdVal]);
+
+    const handleLogPTSession = async (membershipId) => {
+        try {
+            const res = await apiClient.post(`/member-memberships/${membershipId}/use-session`, { notes: 'PT Session completed with trainer' });
+            toast.success(res.data.message || "PT Session logged successfully!");
+            fetchMembershipData();
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to log PT session");
+        }
+    };
+
+    const handleToggleFreeze = async (membershipId, currentStatus) => {
+        const action = currentStatus === 'Frozen' ? 'Unfreeze' : 'Freeze';
+        const reason = window.prompt(`Enter reason to ${action} membership:`, currentStatus === 'Frozen' ? 'Resuming workouts' : 'Medical leave / Travel');
+        if (reason === null) return; // User cancelled
+
+        try {
+            const res = await apiClient.post(`/member-memberships/${membershipId}/freeze`, { reason });
+            toast.success(res.data.message || `Membership ${action}d successfully!`);
+            fetchMembershipData();
+        } catch (err) {
+            toast.error(err.response?.data?.message || `Failed to ${action} membership`);
+        }
+    };
+
+    const handleSubmitCollectFee = async (e) => {
+        e.preventDefault();
+        if (!collectModal.membership) return;
+        const amt = Number(collectModal.amount) || 0;
+        const wal = collectModal.useWallet ? (Number(collectModal.walletUsed) || 0) : 0;
+        if (amt <= 0 && wal <= 0) {
+            toast.error("Please enter a valid payment amount");
+            return;
+        }
+
+        setCollectModal(prev => ({ ...prev, submitting: true }));
+        try {
+            const res = await apiClient.post(`/member-memberships/${collectModal.membership._id}/payment`, {
+                amountPaid: amt,
+                walletUsed: wal,
+                paymentMode: collectModal.paymentMode,
+                paymentDate: new Date()
+            });
+            toast.success(res.data?.message || "Payment recorded successfully!");
+            setCollectModal({ open: false, membership: null, amount: '', paymentMode: 'Cash', useWallet: false, walletUsed: 0, submitting: false });
+            fetchMembershipData();
+            if (id) {
+                apiClient.get(`/members/${id}`).then(r => setFetchedMember(r.data)).catch(console.error);
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to record payment");
+            setCollectModal(prev => ({ ...prev, submitting: false }));
+        }
+    };
 
     if (loadingMember) {
         return <Loader text="Loading member profile..." />;
@@ -119,6 +184,10 @@ export default function MemberProfilePage() {
 
     const today = new Date();
     today.setHours(0,0,0,0);
+
+    const activeMem = allMemberships.find(m => m.membershipStatus === 'Active' || (new Date(m.startDate) <= today && new Date(m.endDate) >= today));
+    const scheduledMembership = allMemberships.find(m => m.membershipStatus === 'Scheduled' || new Date(m.startDate) > today);
+    const activeMembership = activeMem || rawMember?.activeMembership || (rawMember?.membershipPlanId ? rawMember : null);
 
     const planEnd = activeMembership?.paidUntilDate ? new Date(activeMembership.paidUntilDate) : activeMembership?.endDate ? new Date(activeMembership.endDate) : (rawMember?.endDate ? new Date(rawMember.endDate) : null);
     const isPlanExpired = planEnd && planEnd < today;
@@ -378,71 +447,220 @@ export default function MemberProfilePage() {
                                         <FiShield size={18} />
                                     </div>
                                     <div>
-                                        <h3 className="font-extrabold text-slate-800 text-sm">Subscription & Membership</h3>
-                                        <p className="text-[11px] text-slate-400 font-medium">Current plan status and billing breakdown</p>
+                                        <h3 className="font-extrabold text-slate-800 text-sm">Active Subscriptions & Packages</h3>
+                                        <p className="text-[11px] text-slate-400 font-medium">All active memberships, PT packages and session trackers</p>
                                     </div>
                                 </div>
-
-                                {activeMembership && (
-                                    <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
-                                        activeMembership.paymentStatus === 'Paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
-                                    }`}>
-                                        Payment: {activeMembership.paymentStatus || 'Pending'}
-                                    </span>
-                                )}
                             </div>
 
-                            {activeMembership ? (
-                                <div className="space-y-4">
-                                    <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md">
-                                        <div>
-                                            <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Active Package</span>
-                                            <h4 className="text-xl font-black text-white mt-0.5">{planName}</h4>
-                                            <p className="text-xs text-indigo-200 mt-1 font-medium">
-                                                {activeMembership.startDate ? new Date(activeMembership.startDate).toLocaleDateString() : 'N/A'} to {planEnd ? planEnd.toLocaleDateString() : 'N/A'}
-                                            </p>
+                            {(() => {
+                                const activeList = allMemberships.filter(m => m.membershipStatus === 'Active' || m.membershipStatus === 'Frozen');
+                                const listToRender = activeList.length > 0 ? activeList : (activeMembership ? [activeMembership] : []);
+
+                                if (listToRender.length === 0) {
+                                    return (
+                                        <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-100">
+                                            <p className="text-xs text-slate-500 font-medium">No membership plan assigned yet.</p>
+                                            <button 
+                                                onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })}
+                                                className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-sm"
+                                            >
+                                                Assign First Plan
+                                            </button>
                                         </div>
-                                        {activeMembership.bonusDays > 0 && (
-                                            <span className="px-3 py-1 bg-amber-400 text-slate-900 rounded-lg text-xs font-black self-start sm:self-center shadow-sm">
-                                                +{activeMembership.bonusDays} Bonus Days Added
-                                            </span>
-                                        )}
+                                    );
+                                }
+
+                                return (
+                                    <div className="space-y-6">
+                                        {listToRender.map((m, idx) => {
+                                            const isFrozen = m.membershipStatus === 'Frozen';
+                                            const pNameRaw = String(m.membershipPlanId?.name || m.planName || '').toLowerCase();
+                                            const pTypeRaw = Array.isArray(m.membershipPlanId?.planType) 
+                                                ? m.membershipPlanId.planType.join(' ').toLowerCase()
+                                                : Array.isArray(m.planType) 
+                                                    ? m.planType.join(' ').toLowerCase() 
+                                                    : String(m.membershipPlanId?.planType || m.planType || '').toLowerCase();
+                                            const isExplicitPT = pTypeRaw.includes('personal training') || pTypeRaw.includes('pt') || pNameRaw.includes('personal training') || pNameRaw.includes('pt package');
+                                            const isPT = Boolean(m.isPTConversion) || isExplicitPT;
+                                            const pName = m.membershipPlanId?.name || m.planName || 'Active Package';
+                                            const mStart = m.startDate ? new Date(m.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+                                            const mEnd = m.endDate ? new Date(m.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+
+                                            return (
+                                                <div key={m._id || idx} className={`p-4 rounded-xl border transition-all ${isFrozen ? 'bg-cyan-50/60 border-cyan-200' : isPT ? 'bg-gradient-to-r from-slate-900 to-indigo-950 text-white border-indigo-900 shadow-md' : 'bg-slate-900 text-white border-slate-800 shadow-md'}`}>
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                        <div>
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className={`text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded ${isFrozen ? 'bg-cyan-200 text-cyan-900' : isPT ? 'bg-amber-400 text-slate-950' : 'bg-emerald-400 text-slate-950'}`}>
+                                                                    {isFrozen ? 'FROZEN / PAUSED' : isPT ? 'PERSONAL TRAINING' : 'GYM MEMBERSHIP'}
+                                                                </span>
+                                                                {m.trainerId?.name && (
+                                                                    <span className="text-[11px] font-bold text-indigo-300">
+                                                                        Trainer: {m.trainerId.name}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <h4 className={`text-xl font-black mt-1 ${isFrozen ? 'text-slate-800' : 'text-white'}`}>{pName}</h4>
+                                                            <p className={`text-xs mt-1 font-medium ${isFrozen ? 'text-slate-600' : 'text-slate-300'}`}>
+                                                                {mStart} to {mEnd} {m.bonusDays > 0 ? `(+${m.bonusDays} bonus days)` : ''}
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Freeze & Unfreeze Toggle Button */}
+                                                        <div className="flex items-center gap-2 self-start sm:self-center">
+                                                            <button 
+                                                                onClick={() => handleToggleFreeze(m._id, m.membershipStatus)}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
+                                                                    isFrozen 
+                                                                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                                                                        : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
+                                                                }`}
+                                                            >
+                                                                {isFrozen ? '▶️ Unfreeze & Extend' : '❄️ Freeze / Pause'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* PT SESSION TRACKER UI */}
+                                                    {isPT && (
+                                                        <div className={`mt-4 pt-4 border-t ${isFrozen ? 'border-cyan-200' : 'border-white/10'} space-y-2`}>
+                                                            <div className="flex items-center justify-between text-xs font-bold">
+                                                                <span className={isFrozen ? 'text-cyan-900' : 'text-indigo-200'}>
+                                                                    🏋️ PT Sessions Progress
+                                                                </span>
+                                                                <span className={isFrozen ? 'text-slate-800 font-extrabold' : 'text-amber-400 font-black'}>
+                                                                    {m.usedSessions || 0} / {m.totalSessions > 0 ? m.totalSessions : '∞'} Sessions Used
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Progress Bar */}
+                                                            {m.totalSessions > 0 && (
+                                                                <div className="w-full bg-slate-700/60 rounded-full h-2 overflow-hidden">
+                                                                    <div 
+                                                                        className="bg-amber-400 h-full transition-all duration-300"
+                                                                        style={{ width: `${Math.min(100, Math.round(((m.usedSessions || 0) / m.totalSessions) * 100))}%` }}
+                                                                    />
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex justify-end pt-1">
+                                                                <button
+                                                                    onClick={() => handleLogPTSession(m._id)}
+                                                                    className="px-3 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs rounded-lg shadow-sm flex items-center gap-1 transition-all active:scale-95"
+                                                                >
+                                                                    + Log Completed PT Session (+1)
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <div className={`grid grid-cols-3 gap-3 mt-4 pt-3 border-t ${isFrozen ? 'border-cyan-200 text-slate-800' : 'border-white/10 text-white'}`}>
+                                                        <div className="text-center">
+                                                            <p className="text-[10px] font-bold opacity-70 uppercase">Fee</p>
+                                                            <p className="text-xs sm:text-sm font-black">₹{m.finalPrice || m.originalPrice || 0}</p>
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="text-[10px] font-bold opacity-70 uppercase">Paid</p>
+                                                            <div className="flex flex-col items-center justify-center">
+                                                                <p className="text-xs sm:text-sm font-black text-emerald-400">₹{(m.totalCollected || m.paidAmount) > (m.paidAmount || 0) ? m.totalCollected : (m.paidAmount || 0)}</p>
+                                                                {(m.totalCollected || m.paidAmount) > (m.paidAmount || 0) && (
+                                                                    <p className="text-[9px] font-medium text-emerald-200/80 leading-tight mt-0.5 whitespace-nowrap">
+                                                                        Fee: ₹{m.paidAmount} | Wallet: ₹{Number((m.totalCollected - m.paidAmount).toFixed(2))}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="text-[10px] font-bold opacity-70 uppercase">Due</p>
+                                                            <p className="text-xs sm:text-sm font-black text-rose-400">₹{m.balanceAmount || 0}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        {/* SCHEDULED / UPCOMING MEMBERSHIP CARD */}
+                        {scheduledMembership && (
+                            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border border-indigo-200 p-6 shadow-sm space-y-4">
+                                <div className="flex items-center justify-between pb-3 border-b border-indigo-200/60">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs">
+                                            <FiCalendar size={18} />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-extrabold text-indigo-950 text-sm">Upcoming / Scheduled Plan</h3>
+                                            <p className="text-[11px] text-indigo-600 font-semibold">Future plan starting after current plan ends</p>
+                                        </div>
                                     </div>
 
-                                    {/* Pricing & Billing Grid */}
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-center">
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase">Total Fee</p>
-                                            <p className="text-sm sm:text-base font-black text-slate-800 mt-0.5">
-                                                ₹{activeMembership.finalPrice || activeMembership.totalAmount || activeMembership.originalPrice || 0}
-                                            </p>
+                                    <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-indigo-600 text-white shadow-xs">
+                                        Scheduled
+                                    </span>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="p-4 rounded-xl bg-indigo-900 text-white shadow-sm space-y-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                            <div>
+                                                <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Scheduled Package</span>
+                                                <h4 className="text-xl font-black text-white mt-0.5">{scheduledMembership.membershipPlanId?.name || scheduledMembership.planName}</h4>
+                                                <p className="text-xs text-indigo-200 mt-1 font-medium">
+                                                    Starts: <strong>{new Date(scheduledMembership.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong> to {new Date(scheduledMembership.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </p>
+                                                {scheduledMembership.paymentStatus === 'Partial' && scheduledMembership.paidUntilDate && (
+                                                    <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-500/40 px-2 py-0.5 rounded inline-block mt-1.5">
+                                                        Paid till {new Date(scheduledMembership.paidUntilDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} (₹{scheduledMembership.paidAmount || 0} / ₹{scheduledMembership.finalPrice || 0})
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-100 text-center">
-                                            <p className="text-[10px] font-bold text-emerald-600 uppercase">Amount Paid</p>
-                                            <p className="text-sm sm:text-base font-black text-emerald-700 mt-0.5">
-                                                ₹{activeMembership.paidAmount || 0}
-                                            </p>
+
+                                        <div className="grid grid-cols-3 gap-3 pt-3 border-t border-indigo-800 text-white">
+                                            <div className="text-center">
+                                                <p className="text-[10px] font-bold text-indigo-300 uppercase">Fee</p>
+                                                <p className="text-xs sm:text-sm font-black">₹{scheduledMembership.finalPrice || scheduledMembership.originalPrice || 0}</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-[10px] font-bold text-indigo-300 uppercase">Paid</p>
+                                                <div className="flex flex-col items-center justify-center">
+                                                    <p className="text-xs sm:text-sm font-black text-emerald-400">₹{(scheduledMembership.totalCollected || scheduledMembership.paidAmount) > (scheduledMembership.paidAmount || 0) ? scheduledMembership.totalCollected : (scheduledMembership.paidAmount || 0)}</p>
+                                                    {(scheduledMembership.totalCollected || scheduledMembership.paidAmount) > (scheduledMembership.paidAmount || 0) && (
+                                                        <p className="text-[9px] font-medium text-emerald-200/80 leading-tight mt-0.5 whitespace-nowrap">
+                                                            Fee: ₹{scheduledMembership.paidAmount} | Wallet: ₹{Number((scheduledMembership.totalCollected - scheduledMembership.paidAmount).toFixed(2))}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-[10px] font-bold text-indigo-300 uppercase">Due</p>
+                                                <p className="text-xs sm:text-sm font-black text-rose-300">₹{scheduledMembership.balanceAmount || 0}</p>
+                                            </div>
                                         </div>
-                                        <div className="p-3.5 rounded-xl bg-rose-50/60 border border-rose-100 text-center">
-                                            <p className="text-[10px] font-bold text-rose-600 uppercase">Balance Due</p>
-                                            <p className="text-sm sm:text-base font-black text-rose-700 mt-0.5">
-                                                ₹{activeMembership.balanceAmount || activeMembership.remainingBalance || 0}
-                                            </p>
-                                        </div>
+
+                                        {scheduledMembership.balanceAmount > 0 && (
+                                            <div className="pt-2 flex justify-end">
+                                                <button 
+                                                    onClick={() => navigate('/dashboard/owner/finance/collect', {
+                                                        state: {
+                                                            autoOpenMember: member,
+                                                            targetMembership: scheduledMembership
+                                                        }
+                                                    })}
+                                                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-lg shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                                                >
+                                                    <FiCreditCard className="text-xs" /> Collect Remaining Due (₹{scheduledMembership.balanceAmount})
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-100">
-                                    <p className="text-xs text-slate-500 font-medium">No membership plan assigned yet.</p>
-                                    <button 
-                                        onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })}
-                                        className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-sm"
-                                    >
-                                        Assign First Plan
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
 
                         {/* HEALTH & BODY METRICS TILES (ALWAYS SHOWN) */}
                         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
@@ -591,6 +809,89 @@ export default function MemberProfilePage() {
                 </div>
 
             </div>
+
+            {/* COLLECT FEE MODAL */}
+            {collectModal.open && collectModal.membership && (
+                <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-100">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <div>
+                                <h3 className="font-extrabold text-slate-800 text-lg">Collect Fee</h3>
+                                <p className="text-xs text-slate-500 font-medium">
+                                    {collectModal.membership.membershipPlanId?.name || collectModal.membership.planName}
+                                </p>
+                            </div>
+                            <button onClick={() => setCollectModal({ open: false, membership: null })} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+                        </div>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 grid grid-cols-3 gap-2 text-center text-xs">
+                            <div>
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase">Total Fee</span>
+                                <span className="font-black text-slate-800">₹{collectModal.membership.finalPrice}</span>
+                            </div>
+                            <div>
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase">Paid So Far</span>
+                                <span className="font-black text-emerald-600">₹{collectModal.membership.paidAmount}</span>
+                            </div>
+                            <div>
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase">Balance Due</span>
+                                <span className="font-black text-rose-600">₹{collectModal.membership.balanceAmount}</span>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSubmitCollectFee} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Amount to Pay (₹)</label>
+                                <input 
+                                    type="number" 
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-emerald-500 outline-none text-sm font-bold text-emerald-900 bg-emerald-50/40"
+                                    value={collectModal.amount} 
+                                    onChange={(e) => setCollectModal(prev => ({ ...prev, amount: e.target.value }))} 
+                                    placeholder="Enter amount"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Payment Method</label>
+                                <select 
+                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-emerald-500 outline-none text-sm font-medium bg-white"
+                                    value={collectModal.paymentMode} 
+                                    onChange={(e) => setCollectModal(prev => ({ ...prev, paymentMode: e.target.value }))}
+                                >
+                                    <option value="Cash">Cash</option>
+                                    <option value="UPI">UPI</option>
+                                    <option value="Card">Card</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                </select>
+                            </div>
+
+                            {(member?.walletBalance || 0) > 0 && (
+                                <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 flex items-center justify-between">
+                                    <label className="flex items-center gap-2 text-xs font-bold text-indigo-900 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={collectModal.useWallet} 
+                                            onChange={(e) => setCollectModal(prev => ({ 
+                                                ...prev, 
+                                                useWallet: e.target.checked, 
+                                                walletUsed: e.target.checked ? Math.min(member.walletBalance, collectModal.membership.balanceAmount) : 0 
+                                            }))} 
+                                        />
+                                        Use Wallet (Available: ₹{member.walletBalance})
+                                    </label>
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                                <button type="button" onClick={() => setCollectModal({ open: false, membership: null })} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Cancel</button>
+                                <button type="submit" disabled={collectModal.submitting} className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm">
+                                    {collectModal.submitting ? 'Recording...' : 'Submit Payment'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </PageLayout>
     );
 }

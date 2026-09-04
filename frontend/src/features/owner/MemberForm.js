@@ -127,6 +127,34 @@ export default function MemberForm() {
             setLoading(false);
         } else if (isConversion) {
             const lead = location.state.convertedLead;
+            const refStr = (lead.referredBy || '').toString().trim();
+
+            const isStaffReferral = 
+                refStr.includes('(Staff)') || 
+                refStr.includes('(Trainer)') || 
+                refStr.includes('(Admin)') ||
+                staffMembers.some(s => s._id === refStr || (s.name && refStr.toLowerCase().includes(s.name.toLowerCase())));
+
+            let matchedMemberId = '';
+            let matchedStaffId = '';
+
+            if (refStr) {
+                if (isStaffReferral) {
+                    const foundStaff = staffMembers.find(s => 
+                        s._id === refStr || 
+                        `${s.name || 'Staff'} (${s.role === 'STAFF' ? 'Staff' : s.role === 'TRAINER' ? 'Trainer' : (s.role || 'Staff')})` === refStr ||
+                        (s.name && refStr.toLowerCase().includes(s.name.toLowerCase()))
+                    );
+                    matchedStaffId = foundStaff ? foundStaff._id : refStr;
+                } else {
+                    const foundMember = existingMembers.find(m => 
+                        m._id === refStr || 
+                        `${m.firstName || ''} ${m.lastName || ''}`.trim().toLowerCase() === refStr.toLowerCase()
+                    );
+                    matchedMemberId = foundMember ? foundMember._id : refStr;
+                }
+            }
+
             setFormData(prev => ({
                 ...prev,
                 firstName: lead.firstName || '',
@@ -138,7 +166,8 @@ export default function MemberForm() {
                 email: lead.email || '',
                 address: lead.address || '',
                 source: lead.source || '--Select--',
-                referredBy: lead.referredBy || '',
+                referredBy: matchedMemberId,
+                referredByStaff: matchedStaffId,
                 interest: lead.inquiryFor || '--Select--',
                 followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '',
                 followUpTime: lead.followUpTime || '',
@@ -151,12 +180,18 @@ export default function MemberForm() {
         } else if (isEdit) {
             navigate('/dashboard/owner/members');
         }
-    }, [isEdit, isConversion, location, navigate]);
+    }, [isEdit, isConversion, location, navigate, staffMembers, existingMembers]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         
         let updates = { [name]: value };
+
+        if (name === 'referredBy' && value) {
+            updates.referredByStaff = '';
+        } else if (name === 'referredByStaff' && value) {
+            updates.referredBy = '';
+        }
         
         // Auto calculate end date and pre-fill details when a plan is selected or start date changes
         if (name === 'membershipPlan' || name === 'planStartDate') {

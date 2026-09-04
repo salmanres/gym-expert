@@ -8,7 +8,9 @@ const {
     getMemberMembershipHistory,
     updateAssignedMembership,
     addBonusDays,
-    addPayment
+    addPayment,
+    markPTSessionUsed,
+    toggleFreezeMembership
 } = require("../controllers/memberMembershipController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -17,6 +19,8 @@ router.post("/", protect, assignMembership);
 router.put("/:id", protect, updateAssignedMembership);
 router.post("/:id/payment", protect, addPayment);
 router.post("/:id/bonus", protect, addBonusDays);
+router.post("/:id/use-session", protect, markPTSessionUsed);
+router.post("/:id/freeze", protect, toggleFreezeMembership);
 
 router.get("/active", protect, getActiveMemberships);
 router.get("/latest", protect, getLatestMemberships);

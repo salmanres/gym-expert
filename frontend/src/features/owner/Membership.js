@@ -25,30 +25,39 @@ function Memberships() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [memRes, memberRes, latestMembershipsRes, gymRes] = await Promise.all([
+            const [memRes, memberRes, latestMembershipsRes, activeMembershipsRes, gymRes] = await Promise.all([
                 apiClient.get('/membership-plans'),
                 apiClient.get('/members'),
                 apiClient.get('/member-memberships/latest'),
+                apiClient.get('/member-memberships/active').catch(() => ({ data: [] })),
                 apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
             ]);
             
             if (gymRes?.data) setGymSettings(gymRes.data);
 
             const latestMemberships = latestMembershipsRes.data || [];
+            const activeAndScheduled = activeMembershipsRes.data || [];
+
+            const todayEnd = new Date();
+            todayEnd.setHours(23, 59, 59, 999);
+
             const membersWithPlans = memberRes.data.map(member => {
-                const membership = latestMemberships.find(m => (m.memberId?._id || m.memberId) === member._id);
-                if (membership) {
-                    member.membershipPlan = membership.membershipPlanId || { name: membership.planName };
-                    member.activeMembership = membership;
-                    member.planStartDate = membership.startDate;
+                const activeMem = activeAndScheduled.find(m => (m.memberId?._id || m.memberId) === member._id && (m.membershipStatus === 'Active' || new Date(m.startDate) <= todayEnd));
+                const scheduledMem = activeAndScheduled.find(m => (m.memberId?._id || m.memberId) === member._id && (m.membershipStatus === 'Scheduled' || new Date(m.startDate) > todayEnd));
+                const latestMem = latestMemberships.find(m => (m.memberId?._id || m.memberId) === member._id);
+
+                const mainMem = activeMem || scheduledMem || latestMem;
+
+                if (mainMem) {
+                    member.membershipPlan = mainMem.membershipPlanId || { name: mainMem.planName };
+                    member.activeMembership = activeMem || mainMem;
+                    member.scheduledMembership = scheduledMem;
+                    member.planStartDate = mainMem.startDate;
                     
-                    if (membership.paymentStatus !== 'Paid' && membership.paidUntilDate) {
-                        member.planEndDate = membership.paidUntilDate;
-                    } else {
-                        member.planEndDate = membership.endDate;
-                    }
+                    member.planEndDate = mainMem.endDate;
+                    member.paidUntilDate = mainMem.paidUntilDate;
                     
-                    member.paymentStatus = membership.paymentStatus;
+                    member.paymentStatus = mainMem.paymentStatus;
                 }
                 return member;
             });
@@ -101,24 +110,26 @@ function Memberships() {
     };
 
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
     const nextWeek = new Date();
     nextWeek.setDate(today.getDate() + 7);
 
     // Derived Data
     const getMembersByStatus = () => {
         return members.filter(member => {
-            if (!member.planEndDate) return activeTab === 'Assign';
-            
+            if (activeTab === 'Assign') return !member.membershipPlan;
+            if (activeTab === 'Scheduled') return (member.scheduledMembership && new Date(member.scheduledMembership.startDate) > todayEnd) || (member.activeMembership?.membershipStatus === 'Scheduled' && new Date(member.activeMembership.startDate) > todayEnd);
+
+            if (!member.planEndDate) return false;
             const endDate = new Date(member.planEndDate);
             const isExpired = endDate < today;
             const isRenewingSoon = endDate >= today && endDate <= nextWeek;
-            
-            const isScheduled = member.activeMembership?.membershipStatus === 'Scheduled';
 
-            if (activeTab === 'Assign') return !member.membershipPlan;
-            if (activeTab === 'Active') return !isExpired && !isScheduled;
-            if (activeTab === 'Scheduled') return isScheduled;
-            if (activeTab === 'Expired') return isExpired;
+            if (activeTab === 'Active') return !isExpired && (member.activeMembership?.membershipStatus === 'Active' || new Date(member.activeMembership?.startDate) <= todayEnd);
+            if (activeTab === 'Expired') return isExpired && !member.scheduledMembership;
             if (activeTab === 'Renewals') return isRenewingSoon;
             return false;
         });
@@ -162,12 +173,16 @@ function Memberships() {
                 {m.sessions > 0 && <span className="text-[10px] text-slate-500 font-medium">{m.sessions} Sessions</span>}
             </td>
             <td className="py-3 px-4 text-sm text-slate-600 font-medium">
-                <div className="flex flex-wrap gap-1">
-                    {(Array.isArray(m.planType) ? m.planType : [m.planType || 'Gym Access']).map((pt, i) => (
-                        <span key={i} className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs">
-                            {pt}
-                        </span>
-                    ))}
+                <div className="flex flex-wrap gap-1.5">
+                    {(() => {
+                        const rawTypes = Array.isArray(m.planType) ? m.planType : [m.planType || 'Gym Access'];
+                        const flattened = rawTypes.flatMap(pt => typeof pt === 'string' ? pt.split('+').map(s => s.trim()) : [pt]);
+                        return flattened.map((pt, i) => (
+                            <span key={i} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs font-medium border border-slate-200">
+                                {pt}
+                            </span>
+                        ));
+                    })()}
                 </div>
             </td>
             <td className="py-3 px-4 text-sm text-slate-600">{m.duration} {m.durationUnit || 'Months'}</td>
@@ -191,9 +206,17 @@ function Memberships() {
     );
 
     const renderMemberRow = (m) => {
-        const endDate = m.planEndDate ? new Date(m.planEndDate) : null;
-        const isExpired = endDate && endDate < today;
-        const isRenewingSoon = endDate && endDate >= today && endDate <= nextWeek;
+        const isScheduledTab = activeTab === 'Scheduled' && m.scheduledMembership;
+        const currentMem = isScheduledTab ? m.scheduledMembership : m.activeMembership;
+        const planName = currentMem?.membershipPlanId?.name || currentMem?.planName || m.membershipPlan?.name;
+        const startDate = currentMem?.startDate ? new Date(currentMem.startDate) : (m.planStartDate ? new Date(m.planStartDate) : null);
+        const endDate = currentMem?.endDate ? new Date(currentMem.endDate) : (m.planEndDate ? new Date(m.planEndDate) : null);
+        const paidUntilDate = currentMem?.paidUntilDate ? new Date(currentMem.paidUntilDate) : null;
+        const paymentStat = currentMem?.paymentStatus || m.paymentStatus;
+        const isPartial = paymentStat === 'Partial';
+
+        const isExpired = !isScheduledTab && endDate && endDate < today;
+        const isRenewingSoon = !isScheduledTab && endDate && endDate >= today && endDate <= nextWeek;
 
         return (
             <tr key={m._id} className="hover:bg-slate-50 transition-colors">
@@ -216,12 +239,19 @@ function Memberships() {
                     {m.contactNumber}
                 </td>
                 <td className="py-3 px-4">
-                    {m.membershipPlan ? (
+                    {planName ? (
                         <div>
-                            <p className="font-bold text-slate-700 text-sm">{m.membershipPlan.name}</p>
-                            <p className="text-[10px] text-slate-500">{new Date(m.planStartDate).toLocaleDateString()} to {endDate.toLocaleDateString()}</p>
-                            {m.activeMembership?.bonusDays > 0 && (
-                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded ml-1">+{m.activeMembership.bonusDays} Bonus Days</span>
+                            <p className="font-bold text-slate-700 text-sm">{planName}</p>
+                            <p className="text-[10px] text-slate-500">
+                                {startDate ? startDate.toLocaleDateString() : ''} to {isPartial && paidUntilDate ? paidUntilDate.toLocaleDateString() : (endDate ? endDate.toLocaleDateString() : '')}
+                            </p>
+                            {isPartial && paidUntilDate && (
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
+                                    Paid till {paidUntilDate.toLocaleDateString()} (₹{currentMem?.paidAmount || 0} / ₹{currentMem?.finalPrice || 0})
+                                </span>
+                            )}
+                            {currentMem?.bonusDays > 0 && (
+                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded ml-1">+{currentMem.bonusDays} Bonus Days</span>
                             )}
                         </div>
                     ) : (
@@ -229,7 +259,11 @@ function Memberships() {
                     )}
                 </td>
                 <td className="py-3 px-4">
-                    {endDate ? (
+                    {isScheduledTab ? (
+                        <span className="text-xs font-bold px-2 py-1 rounded flex items-center gap-1 w-max bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            <FiCheckCircle /> Scheduled
+                        </span>
+                    ) : endDate ? (
                         <span className={`text-xs font-bold px-2 py-1 rounded flex items-center gap-1 w-max ${isExpired ? 'bg-rose-50 text-rose-600' : isRenewingSoon ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
                             {isExpired ? <FiXCircle /> : isRenewingSoon ? <FiAlertCircle /> : <FiCheckCircle />}
                             {isExpired ? 'Expired' : isRenewingSoon ? 'Expiring Soon' : 'Active'}
@@ -237,10 +271,20 @@ function Memberships() {
                     ) : '-'}
                 </td>
                 <td className="py-3 px-4 text-sm">
-                    {m.paymentStatus === 'Paid' ? (
-                        <span className="text-emerald-600 font-bold">Paid</span>
+                    {paymentStat === 'Paid' ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-1">
+                            <FiCheckCircle className="text-xs" /> Paid
+                        </span>
+                    ) : paymentStat === 'Partial' ? (
+                        <span className="text-amber-600 font-bold flex flex-col">
+                            <span>Partial</span>
+                            <span className="text-[10px] font-normal text-slate-500">₹{currentMem?.paidAmount || 0} paid</span>
+                        </span>
                     ) : (
-                        <span className="text-rose-600 font-bold">{m.paymentStatus}</span>
+                        <span className="text-rose-600 font-bold flex flex-col">
+                            <span>Pending</span>
+                            <span className="text-[10px] font-normal text-slate-500">Unpaid</span>
+                        </span>
                     )}
                 </td>
                 <td className="py-3 px-4">

@@ -12,7 +12,7 @@ const attendanceSchema = new mongoose.Schema({
     },
     attendanceType: {
         type: String,
-        enum: ['Member', 'Trial'],
+        enum: ['Member', 'Trial', 'Staff'],
         default: 'Member'
     },
     date: {
@@ -29,6 +29,20 @@ const attendanceSchema = new mongoose.Schema({
         type: String,
         enum: ['Present', 'Absent', 'Half-Day', 'Late'],
         default: 'Present'
+    },
+    lateMinutes: {
+        type: Number,
+        default: 0
+    },
+    deductionAmount: {
+        type: Number,
+        default: 0
+    },
+    shiftStart: {
+        type: String
+    },
+    shiftEnd: {
+        type: String
     },
     source: {
         type: String,

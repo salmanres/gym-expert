@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import Loader from '../../components/page/Loader';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
-import { FiPrinter, FiCheckCircle } from 'react-icons/fi';
+import { FiPrinter, FiSend, FiCheckCircle, FiPhone, FiMail, FiMapPin, FiShield, FiUser } from 'react-icons/fi';
 import { CgGym } from 'react-icons/cg';
 
 export default function FeeReceipt() {
@@ -15,201 +15,459 @@ export default function FeeReceipt() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchMember = async () => {
+        const fetchReceiptData = async () => {
             try {
-                const [memberRes, memRes] = await Promise.all([
-                    apiClient.get(`/members/${id}`),
-                    apiClient.get(`/member-memberships/member/${id}`).catch(() => ({ data: [] }))
-                ]);
-                const memberData = memberRes.data;
-                const activePlan = memRes.data[0]; // get most recent plan
-                if (activePlan) {
-                    memberData.paymentStatus = activePlan.paymentStatus;
-                    memberData.membershipPlan = activePlan.membershipPlanId;
-                    memberData.planName = activePlan.planName;
-                    memberData.planStartDate = activePlan.startDate;
-                    memberData.amountPaid = activePlan.paidAmount;
-                    memberData.finalAmount = activePlan.finalPrice;
-                    memberData.discount = activePlan.discount;
-                    memberData.paidUntilDate = activePlan.paidUntilDate;
-                    memberData.originalPrice = activePlan.originalPrice;
+                let txData = null;
+                try {
+                    const txRes = await apiClient.get(`/members/transactions/single/${id}`);
+                    if (txRes.data && txRes.data._id) {
+                        txData = txRes.data;
+                    }
+                } catch (e) {
+                    // Not a transaction ID
                 }
-                setMember(memberData);
+
+                if (txData) {
+                    const memberInfo = txData.memberId || {};
+                    const memberId = memberInfo._id || memberInfo;
+
+                    const memRes = await apiClient.get(`/member-memberships/member/${memberId}`).catch(() => ({ data: [] }));
+                    const memberships = memRes.data || [];
+                    const matchedPlan = memberships.find(m => m._id === txData.membershipId || m.membershipPlanId?._id === txData.planId?._id) || memberships[0];
+
+                    const basePrice = matchedPlan?.originalPrice || matchedPlan?.finalPrice || txData.planId?.price || 699;
+                    const discount = matchedPlan?.discount || 0;
+                    const finalAmount = matchedPlan?.finalPrice || (basePrice - discount);
+                    const amountPaidInTx = txData.amountPaid || 0;
+                    const totalPlanPaid = matchedPlan?.paidAmount || amountPaidInTx;
+                    const balance = Math.max(0, finalAmount - totalPlanPaid);
+
+                    setMember({
+                        ...memberInfo,
+                        receiptType: 'transaction',
+                        transactionId: txData.transactionId || txData._id || 'N/A',
+                        paymentMode: txData.paymentMode || 'Cash',
+                        receiptDate: new Date(txData.paymentDate || txData.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+                        planName: matchedPlan?.planName || txData.planId?.name || 'Membership Plan',
+                        planStartDate: matchedPlan?.startDate || txData.createdAt,
+                        paidUntilDate: matchedPlan?.paidUntilDate || matchedPlan?.endDate,
+                        originalPrice: basePrice,
+                        discount: discount,
+                        finalAmount: finalAmount,
+                        amountPaid: amountPaidInTx,
+                        totalPlanPaid: totalPlanPaid,
+                        totalCollected: matchedPlan?.totalCollected || totalPlanPaid,
+                        balance: balance,
+                        paymentStatus: matchedPlan?.paymentStatus || (totalPlanPaid >= finalAmount ? 'Paid' : 'Partial')
+                    });
+                } else {
+                    const [memberRes, memRes, allTxRes] = await Promise.all([
+                        apiClient.get(`/members/${id}`).catch(() => null),
+                        apiClient.get(`/member-memberships/member/${id}`).catch(() => ({ data: [] })),
+                        apiClient.get('/members/transactions/all').catch(() => ({ data: [] }))
+                    ]);
+                    
+                    if (memberRes && memberRes.data) {
+                        const memberData = memberRes.data;
+                        const activePlan = memRes.data[0];
+                        const allTransactions = allTxRes.data || [];
+                        
+                        // Find latest transaction for this member
+                        const memberTxList = allTransactions.filter(t => (t.memberId?._id || t.memberId) === id);
+                        const latestTx = memberTxList[0];
+
+                        if (activePlan) {
+                            const basePrice = activePlan.originalPrice || activePlan.finalPrice || 699;
+                            const discount = activePlan.discount || 0;
+                            const finalAmount = activePlan.finalPrice || (basePrice - discount);
+                            const totalPlanPaid = activePlan.paidAmount || 0;
+                            const currentTxPaid = latestTx ? (latestTx.amountPaid || totalPlanPaid) : totalPlanPaid;
+
+                            memberData.paymentStatus = activePlan.paymentStatus;
+                            memberData.membershipPlan = activePlan.membershipPlanId;
+                            memberData.planName = activePlan.planName;
+                            memberData.planStartDate = activePlan.startDate;
+                            memberData.amountPaid = currentTxPaid;
+                            memberData.totalPlanPaid = totalPlanPaid;
+                            memberData.totalCollected = activePlan.totalCollected || totalPlanPaid;
+                            memberData.transactionId = latestTx ? (latestTx.transactionId || latestTx._id) : 'N/A';
+                            memberData.paymentMode = latestTx ? latestTx.paymentMode : 'Cash';
+                            memberData.finalAmount = finalAmount;
+                            memberData.discount = discount;
+                            memberData.paidUntilDate = activePlan.paidUntilDate;
+                            memberData.originalPrice = basePrice;
+                            memberData.balance = Math.max(0, finalAmount - totalPlanPaid);
+                            memberData.receiptDate = latestTx ? new Date(latestTx.paymentDate || latestTx.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                        }
+                        setMember(memberData);
+                    } else {
+                        // Fallback: Check if id is an Enquiry / Lead ID for Trial Receipt
+                        const enqRes = await apiClient.get(`/enquiries/${id}`);
+                        const enquiry = enqRes.data;
+                        if (enquiry) {
+                            const trialFee = Number(enquiry.trialFee || 0);
+                            const isPaid = enquiry.trialPaymentStatus === 'Paid';
+                            setMember({
+                                firstName: enquiry.firstName,
+                                lastName: enquiry.lastName || '',
+                                contactNumber: enquiry.contactNumber,
+                                email: enquiry.email,
+                                gender: enquiry.gender,
+                                memberId: `LEAD-${enquiry._id.substring(enquiry._id.length - 4).toUpperCase()}`,
+                                isTrialReceipt: true,
+                                receiptType: 'trial',
+                                transactionId: `TRL-${enquiry._id.substring(enquiry._id.length - 6).toUpperCase()}`,
+                                paymentMode: enquiry.trialPaymentMode || 'Cash',
+                                receiptDate: new Date(enquiry.updatedAt || enquiry.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+                                planName: `Paid Trial Pass (${enquiry.inquiryFor || 'Gym Access'})`,
+                                planStartDate: enquiry.trialDate || enquiry.createdAt,
+                                paidUntilDate: enquiry.trialEndDate || enquiry.trialDate,
+                                originalPrice: trialFee,
+                                discount: 0,
+                                finalAmount: trialFee,
+                                amountPaid: isPaid ? trialFee : 0,
+                                totalPlanPaid: isPaid ? trialFee : 0,
+                                balance: isPaid ? 0 : trialFee,
+                                paymentStatus: enquiry.trialPaymentStatus || 'Paid'
+                            });
+                        }
+                    }
+                }
                 setLoading(false);
             } catch (error) {
+                console.error("Receipt fetch error:", error);
                 toast.error("Failed to fetch receipt data");
                 setLoading(false);
             }
         };
-        fetchMember();
+        fetchReceiptData();
     }, [id]);
 
     const handlePrint = () => {
         window.print();
     };
 
-    if (loading) return <Loader text="Generating receipt..." />;
-    if (!member) return <div className="p-8 text-center text-rose-500">Member not found.</div>;
+    const handleSendWhatsApp = () => {
+        if (!member?.contactNumber) {
+            toast.error("Contact number not available");
+            return;
+        }
+        const cleanPhone = member.contactNumber.replace(/\D/g, '');
+        const gymNameStr = member.gymId?.name || member.gym?.name || "Gym Studio";
+        const text = encodeURIComponent(
+            `🧾 *FEE RECEIPT - ${gymNameStr.toUpperCase()}*\n\n` +
+            `*Member:* ${member.firstName} ${member.lastName || ''} (ID: ${member.memberId || 'N/A'})\n` +
+            `*Plan:* ${member.planName || 'Gym Access'}\n` +
+            `*Amount Paid:* ₹${(member.amountPaid || 0).toLocaleString()}\n` +
+            `*Balance Due:* ₹${(member.balance || 0).toLocaleString()}\n` +
+            `*Status:* ${member.paymentStatus || 'Paid'}\n` +
+            `*Date:* ${member.receiptDate}\n\n` +
+            `Thank you for training with us! 💪`
+        );
+        window.open(`https://wa.me/91${cleanPhone}?text=${text}`, '_blank');
+    };
+
+    if (loading) return <Loader text="Generating full A4 invoice..." />;
+    if (!member) return <div className="p-8 text-center text-rose-500 font-bold">Member receipt not found.</div>;
 
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const gymName = member.gymId?.name || member.gym?.name || user.gym?.name || "Official Gym";
-    const receiptDate = new Date().toLocaleDateString();
+    const gymName = member.gymId?.name || member.gym?.name || user.gym?.name || "Fitness With Harjeet";
+    const receiptDate = member.receiptDate || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     
-    // For calculation display
-    const planName = member.planName || member.membershipPlan?.name || "Membership Plan";
-    const basePrice = member.originalPrice || member.membershipPlan?.price || 0;
-    const discount = member.discount || 0;
-    const amountPaid = member.amountPaid || 0;
-    const finalAmount = member.finalAmount || (basePrice - discount);
-    const balance = finalAmount - amountPaid;
+    const planName = member.planName || member.membershipPlan?.name || "Gym Membership Plan";
+    const basePrice = Number(member.originalPrice || member.membershipPlan?.price || member.finalAmount || 0);
+    const discount = Number(member.discount || 0);
+    const finalAmount = Number(member.finalAmount || (basePrice - discount));
+
+    // Transaction specific breakdown
+    const currentPaid = Number(member.amountPaid || 0);
+    const totalPlanPaid = Number(member.totalPlanPaid !== undefined ? member.totalPlanPaid : currentPaid);
+    const previousPaid = Math.max(0, totalPlanPaid - currentPaid);
+    const balance = Number(member.balance !== undefined ? member.balance : Math.max(0, finalAmount - totalPlanPaid));
+    
+    const receiptNo = member.transactionId && member.transactionId !== 'N/A' 
+        ? `INV-${member.transactionId.substring(Math.max(0, member.transactionId.length - 8)).toUpperCase()}`
+        : `INV-${Math.floor(Math.random()*900000) + 100000}`;
+
+    const handleSendWhatsAppWithDetails = () => {
+        if (!member?.contactNumber) {
+            toast.error("Contact number not available");
+            return;
+        }
+        const cleanPhone = member.contactNumber.replace(/\D/g, '');
+        const gymNameStr = member.gymId?.name || member.gym?.name || "Gym Studio";
+        const text = encodeURIComponent(
+            `🧾 *FEE RECEIPT - ${gymNameStr.toUpperCase()}*\n\n` +
+            `*Member:* ${member.firstName} ${member.lastName || ''} (ID: ${member.memberId || 'N/A'})\n` +
+            `*Plan:* ${member.planName || 'Gym Access'}\n` +
+            `*Paid Now (This Receipt):* ₹${currentPaid.toLocaleString()}\n` +
+            (previousPaid > 0 ? `*Previously Paid:* ₹${previousPaid.toLocaleString()}\n` : '') +
+            `*Total Paid So Far:* ₹${totalPlanPaid.toLocaleString()}\n` +
+            `*Balance Due:* ₹${balance.toLocaleString()}\n` +
+            `*Status:* ${member.paymentStatus || 'Paid'}\n` +
+            `*Date:* ${member.receiptDate}\n\n` +
+            `Thank you for training with us! 💪`
+        );
+        window.open(`https://wa.me/91${cleanPhone}?text=${text}`, '_blank');
+    };
 
     return (
         <PageLayout>
+            <style>{`
+                @media print {
+                    @page {
+                        size: A4 portrait;
+                        margin: 10mm;
+                    }
+                    body {
+                        background: white !important;
+                    }
+                    .a4-container {
+                        width: 100% !important;
+                        max-width: none !important;
+                        min-height: 277mm !important;
+                        border: none !important;
+                        box-shadow: none !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                }
+            `}</style>
+
             <PageHeader 
-                title="Fee Receipt" 
-                subtitle={`Payment details for ${member.firstName} ${member.lastName || ''}`}
+                title="A4 Tax Invoice / Fee Receipt" 
+                subtitle={`Printable full A4 sheet receipt for ${member.firstName} ${member.lastName || ''}`}
                 showBack={true}
                 action={
-                    <button onClick={handlePrint} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all transform hover:scale-105 active:scale-95 print:hidden">
-                        <FiPrinter /> Print
-                    </button>
+                    <div className="flex items-center gap-2 print:hidden">
+                        <button 
+                            onClick={handleSendWhatsAppWithDetails} 
+                            className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-xl font-bold text-xs shadow-sm transition-all"
+                        >
+                            <FiSend className="text-sm" /> WhatsApp Receipt
+                        </button>
+                        <button 
+                            onClick={handlePrint} 
+                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-extrabold text-xs shadow-md transition-all"
+                        >
+                            <FiPrinter className="text-sm" /> Print A4 Invoice
+                        </button>
+                    </div>
                 }
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-white print:p-0 print:bg-white print:overflow-visible">
-                {/* Receipt Document */}
-            <div className="w-full max-w-3xl mx-auto bg-white shadow-2xl rounded-2xl overflow-hidden print:shadow-none print:bg-white print:rounded-none relative text-slate-800">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-200/70 print:p-0 print:bg-white print:overflow-visible">
                 
-                {/* Decorative Premium Glow (Hidden on Print) */}
-                <div className="absolute top-0 right-0 -mr-20 -mt-20 w-48 h-48 bg-emerald-200 rounded-full blur-3xl opacity-50 print:hidden pointer-events-none"></div>
-                <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 bg-blue-100 rounded-full blur-3xl opacity-50 print:hidden pointer-events-none"></div>
-
-                {/* Decorative Top Border */}
-                <div className="h-2 w-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-600"></div>
-                
-                {/* Receipt Header */}
-                <div className="p-10 flex flex-col sm:flex-row justify-between items-start border-b border-slate-100 print:border-slate-200 relative z-10">
-                    <div className="flex items-center gap-4 mb-6 sm:mb-0">
-                        <div className="w-16 h-16 bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl flex items-center justify-center shadow-md border border-slate-200 print:bg-slate-100 print:text-slate-900 print:border-none">
-                            <CgGym className="text-4xl text-emerald-600" />
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-black text-slate-900 print:text-slate-900 uppercase tracking-tight">{gymName}</h1>
-                            <p className="text-sm font-medium text-emerald-600 print:text-slate-500 tracking-wide">FITNESS & LIFESTYLE STUDIO</p>
-                        </div>
-                    </div>
-                    <div className="text-left sm:text-right">
-                        <h2 className="text-4xl font-black text-slate-200 print:text-slate-300 uppercase tracking-widest">INVOICE</h2>
-                        <div className="mt-2 space-y-1">
-                            <p className="text-sm font-bold text-slate-500 print:text-slate-800">No. <span className="text-slate-800 print:text-slate-500 font-medium">#{member.transactionId ? member.transactionId.substring(member.transactionId.length - 6).toUpperCase() : Math.floor(Math.random()*90000) + 10000}</span></p>
-                            <p className="text-sm font-bold text-slate-500 print:text-slate-800">Date: <span className="text-slate-800 print:text-slate-500 font-medium">{receiptDate}</span></p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Receipt Body */}
-                <div className="p-10 relative z-10">
+                {/* Full A4 Printable Sheet Container */}
+                <div className="a4-container w-full max-w-4xl min-h-[1020px] mx-auto bg-white border border-slate-300 rounded-2xl shadow-xl p-8 sm:p-12 print:rounded-none print:border-none print:shadow-none flex flex-col justify-between text-slate-800 relative">
                     
-                    {/* Billed To & Status */}
-                    <div className="flex flex-col sm:flex-row justify-between items-start mb-12 bg-slate-50/80 print:bg-slate-50 rounded-2xl p-6 border border-slate-100 print:border-slate-100 backdrop-blur-sm shadow-sm">
-                        <div>
-                            <p className="text-xs font-bold text-slate-400 print:text-slate-400 uppercase tracking-widest mb-2">Billed To</p>
-                            <h3 className="text-xl font-black text-slate-800 print:text-slate-800 mb-1">{member.firstName} {member.lastName}</h3>
-                            <p className="text-sm font-medium text-slate-600 print:text-slate-600 flex items-center gap-2">
-                                <span className="w-4 inline-block text-center text-slate-400">📞</span> {member.contactNumber}
-                            </p>
-                            {member.email && (
-                                <p className="text-sm font-medium text-slate-600 print:text-slate-600 flex items-center gap-2 mt-1">
-                                    <span className="w-4 inline-block text-center text-slate-400">✉️</span> {member.email}
+                    {/* Top Header Section */}
+                    <div>
+                        <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-8">
+                            <div className="flex items-start gap-4">
+                                <div className="w-16 h-16 rounded-2xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black text-3xl shadow-md shrink-0">
+                                    <CgGym />
+                                </div>
+                                <div>
+                                    <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">{gymName}</h1>
+                                    <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest mt-0.5">FITNESS & PERSONAL TRAINING STUDIO</p>
+                                    <p className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1">
+                                        <FiMapPin className="text-slate-400 text-xs" /> Main Branch Facility, Gym Center
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="text-right">
+                                <div className="inline-block bg-slate-900 text-white px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest mb-2">
+                                    FEE RECEIPT / TAX INVOICE
+                                </div>
+                                <p className="text-xs font-bold text-slate-500">Invoice No: <span className="font-mono text-slate-900 font-black text-sm">{receiptNo}</span></p>
+                                <p className="text-xs font-semibold text-slate-600 mt-0.5">Issue Date: <span className="font-bold text-slate-900">{receiptDate}</span></p>
+                            </div>
+                        </div>
+
+                        {/* Customer & Facility Information Cards (2 Columns) */}
+                        <div className="grid grid-cols-2 gap-6 mb-8 text-xs">
+                            
+                            {/* Customer Information */}
+                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                                    <FiUser className="text-emerald-600" /> BILLED TO (MEMBER INFORMATION)
                                 </p>
-                            )}
-                        </div>
-                        <div className="mt-6 sm:mt-0 text-left sm:text-right">
-                            <p className="text-xs font-bold text-slate-400 print:text-slate-400 uppercase tracking-widest mb-2">Payment Status</p>
-                            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-black uppercase tracking-wider ${member.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-700 print:bg-emerald-100 print:text-emerald-700' : member.paymentStatus === 'Partial' ? 'bg-amber-100 text-amber-700 print:bg-amber-100 print:text-amber-700' : 'bg-rose-100 text-rose-700 print:bg-rose-100 print:text-rose-700'}`}>
-                                {member.paymentStatus === 'Paid' && <FiCheckCircle className="text-lg" />}
-                                {member.paymentStatus ? member.paymentStatus : 'UNKNOWN'}
+                                <h3 className="text-lg font-black text-slate-900 mb-1">{member.firstName} {member.lastName}</h3>
+                                <div className="space-y-1 text-slate-600 font-medium mt-2">
+                                    <p><span className="font-bold text-slate-500 w-24 inline-block">Member ID:</span> <span className="font-bold text-slate-900 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">{member.memberId || 'N/A'}</span></p>
+                                    <p><span className="font-bold text-slate-500 w-24 inline-block">Contact Phone:</span> <span className="font-bold text-slate-900">{member.contactNumber}</span></p>
+                                    {member.email && <p><span className="font-bold text-slate-500 w-24 inline-block">Email Address:</span> <span className="font-semibold text-slate-800">{member.email}</span></p>}
+                                    <p><span className="font-bold text-slate-500 w-24 inline-block">Gender:</span> <span className="font-bold text-slate-800">{member.gender || 'N/A'}</span></p>
+                                </div>
                             </div>
-                        </div>
-                    </div>
 
-                    {/* Payment Table */}
-                    <div className="rounded-2xl border border-slate-200 print:border-slate-200 overflow-hidden mb-8 shadow-sm">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-100/80 print:bg-slate-50">
-                                <tr>
-                                    <th className="py-4 px-6 font-bold text-slate-600 print:text-slate-800 text-xs uppercase tracking-wider">Description</th>
-                                    <th className="py-4 px-6 font-bold text-slate-600 print:text-slate-800 text-xs uppercase tracking-wider text-right">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody className="text-sm divide-y divide-slate-100 print:divide-slate-100 bg-white/50 print:bg-white backdrop-blur-md">
-                                <tr>
-                                    <td className="py-5 px-6">
-                                        <p className="font-bold text-slate-800 print:text-slate-800 text-base">{planName}</p>
-                                        <p className="text-xs font-medium text-slate-500 mt-1">
-                                            Valid from: {new Date(member.planStartDate).toLocaleDateString()}
+                            {/* Payment & Validity Summary */}
+                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col justify-between">
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">PAYMENT TRANSACTION SUMMARY</p>
+                                    <div className="space-y-1.5 text-slate-600 font-medium">
+                                        <p className="flex justify-between">
+                                            <span className="font-bold text-slate-500">Payment Status:</span>
+                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-black uppercase ${
+                                                member.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                            }`}>
+                                                <FiCheckCircle size={12} /> {member.paymentStatus || 'PAID'}
+                                            </span>
                                         </p>
-                                    </td>
-                                    <td className="py-5 px-6 text-right font-black text-slate-700 print:text-slate-700 text-base">₹{basePrice.toFixed(2)}</td>
-                                </tr>
-                                {discount > 0 && (
-                                    <tr className="bg-emerald-50/50 print:bg-emerald-50/50">
-                                        <td className="py-4 px-6 text-emerald-600 print:text-emerald-700 font-bold">Discount Applied</td>
-                                        <td className="py-4 px-6 text-right text-emerald-600 print:text-emerald-700 font-black">- ₹{discount.toFixed(2)}</td>
+                                        <p className="flex justify-between">
+                                            <span className="font-bold text-slate-500">Paid Now (This Receipt):</span>
+                                            <span className="font-extrabold text-emerald-700 font-mono">₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                        </p>
+                                        <p className="flex justify-between">
+                                            <span className="font-bold text-slate-500">Payment Mode:</span>
+                                            <span className="font-bold text-slate-900 font-mono">{member.paymentMode || 'Cash'}</span>
+                                        </p>
+                                        <p className="flex justify-between">
+                                            <span className="font-bold text-slate-500">Transaction Ref:</span>
+                                            <span className="font-mono text-slate-800 font-bold">{member.transactionId || 'TX-DEFAULT'}</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center text-xs">
+                                    <span className="font-bold text-slate-500">Access Valid Until:</span>
+                                    <span className="font-black text-emerald-700 font-mono text-sm">
+                                        {member.paidUntilDate ? new Date(member.paidUntilDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                    </span>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        {/* Itemized Services & Plan Table */}
+                        <div className="border-2 border-slate-900 rounded-xl overflow-hidden mb-8">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-slate-900 text-white text-xs font-black uppercase tracking-wider">
+                                        <th className="py-3.5 px-6">#</th>
+                                        <th className="py-3.5 px-6">Description / Plan Details</th>
+                                        <th className="py-3.5 px-4 text-center">Validity Range</th>
+                                        <th className="py-3.5 px-6 text-right">Base Price</th>
+                                        <th className="py-3.5 px-6 text-right">Discount</th>
+                                        <th className="py-3.5 px-6 text-right">Net Amount</th>
                                     </tr>
+                                </thead>
+                                <tbody className="text-xs font-medium text-slate-700 divide-y divide-slate-200">
+                                    <tr className="bg-white">
+                                        <td className="py-4 px-6 font-bold text-slate-400">01</td>
+                                        <td className="py-4 px-6">
+                                            <p className="font-black text-slate-900 text-sm">{planName}</p>
+                                            <p className="text-[11px] text-slate-500 mt-0.5">Full Gym Access & Fitness Training Package</p>
+                                        </td>
+                                        <td className="py-4 px-4 text-center">
+                                            <span className="font-bold bg-slate-100 px-3 py-1 rounded text-slate-800 text-[11px]">
+                                                {member.planStartDate ? new Date(member.planStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A'}
+                                                {' to '}
+                                                {member.paidUntilDate ? new Date(member.paidUntilDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-6 text-right font-bold text-slate-800 text-sm">
+                                            ₹{basePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="py-4 px-6 text-right font-bold text-emerald-600 text-sm">
+                                            {discount > 0 ? `- ₹${discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '₹0.00'}
+                                        </td>
+                                        <td className="py-4 px-6 text-right font-black text-slate-900 text-sm">
+                                            ₹{finalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Calculations & Summary Section */}
+                        <div className="flex justify-between items-start gap-8 mb-12">
+                            
+                            {/* Gym Rules & Policy */}
+                            <div className="w-1/2 bg-slate-50 p-5 rounded-xl border border-slate-200 text-xs space-y-1.5 text-slate-600">
+                                <p className="font-black text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                                    <FiShield className="text-emerald-600" /> GYM RULES & PAYMENT POLICY
+                                </p>
+                                <ul className="list-disc pl-4 space-y-1.5 text-[11px] text-slate-600 leading-relaxed font-medium">
+                                    <li>Fees once paid are non-refundable and non-transferable under any circumstances.</li>
+                                    <li>Members must check-in / scan QR code upon every workout session.</li>
+                                    <li>Membership plans & Personal Training (PT) sessions must be utilized within the valid duration.</li>
+                                </ul>
+                            </div>
+
+                            {/* Total Calculation Table */}
+                            <div className="w-80 bg-slate-900 text-white rounded-xl p-5 text-xs shadow-lg space-y-2 font-medium">
+                                <div className="flex justify-between text-slate-300">
+                                    <span>Subtotal Base Amount:</span>
+                                    <span className="font-bold text-white">₹{basePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                {discount > 0 && (
+                                    <div className="flex justify-between text-emerald-400 font-bold">
+                                        <span>Total Discount Savings:</span>
+                                        <span>- ₹{discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
                                 )}
-                            </tbody>
-                        </table>
+                                <div className="flex justify-between text-slate-300 pt-2 border-t border-slate-800">
+                                    <span>Net Payable Total:</span>
+                                    <span className="font-black text-white text-sm">₹{finalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                {previousPaid > 0 && (
+                                    <div className="flex justify-between text-slate-400">
+                                        <span>Previously Paid:</span>
+                                        <span className="font-bold text-slate-300">₹{previousPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-emerald-400 py-1.5 px-2 bg-emerald-950/60 rounded border border-emerald-500/30 font-extrabold text-sm">
+                                    <span>Paid Now (This Receipt):</span>
+                                    <span>₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between text-slate-300 pb-2 border-b border-slate-800 font-bold">
+                                    <span>Total Paid So Far:</span>
+                                    <span className="text-white font-black">₹{totalPlanPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between items-center pt-2 text-sm">
+                                    <span className="font-black text-amber-400 uppercase">Balance Amount Due:</span>
+                                    <span className={`font-black font-mono text-xl ${balance > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                        ₹{Math.max(0, balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
 
-                    {/* Totals Section */}
-                    <div className="flex justify-end mb-12">
-                        <div className="w-full max-w-sm bg-slate-50/80 print:bg-slate-50 rounded-2xl p-6 border border-slate-100 print:border-slate-100 backdrop-blur-sm shadow-sm">
-                            <div className="flex justify-between py-2 text-sm">
-                                <span className="font-bold text-slate-500 print:text-slate-500">Total Payable</span>
-                                <span className="font-black text-slate-800 print:text-slate-800">₹{finalAmount.toFixed(2)}</span>
+                    {/* Bottom Signature & Footer Section */}
+                    <div>
+                        <div className="grid grid-cols-2 gap-12 pt-8 border-t border-slate-300 text-xs mb-6">
+                            <div>
+                                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">MEMBER SIGNATURE</p>
+                                <div className="h-12 flex items-end">
+                                    <span className="w-48 border-b border-slate-400"></span>
+                                </div>
                             </div>
-                            <div className="flex justify-between py-2 text-sm border-b border-slate-200 print:border-slate-200 mb-2 pb-3">
-                                <span className="font-bold text-slate-500 print:text-slate-500">Amount Paid</span>
-                                <span className="font-black text-emerald-600 print:text-emerald-600">₹{amountPaid.toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between items-center pt-2">
-                                <span className="font-black text-slate-800 print:text-slate-800 uppercase tracking-wider text-sm">Balance Due</span>
-                                <span className={`font-black text-2xl ${balance > 0 ? 'text-rose-500 print:text-rose-600' : 'text-slate-800 print:text-slate-800'}`}>₹{Math.max(0, balance).toFixed(2)}</span>
+                            <div className="text-right">
+                                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">FOR {gymName.toUpperCase()}</p>
+                                <div className="h-12 flex items-end justify-end">
+                                    <span className="font-bold text-slate-800 border-b border-slate-400 pb-1 px-4 italic">
+                                        Authorized Stamp & Sign
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Transaction Details */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-8 border-t border-slate-100 print:border-slate-200">
-                        <div>
-                            <p className="text-slate-400 print:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Payment Mode</p>
-                            <p className="font-black text-slate-700 print:text-slate-800">{member.paymentMode || 'N/A'}</p>
-                        </div>
-                        <div>
-                            <p className="text-slate-400 print:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Transaction ID</p>
-                            <p className="font-black text-slate-700 print:text-slate-800 truncate" title={member.transactionId}>{member.transactionId || 'N/A'}</p>
-                        </div>
-                        <div>
-                            <p className="text-slate-400 print:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Valid Until</p>
-                            <p className="font-black text-slate-700 print:text-slate-800">{member.paidUntilDate ? new Date(member.paidUntilDate).toLocaleDateString() : 'N/A'}</p>
-                        </div>
-                        <div>
-                            <p className="text-slate-400 print:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Generated By</p>
-                            <p className="font-black text-slate-700 print:text-slate-800">System Admin</p>
+                        {/* Computer Generated Footer Line */}
+                        <div className="bg-slate-100 p-3 rounded-lg text-center text-xs text-slate-500 font-medium">
+                            <p className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">THANK YOU FOR YOUR BUSINESS! STAY FIT & STRONG 💪</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">This is an official computer-generated receipt issued by {gymName}.</p>
                         </div>
                     </div>
 
                 </div>
-
-                {/* Footer */}
-                <div className="bg-white p-6 text-center print:bg-transparent print:text-slate-600 print:border-t-2 print:border-slate-200 relative z-10 border-t border-slate-100">
-                    <p className="font-bold text-emerald-600 text-sm tracking-wide uppercase mb-1 print:text-slate-800">Thank you for your business!</p>
-                    <p className="text-xs text-slate-500 print:text-slate-400 font-medium">This is a computer-generated receipt and does not require a physical signature.</p>
-                </div>
-
-            </div>
             </div>
         </PageLayout>
     );
 }
+
+

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { FiMapPin, FiCheckCircle, FiLoader, FiSmartphone, FiXCircle, FiLock } from 'react-icons/fi';
+import { FiMapPin, FiCheckCircle, FiLoader, FiSmartphone, FiXCircle, FiLock, FiInfo, FiAlertTriangle } from 'react-icons/fi';
 import { toast, ToastContainer } from 'react-toastify';
 import Button from '../../components/form/Button';
 import Input from '../../components/form/Input';
@@ -209,7 +209,15 @@ export default function SelfCheckIn() {
 
     return (
         <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden font-sans">
-            <ToastContainer theme="dark" position="top-center" />
+            <ToastContainer theme="dark" position="top-center" icon={({ type }) => {
+                const icons = {
+                    success: <FiCheckCircle size={20} className="text-emerald-400 flex-shrink-0" />,
+                    error: <FiXCircle size={20} className="text-rose-400 flex-shrink-0" />,
+                    info: <FiInfo size={20} className="text-sky-400 flex-shrink-0" />,
+                    warning: <FiAlertTriangle size={20} className="text-amber-400 flex-shrink-0" />
+                };
+                return icons[type] || <FiInfo size={20} className="text-sky-400 flex-shrink-0" />;
+            }} />
             
             {/* Animated Background Orbs */}
             <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-600/20 rounded-full mix-blend-screen filter blur-[100px] animate-pulse"></div>

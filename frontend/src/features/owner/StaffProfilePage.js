@@ -13,14 +13,25 @@ export default function StaffProfilePage() {
     const staff = location.state?.staff;
     const [referredMembers, setReferredMembers] = useState([]);
 
+    const [trainerMemberships, setTrainerMemberships] = useState([]);
+    const [salesMemberships, setSalesMemberships] = useState([]);
+
     useEffect(() => {
         if (staff?._id) {
-            apiClient.get('/members')
-                .then(res => {
-                    const referred = res.data.filter(m => m.referredByStaff?._id === staff._id || m.referredByStaff === staff._id);
-                    setReferredMembers(referred);
-                })
-                .catch(err => console.error("Failed to fetch referred members", err));
+            Promise.all([
+                apiClient.get('/members').catch(() => ({ data: [] })),
+                apiClient.get('/member-memberships/latest').catch(() => ({ data: [] }))
+            ]).then(([memRes, memShipRes]) => {
+                const referred = (memRes.data || []).filter(m => m.referredByStaff?._id === staff._id || m.referredByStaff === staff._id);
+                setReferredMembers(referred);
+
+                const allMemShips = memShipRes.data || [];
+                const assigned = allMemShips.filter(m => (m.trainerId?._id || m.trainerId) === staff._id);
+                const sales = allMemShips.filter(m => (m.salesPersonId?._id || m.salesPersonId) === staff._id);
+
+                setTrainerMemberships(assigned);
+                setSalesMemberships(sales);
+            }).catch(err => console.error("Failed to fetch staff attribution data", err));
         }
     }, [staff]);
 
@@ -107,13 +118,67 @@ export default function StaffProfilePage() {
                         <Input label="Status" value={staff.status || ''} readOnly />
                     </FormSection>
 
-                    <FormSection title="Wallet & Rewards" icon={<FiAward className="text-indigo-600" />} className="grid grid-cols-1 sm:grid-cols-2 gap-4 pointer-events-none mt-6">
+                    <FormSection title="Wallet, Sales & Performance Overview" icon={<FiAward className="text-indigo-600" />} className="grid grid-cols-1 sm:grid-cols-4 gap-4 pointer-events-none mt-6">
                         <Input label="Wallet Balance (Rewards)" value={staff.walletBalance ? `₹${staff.walletBalance}` : '₹0'} className="font-bold text-indigo-600" readOnly />
-                        <Input label="Total Referrals" value={referredMembers.length.toString()} readOnly />
+                        <Input label="Assigned Trainees" value={trainerMemberships.length.toString()} readOnly />
+                        <Input label="Individual Sales Count" value={salesMemberships.length.toString()} readOnly />
+                        <Input label="PT Conversions" value={trainerMemberships.filter(m => m.isPTConversion).length.toString()} readOnly />
                     </FormSection>
 
+                    {/* Assigned Members / Trainees List */}
+                    {trainerMemberships.length > 0 && (
+                        <FormSection title="Assigned Trainees & Members" icon={<FiUsers className="text-indigo-600" />} className="mt-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {trainerMemberships.map(m => {
+                                    const mem = m.memberId || {};
+                                    return (
+                                        <div key={m._id} className="p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+                                                    {(mem.firstName || 'M').charAt(0).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-slate-800 text-sm">{mem.firstName} {mem.lastName || ''}</p>
+                                                    <p className="text-xs text-slate-500 font-medium">{m.planName} • {mem.contactNumber || 'N/A'}</p>
+                                                </div>
+                                            </div>
+                                            {m.isPTConversion && (
+                                                <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-extrabold rounded-full border border-amber-300">
+                                                    PT
+                                                </span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </FormSection>
+                    )}
+
+                    {/* Sales Attribution List */}
+                    {salesMemberships.length > 0 && (
+                        <FormSection title="Individual Sales & Conversions" icon={<FiAward className="text-emerald-600" />} className="mt-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {salesMemberships.map(m => {
+                                    const mem = m.memberId || {};
+                                    return (
+                                        <div key={m._id} className="p-3.5 bg-emerald-50/50 rounded-xl border border-emerald-100 flex items-center justify-between">
+                                            <div>
+                                                <p className="font-bold text-slate-800 text-sm">{mem.firstName} {mem.lastName || ''}</p>
+                                                <p className="text-xs text-slate-500 font-medium">{m.planName} (₹{m.finalPrice || m.originalPrice})</p>
+                                                {m.reference && <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">Ref: {m.reference}</p>}
+                                            </div>
+                                            <span className="font-extrabold text-emerald-600 text-sm">
+                                                ₹{m.paidAmount || 0}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </FormSection>
+                    )}
+
                     {referredMembers.length > 0 && (
-                        <FormSection title="Members Referred by this Staff" icon={<FiUsers className="text-emerald-600" />} className="mt-6 pointer-events-none">
+                        <FormSection title="Members Referred by this Staff" icon={<FiUsers className="text-emerald-600" />} className="mt-6">
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {referredMembers.map(refM => (
                                     <div key={refM._id} className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100 flex items-center gap-3">

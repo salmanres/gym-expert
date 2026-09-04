@@ -73,21 +73,43 @@ export default function PaymentForm() {
 
                 if (autoOpenMember) {
                     const freshMember = membersWithPlans.find(m => m._id === autoOpenMember._id) || autoOpenMember;
-                    setFormData(prev => ({
-                        ...prev,
-                        memberId: freshMember._id,
-                        membershipPlan: freshMember.membershipPlan?._id || '',
-                        baseAmount: freshMember.membershipPlan?.price || 0,
-                        discount: freshMember.discount || 0,
-                        finalAmount: freshMember.finalAmount || ((freshMember.membershipPlan?.price || 0) - (freshMember.discount || 0)),
-                        previouslyPaid: freshMember.amountPaid || 0,
-                        newPaymentAmount: '',
-                        paymentStatus: freshMember.paymentStatus || 'Pending',
-                        paymentMode: freshMember.paymentMode || 'Cash',
-                        transactionId: freshMember.transactionId || '',
-                        walletUsed: '',
-                        additionalDiscount: 0
-                    }));
+                    const targetMem = location.state?.targetMembership;
+                    
+                    if (targetMem) {
+                        const planObj = targetMem.membershipPlanId || freshMember.membershipPlan;
+                        setFormData(prev => ({
+                            ...prev,
+                            memberId: freshMember._id,
+                            membershipPlan: planObj?._id || planObj || '',
+                            baseAmount: targetMem.originalPrice || targetMem.finalPrice || planObj?.price || 0,
+                            discount: targetMem.discount || 0,
+                            finalAmount: targetMem.finalPrice || 0,
+                            previouslyPaid: targetMem.paidAmount || 0,
+                            newPaymentAmount: targetMem.balanceAmount || '',
+                            paymentStatus: targetMem.paymentStatus || 'Pending',
+                            paymentMode: 'Cash',
+                            transactionId: '',
+                            walletUsed: '',
+                            additionalDiscount: 0,
+                            targetMembershipId: targetMem._id
+                        }));
+                    } else {
+                        setFormData(prev => ({
+                            ...prev,
+                            memberId: freshMember._id,
+                            membershipPlan: freshMember.membershipPlan?._id || '',
+                            baseAmount: freshMember.membershipPlan?.price || 0,
+                            discount: freshMember.discount || 0,
+                            finalAmount: freshMember.finalAmount || ((freshMember.membershipPlan?.price || 0) - (freshMember.discount || 0)),
+                            previouslyPaid: freshMember.amountPaid || 0,
+                            newPaymentAmount: '',
+                            paymentStatus: freshMember.paymentStatus || 'Pending',
+                            paymentMode: freshMember.paymentMode || 'Cash',
+                            transactionId: freshMember.transactionId || '',
+                            walletUsed: '',
+                            additionalDiscount: 0
+                        }));
+                    }
                 }
             } catch (err) {
                 toast.error("Failed to fetch necessary data");
@@ -202,6 +224,23 @@ export default function PaymentForm() {
 
         setSubmitting(true);
         try {
+            if (formData.targetMembershipId) {
+                const newPaymentVal = parseFloat(formData.newPaymentAmount || 0);
+                const walletVal = formData.useWallet ? parseFloat(formData.walletUsed || 0) : 0;
+
+                await apiClient.post(`/member-memberships/${formData.targetMembershipId}/payment`, {
+                    amountPaid: newPaymentVal,
+                    walletUsed: walletVal,
+                    paymentMode: formData.paymentMode,
+                    transactionId: formData.transactionId,
+                    paymentDate: new Date().toISOString()
+                });
+
+                toast.success("Payment recorded successfully!");
+                navigate(`/dashboard/owner/finance/receipt/${formData.memberId}`);
+                return;
+            }
+
             const selectedMember = members.find(m => m._id === formData.memberId);
             const plan = memberships.find(m => m._id === formData.membershipPlan) || selectedMember?.membershipPlan;
             

@@ -114,17 +114,25 @@ exports.updateMembership = async (req, res) => {
     }
 };
 
-// @desc    Delete membership plan
+// @desc    Deactivate (soft delete) membership plan
 // @route   DELETE /api/membership-plans/:id
 // @access  Private
 exports.deleteMembership = async (req, res) => {
     try {
         const gymId = req.user.gymId;
 
-        const membership = await MembershipPlan.findOneAndDelete({
-            _id: req.params.id,
-            gymId,
-        });
+        const membership = await MembershipPlan.findOneAndUpdate(
+            {
+                _id: req.params.id,
+                gymId,
+            },
+            {
+                isActive: false,
+            },
+            {
+                new: true,
+            }
+        );
 
         if (!membership) {
             return res.status(404).json({
@@ -133,12 +141,13 @@ exports.deleteMembership = async (req, res) => {
         }
 
         res.status(200).json({
-            message: "Membership plan deleted successfully",
+            message: "Membership plan deactivated successfully",
+            membership,
         });
     } catch (err) {
         console.error(err);
         res.status(500).json({
-            message: "Server error deleting membership plan",
+            message: "Server error deactivating membership plan",
         });
     }
 };

@@ -83,6 +83,52 @@ const autoCheckoutOverdueAttendance = async (gymId = null) => {
 
 exports.autoCheckoutOverdueAttendance = autoCheckoutOverdueAttendance;
 
+// Helper to calculate late minutes and salary deduction for staff
+const calculateStaffLateDeduction = (targetUser, checkInTime) => {
+    if (!targetUser || !targetUser.shiftStart) {
+        return { isLate: false, lateMinutes: 0, deductionAmount: 0 };
+    }
+
+    const [startH, startM] = targetUser.shiftStart.split(':').map(Number);
+    if (isNaN(startH) || isNaN(startM)) {
+        return { isLate: false, lateMinutes: 0, deductionAmount: 0 };
+    }
+
+    const checkIn = new Date(checkInTime || Date.now());
+    const expectedStart = new Date(checkIn);
+    expectedStart.setHours(startH, startM, 0, 0);
+
+    const diffMs = checkIn.getTime() - expectedStart.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+
+    if (diffMins <= 5) { // 5-minute grace period
+        return { isLate: false, lateMinutes: 0, deductionAmount: 0 };
+    }
+
+    const monthlySalary = targetUser.salary || 0;
+    const dailySalary = monthlySalary / 30; // standard 30 days per month
+
+    let shiftHours = 8;
+    if (targetUser.shiftEnd) {
+        const [endH, endM] = targetUser.shiftEnd.split(':').map(Number);
+        if (!isNaN(endH) && !isNaN(endM)) {
+            const shiftDurationMins = (endH * 60 + endM) - (startH * 60 + startM);
+            if (shiftDurationMins > 0) {
+                shiftHours = shiftDurationMins / 60;
+            }
+        }
+    }
+
+    const hourlySalary = shiftHours > 0 ? (dailySalary / shiftHours) : 0;
+    const deductionAmount = Math.round(((diffMins / 60) * hourlySalary) * 100) / 100;
+
+    return {
+        isLate: true,
+        lateMinutes: diffMins,
+        deductionAmount: Math.max(0, deductionAmount)
+    };
+};
+
 // @desc    Mark Attendance (Manual, QR, Biometric)
 // @route   POST /api/attendance/mark
 // @access  Private
@@ -102,6 +148,7 @@ exports.markAttendance = async (req, res) => {
             targetUser = await User.findById(targetUserId);
             if (targetUser) {
                 isStaff = true;
+                attendanceType = 'Staff';
             } else {
                 targetUser = await Enquiry.findById(targetUserId);
                 if (targetUser) {
@@ -241,7 +288,54 @@ exports.markAttendance = async (req, res) => {
 
             // Standard check-out flow (QR/Biometric or normal manual check-out)
             if (!attendance.checkOutTime && attendance.status !== 'Absent') {
-                attendance.checkOutTime = new Date();
+                const checkOutDate = new Date();
+                attendance.checkOutTime = checkOutDate;
+
+                // Trainer / Staff Work Time Salary Cut Calculation on Check-Out
+                if (attendance.attendanceType === 'Staff' || isStaff) {
+                    const staffUser = targetUser || await User.findById(attendance.userId);
+                    if (staffUser && staffUser.shiftStart && staffUser.shiftEnd) {
+                        const parseMinutes = (timeStr) => {
+                            if (!timeStr) return null;
+                            const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+                            if (!match) return null;
+                            let [_, hours, mins, period] = match;
+                            hours = parseInt(hours, 10);
+                            mins = parseInt(mins, 10);
+                            if (period) {
+                                if (period.toUpperCase() === 'PM' && hours < 12) hours += 12;
+                                if (period.toUpperCase() === 'AM' && hours === 12) hours = 0;
+                            }
+                            return hours * 60 + mins;
+                        };
+
+                        const shiftStartMins = parseMinutes(staffUser.shiftStart);
+                        const shiftEndMins = parseMinutes(staffUser.shiftEnd);
+
+                        if (shiftStartMins !== null && shiftEndMins !== null && shiftEndMins > shiftStartMins) {
+                            const requiredShiftMins = shiftEndMins - shiftStartMins;
+                            const actualWorkedMins = Math.floor((checkOutDate.getTime() - new Date(attendance.checkInTime).getTime()) / (1000 * 60));
+
+                            const deficitMins = Math.max(0, requiredShiftMins - actualWorkedMins);
+                            
+                            // If worked less than required shift hours (beyond 5 min grace)
+                            if (deficitMins > 5) {
+                                const monthlySalary = staffUser.salary || 0;
+                                const dailySalary = monthlySalary / 30;
+                                const shiftHours = requiredShiftMins / 60;
+                                const hourlyPay = shiftHours > 0 ? (dailySalary / shiftHours) : 0;
+                                const totalSalaryCut = Math.round(((deficitMins / 60) * hourlyPay) * 100) / 100;
+
+                                attendance.lateMinutes = Math.max(attendance.lateMinutes || 0, deficitMins);
+                                attendance.deductionAmount = Math.max(attendance.deductionAmount || 0, totalSalaryCut);
+                                if (attendance.status === 'Present') {
+                                    attendance.status = 'Late';
+                                }
+                            }
+                        }
+                    }
+                }
+
                 await attendance.save();
                 return res.json({ message: 'Check-out marked successfully', attendance });
             } else {
@@ -251,13 +345,34 @@ exports.markAttendance = async (req, res) => {
             if (source === 'Manual' && status === 'Clear') {
                 return res.json({ message: 'Attendance already cleared', attendance: null });
             }
+
+            let lateMinutes = 0;
+            let deductionAmount = 0;
+            let finalStatus = status || 'Present';
+
+            if (isStaff && status !== 'Absent') {
+                const checkInTime = new Date();
+                const lateCalc = calculateStaffLateDeduction(targetUser, checkInTime);
+                if (lateCalc.isLate) {
+                    lateMinutes = lateCalc.lateMinutes;
+                    deductionAmount = lateCalc.deductionAmount;
+                    if (!status || status === 'Present') {
+                        finalStatus = 'Late';
+                    }
+                }
+            }
+
             // Check in / Create new record
             attendance = await Attendance.create({
                 userId: targetUserId,
                 gymId: gymId,
                 date: recordDate,
                 checkInTime: status !== 'Absent' ? new Date() : null,
-                status: status || 'Present',
+                status: finalStatus,
+                lateMinutes,
+                deductionAmount,
+                shiftStart: isStaff ? targetUser.shiftStart : undefined,
+                shiftEnd: isStaff ? targetUser.shiftEnd : undefined,
                 source: source || 'Manual',
                 attendanceType: attendanceType,
                 location: latitude ? { latitude, longitude } : undefined,
@@ -388,14 +503,18 @@ exports.getDailySheet = async (req, res) => {
             const staffMembers = await User.find({ 
                 gymId: req.user.gymId,
                 role: { $in: ['STAFF', 'TRAINER', 'BRANCH_MANAGER', 'ADMIN'] }
-            }).select('name phone profilePhoto status');
+            }).select('name phone profilePhoto status shiftStart shiftEnd salary role');
             
             users = staffMembers.map(u => ({
                 _id: u._id,
                 name: u.name,
                 phone: u.phone,
                 profilePhoto: u.profilePhoto,
-                status: u.status
+                status: u.status,
+                shiftStart: u.shiftStart,
+                shiftEnd: u.shiftEnd,
+                salary: u.salary,
+                role: u.role
             }));
         } else if (type === 'trial') {
             // Show enquiries that are actively on trial during the queryDate

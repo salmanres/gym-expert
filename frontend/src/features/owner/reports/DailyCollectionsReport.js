@@ -217,6 +217,46 @@ export default function DailyCollectionsReport({
                 </div>
             </div>
 
+            {/* 3. Sales by Staff Breakdown */}
+            <div className="px-4">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <h4 className="font-extrabold text-slate-800 text-xs tracking-wider uppercase">
+                                Collections By Staff (Individual Sales Count)
+                            </h4>
+                            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
+                                Breakdown of collections handled by each staff member
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {Object.entries(
+                            transactions.reduce((acc, t) => {
+                                const staffName = t.collectedBy?.name || (typeof t.collectedBy === 'string' ? t.collectedBy : null) || t.collectedByName || 'Harjeet (Admin)';
+                                if (!acc[staffName]) {
+                                    acc[staffName] = { count: 0, amount: 0 };
+                                }
+                                acc[staffName].count += 1;
+                                acc[staffName].amount += (Number(t.amountPaid) || 0);
+                                return acc;
+                            }, {})
+                        )
+                        .sort((a, b) => b[1].amount - a[1].amount)
+                        .map(([name, data], idx) => (
+                            <div key={idx} className="flex flex-col p-3 rounded-lg bg-slate-50 border border-slate-100">
+                                <span className="text-xs font-bold text-slate-700 mb-1">{name}</span>
+                                <div className="flex justify-between items-end mt-1">
+                                    <span className="text-[10px] font-semibold text-slate-500 uppercase">{data.count} Sales</span>
+                                    <span className="text-sm font-black text-emerald-600">₹{data.amount.toLocaleString()}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
             {/* 4. App Theme Data Table */}
             <div className="px-4 pb-4">
                 {transactions.length > 0 ? (

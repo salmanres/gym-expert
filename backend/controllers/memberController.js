@@ -192,6 +192,26 @@ const getMemberById = async (req, res) => {
     }
 };
 
+// @desc    Get single transaction by ID
+// @route   GET /api/members/transactions/single/:id
+// @access  Private
+const getTransactionById = async (req, res) => {
+    try {
+        const transaction = await Transaction.findById(req.params.id)
+            .populate('memberId')
+            .populate('planId');
+
+        if (!transaction) {
+            return res.status(404).json({ message: 'Transaction not found' });
+        }
+
+        res.status(200).json(transaction);
+    } catch (error) {
+        console.error('Error fetching transaction by id:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 // @desc    Get all transactions for a gym
 // @route   GET /api/members/transactions/all
 // @access  Private
@@ -386,68 +406,96 @@ const updateMember = async (req, res) => {
                 });
             }
 
-            // Sync with active MemberMembership
+            // Sync with active / scheduled MemberMembership
             const activeMembership = await MemberMembership.findOne({
                 memberId: updatedMember._id,
                 membershipStatus: "Active"
             }).sort({ createdAt: -1 });
 
             if (activeMembership) {
-                if (updateData.amountPaid !== undefined) {
-                    activeMembership.paidAmount = updateData.amountPaid;
-                }
-                if (updateData.paymentStatus) {
-                    activeMembership.paymentStatus = updateData.paymentStatus;
-                }
-                if (updateData.paidUntilDate) {
-                    activeMembership.paidUntilDate = updateData.paidUntilDate;
-                }
-                if (updateData.planStartDate) {
-                    activeMembership.startDate = updateData.planStartDate;
-                }
-                if (updateData.planEndDate) {
-                    activeMembership.endDate = updateData.planEndDate;
-                }
-                
-                const finalPrice = activeMembership.finalPrice || 0;
-                const paidAmt = activeMembership.paidAmount || 0;
-                
-                let paymentStatus = "Pending";
-                if (paidAmt >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
-                else if (paidAmt > 0) paymentStatus = "Partial";
-                if (finalPrice === 0) paymentStatus = "Paid";
+                const isActiveFullyPaid = activeMembership.paymentStatus === 'Paid' || (activeMembership.balanceAmount || 0) <= 0;
 
-                activeMembership.paymentStatus = paymentStatus;
+                if (isActiveFullyPaid && newPaymentAmount > 0) {
+                    // Active plan is already fully paid! Create or update Scheduled (Future) membership
+                    let scheduledMem = await MemberMembership.findOne({
+                        memberId: updatedMember._id,
+                        membershipStatus: "Scheduled"
+                    }).sort({ createdAt: -1 });
 
-                if (paymentStatus === 'Paid') {
-                    activeMembership.paidUntilDate = activeMembership.endDate;
-                    activeMembership.balanceAmount = 0;
-                } else if (paymentStatus === 'Partial' && finalPrice > 0 && !updateData.paidUntilDate) {
-                    const startMs = new Date(activeMembership.startDate).getTime();
-                    const endMs = new Date(activeMembership.endDate).getTime();
-                    const totalMs = endMs - startMs;
-                    const totalDays = Math.max(1, Math.round(totalMs / (1000 * 60 * 60 * 24)));
-                    
-                    const perDayCost = finalPrice / totalDays;
-                    const exactDays = paidAmt / perDayCost;
-                    const floorDays = Math.floor(exactDays);
-                    
-                    const costForFloorDays = Number((floorDays * perDayCost).toFixed(2));
-                    const extraAmountToWallet = Number((paidAmt - costForFloorDays).toFixed(2));
-                    
-                    activeMembership.paidAmount = costForFloorDays;
-                    activeMembership.balanceAmount = Math.max(0, finalPrice - costForFloorDays);
-                    activeMembership.paidUntilDate = new Date(startMs + (floorDays * 24 * 60 * 60 * 1000));
-                    
-                    if (extraAmountToWallet > 0) {
-                        updatedMember.walletBalance = (updatedMember.walletBalance || 0) + extraAmountToWallet;
-                        await updatedMember.save();
+                    if (scheduledMem) {
+                        scheduledMem.paidAmount = (scheduledMem.paidAmount || 0) + newPaymentAmount;
+                        scheduledMem.balanceAmount = Math.max(0, scheduledMem.finalPrice - scheduledMem.paidAmount);
+                        scheduledMem.paymentStatus = scheduledMem.paidAmount >= scheduledMem.finalPrice ? 'Paid' : 'Partial';
+                        await scheduledMem.save();
+                    } else {
+                        const schedStart = new Date(activeMembership.endDate);
+                        schedStart.setDate(schedStart.getDate() + 1);
+
+                        const durationMs = new Date(activeMembership.endDate).getTime() - new Date(activeMembership.startDate).getTime();
+                        const schedEnd = new Date(schedStart.getTime() + (durationMs > 0 ? durationMs : 30 * 24 * 60 * 60 * 1000));
+
+                        const planPrice = activeMembership.finalPrice || activeMembership.originalPrice || newPaymentAmount;
+                        const pStatus = newPaymentAmount >= planPrice ? 'Paid' : 'Partial';
+
+                        await MemberMembership.create({
+                            gymId: req.user.gymId,
+                            memberId: updatedMember._id,
+                            membershipPlanId: activeMembership.membershipPlanId,
+                            planName: activeMembership.planName,
+                            duration: activeMembership.duration,
+                            durationUnit: activeMembership.durationUnit,
+                            totalSessions: activeMembership.totalSessions,
+                            startDate: schedStart,
+                            endDate: schedEnd,
+                            originalPrice: activeMembership.originalPrice || planPrice,
+                            discount: activeMembership.discount || 0,
+                            finalPrice: planPrice,
+                            paidAmount: newPaymentAmount,
+                            balanceAmount: Math.max(0, planPrice - newPaymentAmount),
+                            paymentStatus: pStatus,
+                            membershipStatus: 'Scheduled'
+                        });
                     }
                 } else {
-                    activeMembership.balanceAmount = Math.max(0, finalPrice - paidAmt);
+                    // Update active plan (partial/pending payment balance collection)
+                    if (updateData.amountPaid !== undefined) {
+                        activeMembership.paidAmount = updateData.amountPaid;
+                    } else if (newPaymentAmount > 0) {
+                        activeMembership.paidAmount = (activeMembership.paidAmount || 0) + newPaymentAmount;
+                    }
+
+                    if (updateData.paymentStatus) {
+                        activeMembership.paymentStatus = updateData.paymentStatus;
+                    }
+                    if (updateData.paidUntilDate) {
+                        activeMembership.paidUntilDate = updateData.paidUntilDate;
+                    }
+                    if (updateData.planStartDate) {
+                        activeMembership.startDate = updateData.planStartDate;
+                    }
+                    if (updateData.planEndDate) {
+                        activeMembership.endDate = updateData.planEndDate;
+                    }
+                    
+                    const finalPrice = activeMembership.finalPrice || 0;
+                    const paidAmt = activeMembership.paidAmount || 0;
+                    
+                    let paymentStatus = "Pending";
+                    if (paidAmt >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
+                    else if (paidAmt > 0) paymentStatus = "Partial";
+                    if (finalPrice === 0) paymentStatus = "Paid";
+
+                    activeMembership.paymentStatus = paymentStatus;
+
+                    if (paymentStatus === 'Paid') {
+                        activeMembership.paidUntilDate = activeMembership.endDate;
+                        activeMembership.balanceAmount = 0;
+                    } else {
+                        activeMembership.balanceAmount = Math.max(0, finalPrice - paidAmt);
+                    }
+                    
+                    await activeMembership.save();
                 }
-                
-                await activeMembership.save();
             }
         }
 
@@ -487,6 +535,7 @@ module.exports = {
     getMembers,
     getMemberById,
     getTransactions,
+    getTransactionById,
     deleteTransaction,
     updateMember,
     deleteMember

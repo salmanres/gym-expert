@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const transactionSchema = new mongoose.Schema({
     gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true },
     memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'Member', required: true },
+    membershipId: { type: mongoose.Schema.Types.ObjectId, ref: 'MemberMembership' },
     planId: { type: mongoose.Schema.Types.ObjectId, ref: 'MembershipPlan' },
     collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     amountPaid: { type: Number, required: true },

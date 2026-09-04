@@ -86,6 +86,11 @@ const memberMembershipSchema = new mongoose.Schema(
       default: 0,
     },
 
+    totalCollected: {
+      type: Number,
+      default: 0,
+    },
+
     balanceAmount: {
       type: Number,
       default: 0,
@@ -118,6 +123,26 @@ const memberMembershipSchema = new mongoose.Schema(
       trim: true,
     },
 
+    trainerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
+    salesPersonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
+    reference: {
+      type: String,
+      trim: true,
+    },
+
+    isPTConversion: {
+      type: Boolean,
+      default: false,
+    },
+
     bonusDays: {
       type: Number,
       default: 0
@@ -128,6 +153,25 @@ const memberMembershipSchema = new mongoose.Schema(
       reason: { type: String, required: true },
       date: { type: Date, default: Date.now },
       addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    }],
+
+    freezeDate: {
+      type: Date,
+    },
+
+    freezeHistory: [{
+      freezeDate: { type: Date, required: true },
+      unfreezeDate: { type: Date },
+      daysFrozen: { type: Number, default: 0 },
+      reason: { type: String },
+      actionBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    }],
+
+    sessionLogs: [{
+      date: { type: Date, default: Date.now },
+      trainerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      notes: { type: String },
+      loggedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
     }],
   },
   {

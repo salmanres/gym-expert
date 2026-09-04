@@ -12,6 +12,9 @@ router.route('/')
 router.route('/transactions/all')
     .get(protect, memberController.getTransactions);
 
+router.route('/transactions/single/:id')
+    .get(protect, memberController.getTransactionById);
+
 router.route('/transactions/:id')
     .delete(gymOwnerOnly, memberController.deleteTransaction);
 

@@ -44,7 +44,7 @@ export default function LeadForm() {
     const [formData, setFormData] = useState({
         firstName: '', lastName: '', gender: 'Male', dob: '', contactNumber: '', altContact: '', email: '',
         address: '', source: '', referredBy: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
-        trialFeeType: 'Unpaid', trialFee: '', trialPaymentStatus: 'Unpaid',
+        trialFeeType: 'Unpaid', trialFee: '', trialPaymentStatus: 'Unpaid', trialPaymentMode: 'Cash',
         convertibility: 'Warm', status: 'Pending', attendedBy: 'Admin',
         response: '', offerAmount: '', offerDetails: '', selectedOffer: '', lostReason: '', sendTextAndEmail: false, sendWhatsApp: false,
         followUpHistory: []
@@ -107,6 +107,7 @@ export default function LeadForm() {
                             trialFeeType: leadData.trialFeeType || 'Unpaid',
                             trialFee: leadData.trialFee ?? '',
                             trialPaymentStatus: leadData.trialPaymentStatus || 'Unpaid',
+                            trialPaymentMode: leadData.trialPaymentMode || 'Cash',
                             referredBy: leadData.referredBy || '',
                             selectedOffer: matchedOfferId, 
                             sendTextAndEmail: false, 
@@ -404,8 +405,23 @@ export default function LeadForm() {
                                     <Select label="Trial Type" name="trialFeeType" value={formData.trialFeeType || 'Unpaid'} onChange={handleChange} options={['Unpaid', 'Paid']} error={errors.trialFeeType} />
                                     {formData.trialFeeType === 'Paid' && (
                                         <>
-                                            <Input type="number" label="Trial Fee (₹)" name="trialFee" value={formData.trialFee || ''} onChange={handleChange} placeholder="e.g. 500" error={errors.trialFee} />
-                                            <Select label="Trial Payment Status" name="trialPaymentStatus" value={formData.trialPaymentStatus || 'Paid'} onChange={handleChange} options={['Paid', 'Pending', 'Unpaid']} error={errors.trialPaymentStatus} />
+                                            <Input 
+                                                type="number" 
+                                                label="Trial Amount (₹)" 
+                                                name="trialFee" 
+                                                value={formData.trialFee || ''} 
+                                                onChange={handleChange} 
+                                                placeholder="e.g. 500" 
+                                                error={errors.trialFee} 
+                                            />
+                                            <Select 
+                                                label="Trial Payment Mode" 
+                                                name="trialPaymentMode" 
+                                                value={formData.trialPaymentMode || 'Cash'} 
+                                                onChange={handleChange} 
+                                                options={['Cash', 'UPI', 'Card', 'Net Banking', 'Online']} 
+                                                error={errors.trialPaymentMode} 
+                                            />
                                         </>
                                     )}
                                 </>

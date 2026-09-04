@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
 import { 
     FiPhone, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2, 
-    FiUsers, FiList, FiX, FiEye, FiTag, FiClock, FiMapPin, FiCheckCircle
+    FiUsers, FiList, FiX, FiEye, FiTag, FiClock, FiMapPin, FiCheckCircle, FiFileText
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
@@ -157,6 +157,7 @@ function Leads() {
                 trialFeeType: lead.trialFeeType || 'Unpaid',
                 trialFee: lead.trialFee ?? '',
                 trialPaymentStatus: lead.trialPaymentStatus || 'Unpaid',
+                trialPaymentMode: lead.trialPaymentMode || 'Cash',
                 lostReason: lead.lostReason || '',
                 selectedOffer: matchedOfferId,
                 offerAmount: lead.offerAmount || '',
@@ -475,6 +476,15 @@ function Leads() {
                     >
                         <FiEye className="text-sm" />
                     </button>
+                    {lead.trialFeeType === 'Paid' && (
+                        <button 
+                            onClick={() => navigate(`/dashboard/owner/finance/receipt/${lead._id}`)}
+                            className="w-8 h-8 rounded bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                            title="Trial Paid Receipt"
+                        >
+                            <FiFileText className="text-sm" />
+                        </button>
+                    )}
                     {lead.status === 'Converted' && !lead.isMemberCreated && (
                         <button 
                             onClick={() => navigate('/dashboard/owner/members/add', { state: { convertedLead: lead } })}
@@ -677,6 +687,17 @@ function Leads() {
                                 </div>
 
                                 <div className="flex items-center gap-2">
+                                    {viewLead.trialFeeType === 'Paid' && (
+                                        <button
+                                            onClick={() => {
+                                                setViewModalOpen(false);
+                                                navigate(`/dashboard/owner/finance/receipt/${viewLead._id}`);
+                                            }}
+                                            className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-purple-200 transition-all"
+                                        >
+                                            <FiFileText size={14} /> Trial Receipt
+                                        </button>
+                                    )}
                                     {viewLead.status !== 'Converted' && (
                                         <button
                                             onClick={() => {
@@ -991,7 +1012,7 @@ function Leads() {
                                                     <input 
                                                         type="number"
                                                         placeholder="e.g. 500"
-                                                        value={statusFormData.trialFee}
+                                                        value={statusFormData.trialFee || ''}
                                                         onChange={(e) => setStatusFormData({...statusFormData, trialFee: e.target.value})}
                                                         className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                                                     />
@@ -1000,17 +1021,21 @@ function Leads() {
                                         </div>
 
                                         {statusFormData.trialFeeType === 'Paid' && (
-                                            <div className="flex flex-col gap-1.5">
-                                                <label className="text-xs font-bold text-slate-700">Trial Payment Status</label>
-                                                <select 
-                                                    value={statusFormData.trialPaymentStatus || 'Paid'}
-                                                    onChange={(e) => setStatusFormData({...statusFormData, trialPaymentStatus: e.target.value})}
-                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                                >
-                                                    <option value="Paid">Paid</option>
-                                                    <option value="Pending">Pending</option>
-                                                    <option value="Unpaid">Unpaid</option>
-                                                </select>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="flex flex-col gap-1.5">
+                                                    <label className="text-xs font-bold text-slate-700">Payment Mode</label>
+                                                    <select 
+                                                        value={statusFormData.trialPaymentMode || 'Cash'}
+                                                        onChange={(e) => setStatusFormData({...statusFormData, trialPaymentMode: e.target.value})}
+                                                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                                    >
+                                                        <option value="Cash">Cash</option>
+                                                        <option value="UPI">UPI / QR</option>
+                                                        <option value="Card">Credit/Debit Card</option>
+                                                        <option value="Net Banking">Net Banking</option>
+                                                        <option value="Online">Other Online</option>
+                                                    </select>
+                                                </div>
                                             </div>
                                         )}
                                     </div>

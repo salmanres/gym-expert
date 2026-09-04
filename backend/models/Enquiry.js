@@ -26,6 +26,7 @@ const enquirySchema = new mongoose.Schema({
     trialFeeType: { type: String, enum: ['Unpaid', 'Paid'], default: 'Unpaid' },
     trialFee: { type: Number, default: 0 },
     trialPaymentStatus: { type: String, enum: ['Paid', 'Unpaid', 'Pending'], default: 'Unpaid' },
+    trialPaymentMode: { type: String, default: 'Cash' },
     status: { 
         type: String, 
         enum: ['Pending', 'Lead', 'Contacted', 'Trial', 'Negotiation', 'Converted', 'Lost'], 

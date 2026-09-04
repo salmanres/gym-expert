@@ -164,6 +164,8 @@ export default function StaffHoursReport({
             checkOut,
             workingHours: hrs,
             overtime: ot,
+            lateMinutes: log.lateMinutes || 0,
+            deductionAmount: log.deductionAmount || 0,
             status: log.status || (log.checkInTime ? 'Present' : 'Absent')
         };
     }) : [];
@@ -183,7 +185,8 @@ export default function StaffHoursReport({
             'Daily Check In': log.checkIn,
             'Daily Check Out': log.checkOut,
             'Working Hours': log.workingHours,
-            'Overtime': log.overtime,
+            'Late Minutes': log.lateMinutes ? `${log.lateMinutes} mins` : '0 mins',
+            'Salary Deduction (₹)': log.deductionAmount ? log.deductionAmount.toFixed(2) : '0.00',
             'Attendance Status': log.status
         }));
 
@@ -295,7 +298,7 @@ export default function StaffHoursReport({
                                         <th className="py-3 px-4">Check In</th>
                                         <th className="py-3 px-4">Check Out</th>
                                         <th className="py-3 px-4">Working Hours</th>
-                                        <th className="py-3 px-4">Overtime</th>
+                                        <th className="py-3 px-4">Late Deduction</th>
                                         <th className="py-3 px-4 text-right">Status</th>
                                     </tr>
                                 </thead>
@@ -314,8 +317,15 @@ export default function StaffHoursReport({
                                             <td className="py-3 px-4 font-black text-slate-800">
                                                 {log.workingHours}
                                             </td>
-                                            <td className="py-3 px-4 font-bold text-amber-600">
-                                                {log.overtime}
+                                            <td className="py-3 px-4">
+                                                {log.lateMinutes > 0 ? (
+                                                    <span className="inline-flex flex-col text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded">
+                                                        <span>{log.lateMinutes}m Late</span>
+                                                        <span className="font-extrabold text-rose-600">-₹{log.deductionAmount.toFixed(2)}</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400 font-medium">None</span>
+                                                )}
                                             </td>
                                             <td className="py-3 px-4 text-right">
                                                 <span className={`inline-flex px-2.5 py-1 rounded text-xs font-bold uppercase ${

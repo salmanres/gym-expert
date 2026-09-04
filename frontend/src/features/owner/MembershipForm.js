@@ -215,14 +215,14 @@ function MembershipForm() {
                                     />
                                 </div>
                             </div>
-                            {formData.planType.some(pt => ['Personal Training', 'Classes', 'Zumba', 'Yoga', 'Combo'].includes(pt)) && (
+                            {formData.planType.some(pt => typeof pt === 'string' && (pt.toLowerCase().includes('personal training') || pt.toLowerCase().includes('pt') || ['Classes', 'Zumba', 'Yoga', 'Combo'].includes(pt))) && (
                                 <Input 
-                                    label="Total Sessions (Optional)" 
+                                    label="Total PT / Class Sessions Limit (e.g. 12, 24)" 
                                     type="number"
                                     name="sessions" 
                                     value={formData.sessions} 
                                     onChange={handleChange} 
-                                    placeholder="e.g. 12" 
+                                    placeholder="e.g. 12 sessions (0 for unlimited)" 
                                 />
                             )}
                             <Input 

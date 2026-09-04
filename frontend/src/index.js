@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
+import { FiCheckCircle, FiXCircle, FiInfo, FiAlertTriangle } from 'react-icons/fi';
 import 'react-toastify/dist/ReactToastify.css';
 import './index.css';
 
@@ -31,6 +32,13 @@ import Reports from './features/owner/Reports';
 import GymQRCode from './features/owner/GymQRCode';
 import SelfCheckIn from './features/owner/SelfCheckIn';
 import reportWebVitals from './reportWebVitals';
+
+const customToastIcons = {
+  success: <FiCheckCircle size={20} className="text-emerald-400 flex-shrink-0" />,
+  error: <FiXCircle size={20} className="text-rose-400 flex-shrink-0" />,
+  info: <FiInfo size={20} className="text-sky-400 flex-shrink-0" />,
+  warning: <FiAlertTriangle size={20} className="text-amber-400 flex-shrink-0" />
+};
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -82,7 +90,7 @@ root.render(
             <Route path="owner/branches" element={<div className="p-8 text-2xl font-bold text-slate-800">My Branches (Coming Soon)</div>} />
         </Route>
       </Routes>
-      <ToastContainer theme="dark" position="bottom-right" />
+      <ToastContainer theme="dark" position="bottom-right" icon={({ type }) => customToastIcons[type] || <FiInfo size={20} className="text-sky-400 flex-shrink-0" />} />
     </Router>
   </React.StrictMode>
 );

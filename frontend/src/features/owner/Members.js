@@ -36,6 +36,9 @@ export default function Members() {
             
             const latestMemberships = latestMembershipsRes.data || [];
             const membersWithPlans = membersRes.data.map(member => {
+                const memberActiveList = latestMemberships.filter(m => (m.memberId?._id || m.memberId) === member._id && (m.membershipStatus === 'Active' || m.membershipStatus === 'Frozen'));
+                member.allActiveMemberships = memberActiveList;
+
                 const membership = latestMemberships.find(m => (m.memberId?._id || m.memberId) === member._id);
                 let computedStatus = member.status || 'Inactive';
 
@@ -205,11 +208,45 @@ export default function Members() {
                     <div>
                         <p className="font-bold text-slate-800 text-sm">{member.firstName} {member.lastName}</p>
                         <p className="text-[10px] text-slate-400 font-medium">{member.gender} • Joined: {new Date(member.joiningDate).toLocaleDateString()}</p>
-                        {member.walletBalance > 0 && (
-                            <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 mt-1 inline-block">
-                                Wallet: ₹{member.walletBalance}
-                            </span>
-                        )}
+                        
+                        {/* Multi-Plan Active Badges */}
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {member.allActiveMemberships && member.allActiveMemberships.length > 0 ? (
+                                member.allActiveMemberships.map((m, i) => {
+                                    const pNameRaw = String(m.membershipPlanId?.name || m.planName || '').toLowerCase();
+                                    const pTypeRaw = String(m.membershipPlanId?.planType || m.planType || '').toLowerCase();
+                                    const isExplicitPT = pTypeRaw.includes('personal training') || pTypeRaw.includes('pt') || pNameRaw.includes('personal training') || pNameRaw.includes('pt package');
+                                    const isPT = Boolean(m.isPTConversion) || isExplicitPT;
+                                    const pName = m.membershipPlanId?.name || m.planName || 'Plan';
+                                    const trName = m.trainerId?.name ? `(Trainer: ${m.trainerId.name})` : '';
+                                    const sessInfo = isPT && m.totalSessions > 0 ? `[${m.usedSessions || 0}/${m.totalSessions}]` : '';
+
+                                    return (
+                                        <span key={m._id || i} className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${
+                                            m.membershipStatus === 'Frozen' 
+                                                ? 'bg-cyan-50 text-cyan-700 border-cyan-200' 
+                                                : isPT 
+                                                    ? 'bg-amber-50 text-amber-800 border-amber-300' 
+                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        }`}>
+                                            {isPT ? '🟡 PT' : '🟢 Gym'}: {pName} {sessInfo} {trName}
+                                        </span>
+                                    );
+                                })
+                            ) : (
+                                member.membershipPlan && (
+                                    <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                        {member.membershipPlan.name}
+                                    </span>
+                                )
+                            )}
+
+                            {member.walletBalance > 0 && (
+                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                    Wallet: ₹{member.walletBalance}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
             </td>

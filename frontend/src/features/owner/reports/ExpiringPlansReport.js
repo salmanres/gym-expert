@@ -63,6 +63,29 @@ export default function ExpiringPlansReport({
         }
     };
 
+    const sendBulkReminders = (daysFilter = 7) => {
+        const targetPlans = expiringPlans.filter(p => {
+            const endDate = new Date(p.paidUntilDate || p.endDate);
+            const daysLeft = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+            return daysLeft >= 0 && daysLeft <= daysFilter;
+        });
+
+        if (targetPlans.length === 0) {
+            alert(`No members expiring in the next ${daysFilter} days.`);
+            return;
+        }
+
+        if (window.confirm(`Send WhatsApp renewal reminder to ${targetPlans.length} members expiring in the next ${daysFilter} days?`)) {
+            targetPlans.forEach((p, idx) => {
+                setTimeout(() => {
+                    const planName = p.membershipPlanId?.name || p.planName || 'General Plan';
+                    const expDateStr = new Date(p.paidUntilDate || p.endDate).toLocaleDateString();
+                    sendWhatsAppReminder(p.memberId, planName, expDateStr);
+                }, idx * 1200); // Stagger by 1.2s to prevent popup blocker
+            });
+        }
+    };
+
     // Calculate Plan-Wise Grouping Breakdown
     const planBreakdownMap = {};
     expiringPlans.forEach(p => {
@@ -177,8 +200,27 @@ export default function ExpiringPlansReport({
 
     return (
         <div className="space-y-4 w-full m-0 p-0">
+            {/* Quick Auto WhatsApp Trigger Bar */}
+            <div className="px-4 pt-2 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Quick Reminders:</span>
+                    <button 
+                        onClick={() => sendBulkReminders(3)}
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                    >
+                        <FiMessageSquare size={13} /> 🚨 Bulk 3-Day WhatsApp Alert
+                    </button>
+                    <button 
+                        onClick={() => sendBulkReminders(7)}
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                    >
+                        <FiMessageSquare size={13} /> 📲 Bulk 7-Day WhatsApp Alert
+                    </button>
+                </div>
+            </div>
+
             {/* 1. App Theme Summary Cards */}
-            <div className="px-4 pt-3">
+            <div className="px-4 pt-1">
                 <SummaryCards cards={cards} />
             </div>
 
