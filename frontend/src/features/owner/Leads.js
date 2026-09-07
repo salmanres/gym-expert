@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
 import { 
-    FiPhone, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2, 
-    FiUsers, FiList, FiX, FiEye, FiTag, FiClock, FiMapPin, FiCheckCircle, FiFileText
+    FiPhone, FiPhoneCall, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2, 
+    FiUsers, FiList, FiX, FiXCircle, FiEye, FiTag, FiClock, FiAlertCircle, FiCheckCircle, FiFileText
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 
@@ -13,6 +13,7 @@ import PageHeader from '../../components/page/PageHeader';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import DataTable from '../../components/page/DataTable';
+import SummaryCards from '../../components/page/SummaryCards';
 import FollowUpCalendar from './FollowUpCalendar';
 
 function Leads() {
@@ -337,190 +338,281 @@ function Leads() {
         return tabMatch && searchMatch && dateMatch && sourceMatch && priorityMatch && dateRangeMatch;
     });
 
-    const columns = [
-        { label: 'Prospect' },
-        { label: 'Contact' },
-        { label: 'Details' },
-        { label: 'Follow Up' },
-        { label: 'Status', className: 'text-center' },
-        { label: 'Actions', className: 'text-center' }
-    ];
+  const columns = [
+    { label: 'PROSPECT', className: 'w-[30%]' },
+    { label: 'CONTACTS', className: 'w-[14%]' },
+    { label: 'DETAILS', className: 'w-[23%]' },
+    { label: 'FOLLOW UPS', className: 'w-[20%]' },
+    { label: 'STATUS', className: 'w-[8%] text-center' },
+    { label: 'ACTION', className: 'w-[15%] text-center' }
+];
+   const avatarColors = [
+    'bg-rose-500',
+    'bg-amber-500',
+    'bg-sky-500',
+    'bg-indigo-500',
+    'bg-emerald-500',
+    'bg-purple-500',
+    'bg-teal-500',
+];
 
-    const renderRow = (lead, index) => (
-        <tr key={lead._id} className="hover:bg-slate-50 transition-colors group">
-            <td className="py-3 px-4">
-                <button 
-                    onClick={() => handleViewLead(lead)}
-                    className="font-bold text-slate-800 text-sm hover:text-indigo-600 transition-colors text-left"
-                >
-                    {lead.firstName} {lead.lastName}
-                </button>
-                <div className="flex flex-col items-start gap-1.5 mt-0.5">
-                    <p className="text-[10px] text-slate-400 font-medium">
-                        {lead.gender} {lead.createdAt && `• Enquired: ${new Date(lead.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`}
-                    </p>
-                    {lead.trialDate && (() => {
-                        const todayStr = new Date().toISOString().split('T')[0];
-                        const endDate = lead.trialEndDate ? new Date(lead.trialEndDate) : new Date(lead.trialDate);
-                        const endStr = endDate.toISOString().split('T')[0];
-                        const isExpired = endStr < todayStr;
-                        const isPaid = lead.trialFeeType === 'Paid';
+const renderRow = (lead, index) => (
+    <tr key={lead._id} className="hover:bg-slate-50 transition-colors group">
+        <td className="py-4 px-4">
+            <div className="flex items-start gap-3">
+                {/* Initial Letter Avatar */}
+                <div className={`w-14 h-14 rounded-full ${avatarColors[index % avatarColors.length]} text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm`}>
+                    {(lead.firstName || 'L').charAt(0).toUpperCase()}
+                </div>
 
-                        return (
-                            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border uppercase tracking-wider ${
-                                    isExpired 
-                                        ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                                        : 'bg-purple-50 text-purple-700 border-purple-200'
-                                }`}>
-                                    {isExpired ? 'Trial Ended: ' : 'Trial: '}
-                                    {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} 
-                                    {lead.trialEndDate && lead.trialEndDate !== lead.trialDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
-                                </div>
-                                <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase border ${
-                                    isPaid 
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                                        : 'bg-slate-100 text-slate-600 border-slate-200'
-                                }`}>
-                                    {isPaid ? `Paid (₹${lead.trialFee || 0} • ${lead.trialPaymentStatus || 'Paid'})` : 'Free Trial'}
-                                </div>
-                            </div>
-                        );
-                    })()}
-                </div>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                        <FiPhone className="text-emerald-500 shrink-0" /> {lead.contactNumber}
-                    </div>
-                    {lead.email && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                            <FiMail className="text-emerald-500 shrink-0" /> {lead.email}
-                        </div>
-                    )}
-                </div>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex flex-col gap-1 text-[10px] text-slate-600 font-medium">
-                    <div className="flex items-center gap-1"><span className="text-slate-400">Source:</span> <span className="font-bold text-slate-700">{lead.source || 'Walk-in'}</span></div>
-                    {lead.referredBy && (
-                        <div className="flex items-center gap-1"><span className="text-slate-400">Ref By:</span> <span className="font-bold text-indigo-600">{lead.referredBy}</span></div>
-                    )}
-                    <div className="flex items-center gap-1"><span className="text-slate-400">Plan/For:</span> <span className="font-extrabold text-indigo-600">{lead.inquiryFor || 'General'}</span></div>
-                    {lead.offerDetails && (
-                        <div className="flex items-center gap-1"><span className="text-slate-400">Offer:</span> <span className="font-bold text-emerald-600">{lead.offerDetails} {lead.offerAmount ? `(₹${lead.offerAmount})` : ''}</span></div>
-                    )}
-                    <div className="flex items-center gap-1">
-                        <span className="text-slate-400">Priority:</span> 
-                        <span className={`font-bold uppercase tracking-wider ${lead.convertibility === 'Hot' ? 'text-rose-500' : lead.convertibility === 'Warm' ? 'text-amber-500' : 'text-sky-500'}`}>
-                            {lead.convertibility}
-                        </span>
-                    </div>
-                </div>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex flex-col gap-1 text-xs text-slate-600">
-                    {lead.followUpHistory && lead.followUpHistory.length > 0 ? (
-                        <div className="flex items-center gap-1.5 font-bold text-indigo-600 bg-indigo-50 w-max px-2 py-0.5 rounded border border-indigo-100">
-                            <FiMessageSquare className="shrink-0" />
-                            Last: {new Date(lead.followUpHistory[lead.followUpHistory.length - 1].contactDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                            <span className="text-[9px] bg-indigo-200 text-indigo-800 px-1 rounded-full ml-1">{lead.followUpHistory.length}</span>
-                        </div>
-                    ) : (
-                        <div className="flex items-center gap-1.5 font-bold text-slate-400 bg-slate-50 w-max px-2 py-0.5 rounded border border-slate-200">
-                            <FiMessageSquare className="shrink-0" /> New Lead
-                        </div>
-                    )}
-                    <div className="flex items-center gap-1.5 font-bold text-slate-700 mt-1">
-                        <FiCalendar className="text-emerald-500 shrink-0" />
-                        Next: {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'None'} {lead.followUpTime}
-                    </div>
-                    {lead.trialDate && (
-                        <div className="flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 w-max mt-0.5">
-                            <FiCalendar className="shrink-0 text-teal-600" />
-                            Trial: {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                            {lead.trialEndDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
-                        </div>
-                    )}
-                    <div className="text-[10px] font-medium mt-0.5"><span className="text-slate-400">Assigned:</span> {lead.attendedBy}</div>
-                </div>
-            </td>
-            <td className="py-3 px-4 text-center">
-                <select
-                    value={lead.status}
-                    onChange={(e) => handleStatusDropdownChange(lead, e.target.value)}
-                    className={`text-xs font-bold rounded-lg px-2 py-1.5 border-0 shadow-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer transition-colors outline-none
-                        ${lead.status === 'Pending' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 
-                          lead.status === 'Lead' ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100' :
-                          lead.status === 'Contacted' ? 'bg-sky-50 text-sky-700 hover:bg-sky-100' :
-                          lead.status === 'Trial' ? 'bg-teal-50 text-teal-700 hover:bg-teal-100' :
-                          lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' :
-                          lead.status === 'Negotiation' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' :
-                          'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
-                >
-                    <option value="Pending">Pending</option>
-                    <option value="Contacted">Contacted</option>
-                    <option value="Trial">Trial</option>
-                    <option value="Negotiation">Negotiation</option>
-                    <option value="Converted">Converted</option>
-                    <option value="Lost">Lost</option>
-                </select>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex flex-col items-start">
                     <button 
                         onClick={() => handleViewLead(lead)}
-                        className="w-8 h-8 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                        title="View Lead Details"
+                        className="font-extrabold  text-slate-800 text-lg hover:text-[#CA0410] transition-colors text-left"
                     >
-                        <FiEye className="text-sm" />
+                        {lead.firstName} {lead.lastName}
                     </button>
-                    {lead.trialFeeType === 'Paid' && (
-                        <button 
-                            onClick={() => navigate(`/dashboard/owner/finance/receipt/${lead._id}`)}
-                            className="w-8 h-8 rounded bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                            title="Trial Paid Receipt"
-                        >
-                            <FiFileText className="text-sm" />
-                        </button>
-                    )}
-                    {lead.status === 'Converted' && !lead.isMemberCreated && (
-                        <button 
-                            onClick={() => navigate('/dashboard/owner/members/add', { state: { convertedLead: lead } })}
-                            className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                            title="Convert to Member"
-                        >
-                            <FiUsers className="text-sm" />
-                        </button>
-                    )}
-                    <a 
-                        href={`https://wa.me/${(lead.contactNumber || lead.phone || '').toString().replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                        title="WhatsApp"
-                    >
-                        <FiMessageSquare className="text-sm" />
-                    </a>
-                    <button 
-                        onClick={() => handleEdit(lead)}
-                        className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                        title="Edit Lead"
-                    >
-                        <FiEdit2 className="text-sm" />
-                    </button>
-                    <button 
-                        onClick={() => handleDelete(lead._id)}
-                        className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                        title="Delete Lead"
-                    >
-                        <FiTrash2 className="text-sm" />
-                    </button>
+                    <div className="flex flex-col items-start gap-1.5 mt-0.5">
+                        <p className="text-[15px] text-[#737373] font-medium">
+                            {lead.gender} {lead.createdAt && `• Enquired: ${new Date(lead.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+                        </p>
+                        {lead.trialDate && (() => {
+                            const todayStr = new Date().toISOString().split('T')[0];
+                            const endDate = lead.trialEndDate ? new Date(lead.trialEndDate) : new Date(lead.trialDate);
+                            const endStr = endDate.toISOString().split('T')[0];
+                            const isExpired = endStr < todayStr;
+                            const isPaid = lead.trialFeeType === 'Paid';
+
+                            return (
+                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                    <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold  border-[0.2px] uppercase tracking-wider ${
+                                        isExpired 
+                                            ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                            : 'bg-purple-50 text-purple-700 border-purple-200'
+                                    }`}>
+                                        {isExpired ? 'Trial Ended: ' : 'Trial: '}
+                                        {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} 
+                                        {lead.trialEndDate && lead.trialEndDate !== lead.trialDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
+                                    </div>
+                                    <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase border ${
+                                        isPaid 
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                                    }`}>
+                                        {isPaid ? `Paid (₹${lead.trialFee || 0} • ${lead.trialPaymentStatus || 'Paid'})` : 'Free Trial'}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </div>
                 </div>
-            </td>
-        </tr>
-    );
+            </div>
+        </td>
+        <td className="py-4 px-4">
+            <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+                    <FiPhone className="text-emerald-500 shrink-0" /> {lead.contactNumber}
+                </div>
+                {lead.email && (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                        <FiMail className="text-emerald-500 shrink-0" /> {lead.email}
+                    </div>
+                )}
+            </div>
+        </td>
+        <td className="py-4 px-4">
+            <div className="flex flex-col gap-1 text-[10px] text-slate-600 font-medium">
+                <div className="flex items-center gap-1"><span className="text-slate-400">Source:</span> <span className="font-bold text-slate-700">{lead.source || 'Walk-in'}</span></div>
+                {lead.referredBy && (
+                    <div className="flex items-center gap-1"><span className="text-slate-400">Ref By:</span> <span className="font-bold text-indigo-600">{lead.referredBy}</span></div>
+                )}
+                <div className="flex items-center gap-1"><span className="text-slate-400">Plan/For:</span> <span className="font-extrabold text-indigo-600">{lead.inquiryFor || 'General'}</span></div>
+                {lead.offerDetails && (
+                    <div className="flex items-center gap-1"><span className="text-slate-400">Offer:</span> <span className="font-bold text-emerald-600">{lead.offerDetails} {lead.offerAmount ? `(₹${lead.offerAmount})` : ''}</span></div>
+                )}
+                <div className="flex items-center gap-1">
+                    <span className="text-slate-400">Priority:</span> 
+                    <span className={`font-bold uppercase tracking-wider ${lead.convertibility === 'Hot' ? 'text-rose-500' : lead.convertibility === 'Warm' ? 'text-amber-500' : 'text-sky-500'}`}>
+                        {lead.convertibility}
+                    </span>
+                </div>
+            </div>
+        </td>
+        <td className="py-4 px-4">
+            <div className="flex flex-col gap-1 text-xs text-slate-600">
+                {lead.followUpHistory && lead.followUpHistory.length > 0 ? (
+                    <div className="flex items-center gap-1.5 font-bold text-indigo-600 bg-indigo-50 w-max px-2 py-0.5 rounded border border-indigo-100">
+                        <FiMessageSquare className="shrink-0" />
+                        Last: {new Date(lead.followUpHistory[lead.followUpHistory.length - 1].contactDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                        <span className="text-[9px] bg-indigo-200 text-indigo-800 px-1 rounded-full ml-1">{lead.followUpHistory.length}</span>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-1.5 font-bold text-slate-400 bg-slate-50 w-max px-2 py-0.5 rounded border border-slate-200">
+                        <FiMessageSquare className="shrink-0" /> New Lead
+                    </div>
+                )}
+                <div className="flex items-center gap-1.5 font-bold text-slate-700 mt-1">
+                    <FiCalendar className="text-emerald-500 shrink-0" />
+                    Next: {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'None'} {lead.followUpTime}
+                </div>
+                {lead.trialDate && (
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 w-max mt-0.5">
+                        <FiCalendar className="shrink-0 text-teal-600" />
+                        Trial: {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                        {lead.trialEndDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
+                    </div>
+                )}
+                <div className="text-[10px] font-medium mt-0.5"><span className="text-slate-400">Assigned:</span> {lead.attendedBy}</div>
+            </div>
+        </td>
+        <td className="py-4 px-4 text-center">
+            <select
+                value={lead.status}
+                onChange={(e) => handleStatusDropdownChange(lead, e.target.value)}
+                className={`text-xs font-bold rounded-lg px-2 py-1.5 border-0 shadow-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer transition-colors outline-none
+                    ${lead.status === 'Pending' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 
+                      lead.status === 'Lead' ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100' :
+                      lead.status === 'Contacted' ? 'bg-sky-50 text-sky-700 hover:bg-sky-100' :
+                      lead.status === 'Trial' ? 'bg-teal-50 text-teal-700 hover:bg-teal-100' :
+                      lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' :
+                      lead.status === 'Negotiation' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' :
+                      'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+            >
+                <option value="Pending">Pending</option>
+                <option value="Contacted">Contacted</option>
+                <option value="Trial">Trial</option>
+                <option value="Negotiation">Negotiation</option>
+                <option value="Converted">Converted</option>
+                <option value="Lost">Lost</option>
+            </select>
+        </td>
+        <td className="py-4 px-4">
+            <div className="flex items-center justify-center gap-2">
+                <button 
+                    onClick={() => handleViewLead(lead)}
+                    className="w-8 h-8 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                    title="View Lead Details"
+                >
+                    <FiEye className="text-sm" />
+                </button>
+                {lead.trialFeeType === 'Paid' && (
+                    <button 
+                        onClick={() => navigate(`/dashboard/owner/finance/receipt/${lead._id}`)}
+                        className="w-8 h-8 rounded bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                        title="Trial Paid Receipt"
+                    >
+                        <FiFileText className="text-sm" />
+                    </button>
+                )}
+                {lead.status === 'Converted' && !lead.isMemberCreated && (
+                    <button 
+                        onClick={() => navigate('/dashboard/owner/members/add', { state: { convertedLead: lead } })}
+                        className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                        title="Convert to Member"
+                    >
+                        <FiUsers className="text-sm" />
+                    </button>
+                )}
+                <a 
+                    href={`https://wa.me/${(lead.contactNumber || lead.phone || '').toString().replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                    title="WhatsApp"
+                >
+                    <FiMessageSquare className="text-sm" />
+                </a>
+                <button 
+                    onClick={() => handleEdit(lead)}
+                    className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                    title="Edit Lead"
+                >
+                    <FiEdit2 className="text-sm" />
+                </button>
+                <button 
+                    onClick={() => handleDelete(lead._id)}
+                    className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
+                    title="Delete Lead"
+                >
+                    <FiTrash2 className="text-sm" />
+                </button>
+            </div>
+        </td>
+    </tr>
+);
+
+    const totalLeads = leads.length;
+    const newEnquiriesCount = leads.filter(l => l.status === 'Pending').length;
+    const activeLeadsCount = leads.filter(l => ['Lead', 'Contacted', 'Trial', 'Negotiation'].includes(l.status)).length;
+    const followUpsCount = leads.filter(l => (!!l.followUpDate || l.status === 'Contacted') && !['Converted', 'Lost'].includes(l.status)).length;
+    const trialsCount = leads.filter(l => l.trialDate || l.status === 'Trial').length;
+    const paidTrialFees = leads.filter(l => l.trialFeeType === 'Paid').reduce((acc, l) => acc + (Number(l.trialFee) || 0), 0);
+    const negotiationCount = leads.filter(l => l.status === 'Negotiation').length;
+    const convertedCount = leads.filter(l => l.status === 'Converted').length;
+    const lostCount = leads.filter(l => l.status === 'Lost').length;
+
+    const summaryCardsData = [
+        {
+            title: 'Total Leads',
+            value: totalLeads,
+            percentage: '12%',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'vs last month',
+            icon: <FiUsers />,
+            bgClass: 'bg-rose-50',
+            iconColor: 'text-rose-600'
+        },
+        {
+            title: 'New Enquires',
+            value: newEnquiriesCount,
+            percentage: '8%',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'vs last month',
+            icon: <FiAlertCircle />,
+            bgClass: 'bg-rose-50',
+            iconColor: 'text-rose-500'
+        },
+        {
+            title: 'Trials',
+            value: trialsCount,
+            percentage: '5%',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'vs last month',
+            icon: <FiCalendar />,
+            bgClass: 'bg-amber-50',
+            iconColor: 'text-amber-600'
+        },
+        {
+            title: 'Follow Ups',
+            value: followUpsCount,
+            percentage: '15%',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'vs last month',
+            icon: <FiPhoneCall />,
+            bgClass: 'bg-yellow-50',
+            iconColor: 'text-amber-500'
+        },
+        {
+            title: 'Converted',
+            value: convertedCount,
+            percentage: '10%',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'vs last month',
+            icon: <FiCheckCircle />,
+            bgClass: 'bg-emerald-50',
+            iconColor: 'text-emerald-600'
+        },
+        {
+            title: 'Lost',
+            value: lostCount,
+            percentage: '3%',
+            percentageColor: 'text-rose-500',
+            subtitle: 'vs last month',
+            icon: <FiXCircle />,
+            bgClass: 'bg-rose-50',
+            iconColor: 'text-rose-500'
+        }
+    ];
 
     return (
         <PageLayout>
@@ -530,6 +622,10 @@ function Leads() {
                 onAdd={handleAddNew}
                 addLabel="Add Enquiry"
             />
+
+            <div className="px-4 sm:px-6 py-4 bg-[#EEEEEE]">
+                <SummaryCards cards={summaryCardsData} />
+            </div>
 
             <Tabs 
                 tabs={['All Leads', 'New Enquiries', 'Active Leads', 'Follow Ups', 'Trials', 'Negotiation', 'Converted', 'Lost']}
