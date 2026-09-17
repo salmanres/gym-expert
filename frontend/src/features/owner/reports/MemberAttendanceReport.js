@@ -4,6 +4,7 @@ import DataTable from '../../../components/page/DataTable';
 import EmptyState from '../../../components/page/EmptyState';
 import { FiUsers, FiCheckCircle, FiClock, FiActivity, FiEye, FiX, FiCalendar, FiDownload, FiList, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import apiClient from '../../../api/apiClient';
+import { formatDate } from '../../../utils/dateUtils';
 
 export default function MemberAttendanceReport({ 
     memberAttendance = [],
@@ -123,35 +124,89 @@ export default function MemberAttendanceReport({
     const currentlyInGym = memberAttendance.filter(m => m.attendance?.checkInTime && !m.attendance?.checkOutTime);
 
     const cards = [
-        { title: 'Total Members', value: `${totalMemberCount} Members`, icon: <FiUsers />, textColor: 'text-slate-600', valueColor: 'text-slate-700', bgClass: 'bg-slate-50', iconColor: 'text-slate-600' },
-        { title: 'Active Members', value: `${activeCount} Members`, icon: <FiCheckCircle />, textColor: 'text-emerald-600', valueColor: 'text-emerald-700', bgClass: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-        { title: 'Upcoming Plans', value: `${upcomingCount} Members`, icon: <FiClock />, textColor: 'text-amber-600', valueColor: 'text-amber-700', bgClass: 'bg-amber-50', iconColor: 'text-amber-600' },
-        { title: 'Expired Plans', value: `${expiredCount} Members`, icon: <FiX />, textColor: 'text-rose-600', valueColor: 'text-rose-700', bgClass: 'bg-rose-50', iconColor: 'text-rose-600' },
-        { title: 'Present Today', value: `${presentTodayMembers.length} Members`, icon: <FiActivity />, textColor: 'text-indigo-600', valueColor: 'text-indigo-700', bgClass: 'bg-indigo-50', iconColor: 'text-indigo-600' },
-        { title: 'Currently In Gym', value: `${currentlyInGym.length} Active`, icon: <FiEye />, textColor: 'text-cyan-600', valueColor: 'text-cyan-700', bgClass: 'bg-cyan-50', iconColor: 'text-cyan-600' }
+        { 
+            title: 'Total Members', 
+            value: `${totalMemberCount} Members`, 
+            percentage: '100%',
+            percentageColor: 'text-emerald-600',
+            icon: <FiUsers />, 
+            subtitle: 'Registered members',
+            bgClass: 'bg-[#FFECEC]', 
+            iconColor: 'text-[#E53935]' 
+        },
+        { 
+            title: 'Active Members', 
+            value: `${activeCount} Members`, 
+            percentage: `${totalMemberCount > 0 ? Math.round((activeCount / totalMemberCount) * 100) : 0}%`,
+            percentageColor: 'text-emerald-600',
+            icon: <FiCheckCircle />, 
+            subtitle: 'With active plan',
+            bgClass: 'bg-[#E8F5E9]', 
+            iconColor: 'text-[#2E7D32]' 
+        },
+        { 
+            title: 'Present Today', 
+            value: `${presentTodayMembers.length} Members`, 
+            percentage: 'Today',
+            percentageColor: 'text-blue-600',
+            icon: <FiActivity />, 
+            subtitle: 'Logged check-ins',
+            bgClass: 'bg-[#E3F2FD]', 
+            iconColor: 'text-[#1976D2]' 
+        },
+        { 
+            title: 'Currently In Gym', 
+            value: `${currentlyInGym.length} Active`, 
+            percentage: 'Live',
+            percentageColor: 'text-purple-600',
+            icon: <FiEye />, 
+            subtitle: 'Workout in progress',
+            bgClass: 'bg-[#F3E8FF]', 
+            iconColor: 'text-[#7E22CE]' 
+        }
     ];
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    const avatarStyles = [
+        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
+        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
+        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
+        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
+        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
+        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
+    ];
+
+    const getAvatarStyle = (name, index) => {
+        const charCode = (name || '').charCodeAt(0) || 0;
+        return avatarStyles[(charCode + index) % avatarStyles.length];
+    };
+
+    const totalItems = memberAttendance.length;
+    const paginatedMemberAttendance = memberAttendance.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
     // Main Member Attendance Summary Table with Plan Start & End Dates
     const columns = [
-        { label: 'Member ID' },
-        { label: 'Member Name' },
-        { label: 'Plan' },
-        { label: 'Start Date' },
-        { label: 'End Date' },
-        { label: 'Membership Status' },
-        { label: 'Attendance' },
-        { label: 'Total Attendance' },
-        { label: 'Action' }
+        { label: 'MEMBER', className: 'w-[22%] pl-6' },
+        { label: 'MEMBERSHIP PLAN', className: 'w-[16%] pl-3' },
+        { label: 'VALIDITY DATES', className: 'w-[16%] pl-3' },
+        { label: 'PLAN STATUS', className: 'w-[11%] pl-1 text-left' },
+        { label: 'TODAY ATTENDANCE', className: 'w-[13%] pl-1 text-left' },
+        { label: 'TOTAL ATTENDANCE', className: 'w-[14%] pl-3' },
+        { label: 'ACTIONS', className: 'w-[8%] text-center pr-6' }
     ];
 
-    const renderRow = (item) => {
+    const renderRow = (item, index) => {
         const memberCustomId = item.memberId?.memberId || (typeof item.memberId === 'string' ? item.memberId : null) || item.memberId || 'MEM-00' + (item._id || '').substring(0, 3).toUpperCase();
         const memberName = item.memberId?.firstName ? `${item.memberId.firstName} ${item.memberId.lastName || ''}`.trim() : item.firstName ? `${item.firstName} ${item.lastName || ''}`.trim() : item.memberName || item.name || 'Gym Member';
         
         const planName = item.membershipPlanId?.name || item.planName || '--';
         const info = getMemberStatusInfo(item);
-        const startDateStr = info.start ? info.start.toLocaleDateString() : '--';
-        const endDateStr = info.end ? info.end.toLocaleDateString() : '--';
+        const startDateStr = formatDate(info.start, '--');
+        const endDateStr = formatDate(info.end, '--');
+        const avatarStyle = getAvatarStyle(memberName, index);
 
         const checkInTime = item.attendance?.checkInTime;
         const totalDaysPresent = item.totalPresentDays !== undefined ? item.totalPresentDays : (item.attendanceCount || (checkInTime ? 24 : 0));
@@ -169,53 +224,79 @@ export default function MemberAttendanceReport({
         }
 
         return (
-            <tr key={item._id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4 text-xs font-mono font-bold text-slate-700">
-                    {memberCustomId}
+            <tr key={item._id} className="bg-white hover:bg-slate-50/70 transition-colors duration-150 group">
+                {/* MEMBER */}
+                <td className="py-2.5 pl-6 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
+                        <div className={`w-9 h-9 rounded-full ${avatarStyle.bg} ${avatarStyle.text} font-bold text-sm flex items-center justify-center shrink-0`}>
+                            {(memberName || 'M').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="font-bold text-[#111827] text-[13px] leading-tight truncate">
+                                {memberName}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                ID: {memberCustomId}
+                            </span>
+                        </div>
+                    </div>
                 </td>
-                <td className="py-3 px-4 font-bold text-slate-800 text-sm">
-                    {memberName}
+
+                {/* PLAN */}
+                <td className="py-2.5 px-3 align-middle">
+                    <span className="font-bold text-[#111827] text-[13px]">
+                        {planName}
+                    </span>
                 </td>
-                <td className="py-3 px-4 font-medium text-slate-600 text-xs">
-                    {planName}
+
+                {/* VALIDITY DATES */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12px] leading-tight">
+                        <span className="font-medium text-slate-700">{startDateStr} to {endDateStr}</span>
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-xs font-bold text-slate-700">
-                    {startDateStr}
-                </td>
-                <td className="py-3 px-4 text-xs font-bold text-slate-700">
-                    {endDateStr}
-                </td>
-                <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                        info.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        info.status === 'Upcoming' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                        info.status === 'Expired' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+
+                {/* PLAN STATUS */}
+                <td className="py-2.5 pl-1 pr-3 text-left align-middle">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-0.5 border leading-none shadow-2xs ${
+                        info.status === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
+                        info.status === 'Upcoming' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                        info.status === 'Expired' ? 'bg-rose-50 text-rose-700 border-rose-200' :
                         'bg-slate-50 text-slate-600 border border-slate-200'
                     }`}>
                         {info.status}
                     </span>
                 </td>
-                <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                        attendanceStatus === 'Present' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        attendanceStatus === 'Absent' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+
+                {/* TODAY ATTENDANCE */}
+                <td className="py-2.5 pl-1 pr-3 text-left align-middle">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-0.5 border leading-none shadow-2xs ${
+                        attendanceStatus === 'Present' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
+                        attendanceStatus === 'Absent' ? 'bg-rose-50 text-rose-700 border-rose-200' :
                         'bg-slate-50 text-slate-600 border border-slate-200'
                     }`}>
                         {attendanceStatus}
                     </span>
                 </td>
-                <td className="py-3 px-4 text-xs font-bold text-indigo-700">
-                    <span className="inline-flex px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-extrabold">
+
+                {/* TOTAL ATTENDANCE */}
+                <td className="py-2.5 px-3 align-middle">
+                    <span className="inline-flex px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full text-[11px] font-bold">
                         {totalDaysPresent} Days
                     </span>
                 </td>
-                <td className="py-3 px-4">
-                    <button 
-                        onClick={() => handleOpenModal(item)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors whitespace-nowrap shadow-sm"
-                    >
-                        <FiEye className="text-sm" /> View Attendance
-                    </button>
+
+                {/* ACTIONS */}
+                <td className="py-2.5 pl-2 pr-6 text-center align-middle">
+                    <div className="flex items-center justify-center">
+                        <button 
+                            onClick={() => handleOpenModal(item)}
+                            className="w-7 h-7 rounded-md border border-slate-200 text-slate-500 bg-white hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer"
+                            title="View Attendance History"
+                        >
+                            <FiEye size={14} />
+                        </button>
+                    </div>
                 </td>
             </tr>
         );
@@ -242,14 +323,14 @@ export default function MemberAttendanceReport({
         // Map existing logs for easy lookup
         const fetchedLogsMap = {};
         fetchedLogs.forEach(log => {
-            const dateStr = new Date(log.date || log.checkInTime || log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const dateStr = formatDate(log.date || log.checkInTime || log.createdAt);
             fetchedLogsMap[dateStr] = log;
         });
 
         // Generate logs for every day in the range
         let current = new Date(startFilter);
         while (current <= endFilter) {
-            const dateString = current.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const dateString = formatDate(current);
             const existingLog = fetchedLogsMap[dateString];
 
             if (existingLog) {
@@ -304,7 +385,7 @@ export default function MemberAttendanceReport({
         
         // Include any fetched logs that might be outside the filter range just in case
         fetchedLogs.forEach(log => {
-            const dateStr = new Date(log.date || log.checkInTime || log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const dateStr = formatDate(log.date || log.checkInTime || log.createdAt);
             if (!modalDailyLogs.find(l => l.date === dateStr)) {
                 const checkIn = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
                 const checkOut = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
@@ -332,8 +413,8 @@ export default function MemberAttendanceReport({
         const endDate = selectedMember.endDate || selectedMember.membershipPlanId?.endDate || selectedMember.memberId?.endDate;
 
         const today = new Date();
-        const startDateStr = startDate ? new Date(startDate).toLocaleDateString() : new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString();
-        const endDateStr = endDate ? new Date(endDate).toLocaleDateString() : new Date(today.getFullYear(), today.getMonth() + 1, 0).toLocaleDateString();
+        const startDateStr = formatDate(startDate || new Date(today.getFullYear(), today.getMonth(), 1));
+        const endDateStr = formatDate(endDate || new Date(today.getFullYear(), today.getMonth() + 1, 0));
 
         const csvData = modalDailyLogs.map(log => ({
             'Member ID': selectedMember.memberId?.memberId || selectedMember.memberId || 'MEM-001',
@@ -364,9 +445,8 @@ export default function MemberAttendanceReport({
     };
 
     const selectedMemberInfo = selectedMember ? getMemberStatusInfo(selectedMember) : { status: 'No Plan', start: null, end: null };
-    const selectedMemberStartDate = selectedMemberInfo.start ? selectedMemberInfo.start.toLocaleDateString() : '--/--/----';
-    const selectedMemberEndDate = selectedMemberInfo.end ? selectedMemberInfo.end.toLocaleDateString() : '--/--/----';
-    const selectedMemberPhone = selectedMember ? (selectedMember.memberId?.contactNumber || selectedMember.memberId?.phone || selectedMember.memberId?.mobile || selectedMember.memberId?.contactNo || selectedMember.contactNumber || selectedMember.phone || selectedMember.mobile || selectedMember.contactNo || 'N/A') : '';
+    const selectedMemberStartDate = formatDate(selectedMemberInfo.start, '--/--/----');
+    const selectedMemberEndDate = formatDate(selectedMemberInfo.end, '--/--/----');
 
     const nextCalendarMonth = () => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1));
     const prevCalendarMonth = () => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1));
@@ -383,7 +463,7 @@ export default function MemberAttendanceReport({
         
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), d);
-            const formattedTargetDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const formattedTargetDate = formatDate(date);
             
             // Only show logs matching this date from modalDailyLogs
             const dayLogs = modalDailyLogs.filter(log => log.date === formattedTargetDate);
@@ -484,15 +564,22 @@ export default function MemberAttendanceReport({
 
     return (
         <div className="space-y-4 w-full m-0 p-0">
-            {/* 4 App Theme Summary Cards */}
-            <div className="px-4 pt-3">
-                <SummaryCards cards={cards} />
-            </div>
-
             {/* Member Attendance Table */}
-            <div className="px-4 pb-4">
+            <div className="px-6 md:px-8 pb-6 pt-1">
                 {memberAttendance.length > 0 ? (
-                    <DataTable columns={columns} data={memberAttendance} renderRow={renderRow} />
+                    <DataTable 
+                        columns={columns} 
+                        data={paginatedMemberAttendance} 
+                        renderRow={renderRow} 
+                        pagination={{
+                            currentPage: currentPage,
+                            totalItems: totalItems,
+                            pageSize: pageSize,
+                            onPageChange: (p) => setCurrentPage(p),
+                            onPageSizeChange: (s) => setPageSize(s),
+                            itemLabel: "member attendance records"
+                        }}
+                    />
                 ) : (
                     <EmptyState 
                         icon={<FiClock size={48} />} 
@@ -507,8 +594,8 @@ export default function MemberAttendanceReport({
                 const info = getMemberStatusInfo(selectedMember);
                 const planName = selectedMember.membershipPlanId?.name || selectedMember.planName || 'General Plan';
                 const selectedMemberPhone = selectedMember.memberId?.contactNumber || selectedMember.contactNumber || 'N/A';
-                const selectedMemberStartDate = info.start ? info.start.toLocaleDateString() : '--/--/----';
-                const selectedMemberEndDate = info.end ? info.end.toLocaleDateString() : '--/--/----';
+                const selectedMemberStartDate = formatDate(info.start, '--/--/----');
+                const selectedMemberEndDate = formatDate(info.end, '--/--/----');
                 const customMemberId = selectedMember.memberId?.memberId || selectedMember.memberId || 'MEM-001';
 
                 return (
@@ -644,35 +731,35 @@ export default function MemberAttendanceReport({
                                 <>
                                     <DataTable 
                                         columns={[
-                                            { label: 'Date' },
-                                            { label: 'Check In' },
-                                            { label: 'Check Out' },
-                                            { label: 'Workout Duration' },
-                                            { label: 'Status' }
+                                            { label: 'DATE', className: 'w-[20%] pl-6' },
+                                            { label: 'CHECK IN', className: 'w-[20%] pl-3' },
+                                            { label: 'CHECK OUT', className: 'w-[20%] pl-3' },
+                                            { label: 'WORKOUT DURATION', className: 'w-[22%] pl-3' },
+                                            { label: 'STATUS', className: 'w-[18%] pl-1 text-left' }
                                         ]}
                                         data={modalDailyLogs}
                                         loading={loadingLogs}
                                         emptyMessage="No records found for the selected period."
                                         renderRow={(log, index) => (
                                             <tr key={index} className="hover:bg-slate-50 transition-colors text-xs">
-                                                <td className="py-3 px-4 font-bold text-slate-800">
+                                                <td className="py-3 pl-6 pr-3 font-bold text-slate-800 align-middle">
                                                     {log.date}
                                                 </td>
-                                                <td className={`py-3 px-4 font-bold ${log.status === 'Absent' || log.status === 'OFF' ? 'text-slate-400' : 'text-emerald-600'}`}>
+                                                <td className={`py-3 px-3 font-bold align-middle ${log.status === 'Absent' || log.status === 'OFF' ? 'text-slate-400' : 'text-emerald-600'}`}>
                                                     {log.checkIn}
                                                 </td>
-                                                <td className="py-3 px-4 font-bold text-slate-600">
+                                                <td className="py-3 px-3 font-bold text-slate-600 align-middle">
                                                     {log.checkOut}
                                                 </td>
-                                                <td className="py-3 px-4 font-black text-slate-800">
+                                                <td className="py-3 px-3 font-black text-slate-800 align-middle">
                                                     {log.workoutTime}
                                                 </td>
-                                                <td className="py-3 px-4">
-                                                    <span className={`inline-flex px-2.5 py-1 rounded text-xs font-bold uppercase ${
-                                                        log.status === 'Present' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                                        log.status === 'Absent' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                                                        log.status === 'OFF' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                                        'bg-slate-100 text-slate-600 border border-slate-200'
+                                                <td className="py-3 pl-1 pr-3 align-middle text-left">
+                                                    <span className={`inline-flex items-center gap-1.5 text-[12px] font-bold rounded-full px-3 py-1 border leading-none shadow-2xs ${
+                                                        log.status === 'Present' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
+                                                        log.status === 'Absent' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                                        log.status === 'OFF' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                        'bg-slate-100 text-slate-600 border-slate-200'
                                                     }`}>
                                                         {log.status === 'OFF' && log.reason ? log.reason : log.status}
                                                     </span>

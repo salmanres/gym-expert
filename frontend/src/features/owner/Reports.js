@@ -4,9 +4,13 @@ import PageHeader from '../../components/page/PageHeader';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import Loader from '../../components/page/Loader';
-import { FiDownload } from 'react-icons/fi';
+import SummaryCards from '../../components/page/SummaryCards';
+import { 
+    FiDownload, FiDollarSign, FiCalendar, FiAlertCircle, FiPieChart, 
+    FiTrendingUp, FiCheckCircle, FiClock, FiUsers, FiActivity, FiUserCheck, FiUserX 
+} from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
-import { toast } from 'react-toastify';
+import { formatDate } from '../../utils/dateUtils';
 
 // Modular Report Components
 import DailyCollectionsReport from './reports/DailyCollectionsReport';
@@ -304,8 +308,8 @@ export default function Reports() {
                     'Member Name': `${p.memberId?.firstName || ''} ${p.memberId?.lastName || ''}`.trim() || 'Gym Member',
                     'Contact Number': phone,
                     'Membership Plan': p.membershipPlanId?.name || p.planName || 'General Plan',
-                    'Start Date': p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A',
-                    'Expiry Date': relevantEndDate ? new Date(relevantEndDate).toLocaleDateString() : 'N/A',
+                    'Start Date': formatDate(p.startDate, 'N/A'),
+                    'Expiry Date': formatDate(relevantEndDate, 'N/A'),
                     'Days Left': daysLeft <= 0 ? 'Expired' : `${daysLeft} Days`,
                     'Renewal Amount': p.finalPrice || p.originalPrice || 0,
                     'Assigned Trainer': p.assignedTrainer?.name || p.assignedBy?.name || 'General Trainer',
@@ -322,7 +326,7 @@ export default function Reports() {
                 'Payment Mode': t.paymentMode || 'Cash',
                 'Collected By': t.collectedBy?.name || (typeof t.collectedBy === 'string' ? t.collectedBy : null) || t.collectedByName || (JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Harjeet'),
                 'Status': t.paymentStatus || 'Paid',
-                'Date': new Date(t.paymentDate || t.createdAt).toLocaleDateString()
+                'Date': formatDate(t.paymentDate || t.createdAt)
             })), 'Daily_Collections_Report');
         } else if (activeTab === 'Staff Attendance') {
             // Horizontal Matrix CSV with Dates as Columns: 2026-08-01, 2026-08-02, 2026-08-03...
@@ -404,8 +408,8 @@ export default function Reports() {
                 const startDate = item.startDate || item.membershipPlanId?.startDate || item.memberId?.startDate;
                 const endDate = item.endDate || item.membershipPlanId?.endDate || item.memberId?.endDate;
 
-                const startDateStr = startDate ? new Date(startDate).toLocaleDateString() : new Date(today.getFullYear(), today.getMonth(), 1).toLocaleDateString();
-                const endDateStr = endDate ? new Date(endDate).toLocaleDateString() : new Date(today.getFullYear(), today.getMonth() + 1, 0).toLocaleDateString();
+                const startDateStr = formatDate(startDate || new Date(today.getFullYear(), today.getMonth(), 1));
+                const endDateStr = formatDate(endDate || new Date(today.getFullYear(), today.getMonth() + 1, 0));
                 const totalDays = `${item.totalPresentDays || 24} Days`;
 
                 const realLogs = item.attendanceLogs || item.attendanceHistory || item.history || item.memberId?.attendanceHistory;
@@ -475,7 +479,7 @@ export default function Reports() {
                 <select
                     value={paymentModeFilter}
                     onChange={(e) => setPaymentModeFilter(e.target.value)}
-                    className="h-9 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="h-9 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 cursor-pointer"
                 >
                     <option value="All">All Payment Modes</option>
                     <option value="Cash">Cash</option>
@@ -490,7 +494,7 @@ export default function Reports() {
                 <select
                     value={paymentStatusFilter}
                     onChange={(e) => setPaymentStatusFilter(e.target.value)}
-                    className="h-9 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="h-9 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 cursor-pointer"
                 >
                     <option value="All">All Statuses</option>
                     <option value="Paid">Paid</option>
@@ -503,7 +507,7 @@ export default function Reports() {
             <select
                 value={datePreset}
                 onChange={(e) => applyDatePreset(e.target.value)}
-                className="h-9 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                className="h-9 bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-3 focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 cursor-pointer"
             >
                 <option value="All">All Time Range</option>
                 <option value="Today">Today</option>
@@ -541,6 +545,218 @@ export default function Reports() {
         </FilterBar>
     );
 
+    // Active Summary Cards Computation
+    const getActiveSummaryCards = () => {
+        if (activeTab === 'Daily Collections') {
+            const totalInRange = filteredTransactions.reduce((sum, t) => sum + (Number(t.amountPaid) || 0), 0);
+            const avgTxn = filteredTransactions.length ? Math.round(totalInRange / filteredTransactions.length) : 0;
+            return [
+                {
+                    title: "Today's Collection",
+                    value: `₹${Math.round(todayCollection).toLocaleString()}`,
+                    percentage: 'Daily',
+                    percentageColor: 'text-emerald-600',
+                    subtitle: 'Collected today',
+                    icon: <FiDollarSign />,
+                    bgClass: 'bg-[#E8F5E9]',
+                    iconColor: 'text-[#2E7D32]'
+                },
+                {
+                    title: "Month's Collection",
+                    value: `₹${Math.round(monthlyCollection).toLocaleString()}`,
+                    percentage: 'MTD',
+                    percentageColor: 'text-purple-600',
+                    subtitle: 'This month total',
+                    icon: <FiCalendar />,
+                    bgClass: 'bg-[#F3E8FF]',
+                    iconColor: 'text-[#7E22CE]'
+                },
+                {
+                    title: "Total in Range",
+                    value: `₹${Math.round(totalInRange).toLocaleString()}`,
+                    percentage: `${filteredTransactions.length} Txns`,
+                    percentageColor: 'text-blue-600',
+                    subtitle: `Avg: ₹${avgTxn.toLocaleString()}`,
+                    icon: <FiPieChart />,
+                    bgClass: 'bg-[#E3F2FD]',
+                    iconColor: 'text-[#1976D2]'
+                },
+                {
+                    title: "Outstanding Dues",
+                    value: `₹${Math.round(totalOutstandingDue).toLocaleString()}`,
+                    percentage: 'Pending',
+                    percentageColor: 'text-rose-600',
+                    subtitle: 'Overdue recovery',
+                    icon: <FiAlertCircle />,
+                    bgClass: 'bg-[#FFECEC]',
+                    iconColor: 'text-[#CA0410]'
+                }
+            ];
+        }
+
+        if (activeTab === 'Expiring Plans') {
+            const sevenDaysLater = new Date();
+            sevenDaysLater.setDate(today.getDate() + 7);
+            const critical7 = filteredExpiring.filter(p => {
+                const end = new Date(p.paidUntilDate || p.endDate);
+                return end >= today && end <= sevenDaysLater;
+            });
+            const totalPipeline = filteredExpiring.reduce((sum, p) => sum + (Number(p.finalPrice || p.originalPrice) || 0), 0);
+            const renewedThisMonth = activePlans.filter(p => {
+                if (!p.startDate) return false;
+                const d = new Date(p.startDate);
+                return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+            });
+
+            return [
+                {
+                    title: 'Critical (7 Days)',
+                    value: `${critical7.length} Plans`,
+                    percentage: 'Urgent',
+                    percentageColor: 'text-rose-600',
+                    subtitle: 'Immediate renewal',
+                    icon: <FiAlertCircle />,
+                    bgClass: 'bg-[#FFECEC]',
+                    iconColor: 'text-[#E53935]'
+                },
+                {
+                    title: 'Expiring (30 Days)',
+                    value: `${filteredExpiring.length} Plans`,
+                    percentage: '30 Days',
+                    percentageColor: 'text-amber-600',
+                    subtitle: 'Upcoming renewals',
+                    icon: <FiClock />,
+                    bgClass: 'bg-[#FFF3E0]',
+                    iconColor: 'text-[#EA580C]'
+                },
+                {
+                    title: 'Renewal Pipeline',
+                    value: `₹${Math.round(totalPipeline).toLocaleString()}`,
+                    percentage: 'Revenue',
+                    percentageColor: 'text-emerald-600',
+                    subtitle: 'Estimated value',
+                    icon: <FiDollarSign />,
+                    bgClass: 'bg-[#E8F5E9]',
+                    iconColor: 'text-[#2E7D32]'
+                },
+                {
+                    title: 'Renewed This Month',
+                    value: `${renewedThisMonth.length} Plans`,
+                    percentage: 'Renewed',
+                    percentageColor: 'text-purple-600',
+                    subtitle: 'Current month',
+                    icon: <FiCheckCircle />,
+                    bgClass: 'bg-[#F3E8FF]',
+                    iconColor: 'text-[#7E22CE]'
+                }
+            ];
+        }
+
+        if (activeTab === 'Staff Attendance') {
+            const presentTodayStaff = filteredStaffAttendance.filter(s => s.attendance?.checkInTime || s.attendanceStatus === 'Present');
+            const onDutyStaff = filteredStaffAttendance.filter(s => s.attendance?.checkInTime && !s.attendance?.checkOutTime);
+            const lateStaff = filteredStaffAttendance.filter(s => {
+                if (!s.attendance?.checkInTime) return false;
+                const checkIn = new Date(s.attendance.checkInTime);
+                return checkIn.getHours() > 9 || (checkIn.getHours() === 9 && checkIn.getMinutes() > 30);
+            });
+
+            return [
+                {
+                    title: 'Total Staff',
+                    value: `${filteredStaffAttendance.length} Staff`,
+                    percentage: 'Team',
+                    percentageColor: 'text-purple-600',
+                    subtitle: 'On team roster',
+                    icon: <FiUsers />,
+                    bgClass: 'bg-[#FFECEC]',
+                    iconColor: 'text-[#E53935]'
+                },
+                {
+                    title: 'Present Today',
+                    value: `${presentTodayStaff.length} Staff`,
+                    percentage: `${filteredStaffAttendance.length > 0 ? Math.round((presentTodayStaff.length / filteredStaffAttendance.length) * 100) : 0}%`,
+                    percentageColor: 'text-emerald-600',
+                    subtitle: 'Checked in today',
+                    icon: <FiCheckCircle />,
+                    bgClass: 'bg-[#E8F5E9]',
+                    iconColor: 'text-[#2E7D32]'
+                },
+                {
+                    title: 'On Floor Duty',
+                    value: `${onDutyStaff.length} Staff`,
+                    percentage: 'Active',
+                    percentageColor: 'text-blue-600',
+                    subtitle: 'Currently working',
+                    icon: <FiActivity />,
+                    bgClass: 'bg-[#E3F2FD]',
+                    iconColor: 'text-[#1976D2]'
+                },
+                {
+                    title: 'Late Check-ins',
+                    value: `${lateStaff.length} Staff`,
+                    percentage: 'Late',
+                    percentageColor: 'text-amber-600',
+                    subtitle: 'Arrived after 9:30 AM',
+                    icon: <FiClock />,
+                    bgClass: 'bg-[#FFF3E0]',
+                    iconColor: 'text-[#EA580C]'
+                }
+            ];
+        }
+
+        if (activeTab === 'Member Attendance') {
+            const presentTodayMembers = filteredMemberAttendance.filter(m => m.attendance?.checkInTime || m.attendanceStatus === 'Present');
+            const currentlyInGym = filteredMemberAttendance.filter(m => m.attendance?.checkInTime && !m.attendance?.checkOutTime);
+            const activePlansCount = activePlans.length;
+
+            return [
+                {
+                    title: 'Total Members',
+                    value: `${filteredMemberAttendance.length} Members`,
+                    percentage: '100%',
+                    percentageColor: 'text-emerald-600',
+                    subtitle: 'Registered members',
+                    icon: <FiUsers />,
+                    bgClass: 'bg-[#FFECEC]',
+                    iconColor: 'text-[#E53935]'
+                },
+                {
+                    title: 'Active Members',
+                    value: `${activePlansCount} Members`,
+                    percentage: `${filteredMemberAttendance.length > 0 ? Math.round((activePlansCount / filteredMemberAttendance.length) * 100) : 0}%`,
+                    percentageColor: 'text-emerald-600',
+                    subtitle: 'With active plan',
+                    icon: <FiCheckCircle />,
+                    bgClass: 'bg-[#E8F5E9]',
+                    iconColor: 'text-[#2E7D32]'
+                },
+                {
+                    title: 'Present Today',
+                    value: `${presentTodayMembers.length} Members`,
+                    percentage: 'Today',
+                    percentageColor: 'text-blue-600',
+                    subtitle: 'Logged check-ins',
+                    icon: <FiActivity />,
+                    bgClass: 'bg-[#E3F2FD]',
+                    iconColor: 'text-[#1976D2]'
+                },
+                {
+                    title: 'Currently In Gym',
+                    value: `${currentlyInGym.length} Active`,
+                    percentage: 'Live',
+                    percentageColor: 'text-purple-600',
+                    subtitle: 'On workout floor',
+                    icon: <FiClock />,
+                    bgClass: 'bg-[#F3E8FF]',
+                    iconColor: 'text-[#7E22CE]'
+                }
+            ];
+        }
+
+        return [];
+    };
+
     return (
         <PageLayout>
             <PageHeader 
@@ -549,12 +765,17 @@ export default function Reports() {
                 action={
                     <button 
                         onClick={handleExportCSV}
-                        className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                        className="flex items-center gap-2 bg-[#CA0410] hover:bg-[#a8030d] text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors shadow-2xs cursor-pointer"
                     >
                         <FiDownload className="text-base" /> Export CSV
                     </button>
                 }
             />
+
+            {/* Summary Cards Rendered ABOVE the Tabs */}
+            <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
+                <SummaryCards cards={getActiveSummaryCards()} />
+            </div>
 
             <Tabs 
                 tabs={['Daily Collections', 'Expiring Plans', 'Staff Attendance', 'Member Attendance']}
@@ -567,7 +788,7 @@ export default function Reports() {
 
             {filterBarElement}
 
-            <div className="flex-1 overflow-y-auto space-y-4 pb-6 pt-4">
+            <div className="flex-1 overflow-y-auto space-y-4 pb-6 pt-1 bg-[#FAEEEF]">
                 {activeTab === 'Daily Collections' && (
                     <DailyCollectionsReport 
                         transactions={filteredTransactions}

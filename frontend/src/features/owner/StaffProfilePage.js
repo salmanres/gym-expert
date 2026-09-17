@@ -6,6 +6,7 @@ import PageHeader from '../../components/page/PageHeader';
 import FormSection from '../../components/form/FormSection';
 import Input from '../../components/form/Input';
 import apiClient from '../../api/apiClient';
+import { formatDate } from '../../utils/dateUtils';
 
 export default function StaffProfilePage() {
     const location = useLocation();
@@ -55,13 +56,13 @@ export default function StaffProfilePage() {
                 onBack={() => navigate('/dashboard/owner/staff')}
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 py-4 bg-[#FAEEEF]">
+                <div className="max-w-7xl mx-auto space-y-6">
                     
                     {/* Header Card */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 mb-6 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 p-6 bg-white rounded-2xl border border-rose-200/70 shadow-2xs">
                         <div className="flex items-center gap-6">
-                            <div className="w-24 h-24 shrink-0 rounded-full bg-slate-100 flex items-center justify-center border-2 border-dashed border-slate-300 text-slate-400 overflow-hidden">
+                            <div className="w-24 h-24 shrink-0 rounded-full bg-rose-50/60 flex items-center justify-center border-2 border-dashed border-rose-200 text-rose-400 overflow-hidden">
                                 {staff.profilePhoto ? (
                                     <img src={staff.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
                                 ) : (
@@ -73,11 +74,11 @@ export default function StaffProfilePage() {
                                     {staff.name}
                                 </h3>
                                 <div className="flex items-center gap-3 mt-2 flex-wrap">
-                                    <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide border ${staff.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide border ${staff.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
                                         {staff.status || 'Active'}
                                     </span>
                                     {staff.role && (
-                                        <span className="px-2 py-0.5 rounded text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 text-[#CA0410] border border-rose-200">
                                             {staff.role}
                                         </span>
                                     )}
@@ -85,15 +86,15 @@ export default function StaffProfilePage() {
                             </div>
                         </div>
                         
-                        <button onClick={() => navigate(`/dashboard/owner/staff/edit/${staff._id}`, { state: { staff } })} className="px-6 py-2.5 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors border border-slate-200 shadow-sm">
-                            <FiEdit2 size={16} /> Edit Profile
+                        <button onClick={() => navigate(`/dashboard/owner/staff/edit/${staff._id}`, { state: { staff } })} className="px-5 py-2.5 bg-[#CA0410] text-white hover:bg-[#a8030d] rounded-xl text-xs font-bold flex items-center gap-2 transition-colors shadow-2xs cursor-pointer">
+                            <FiEdit2 size={15} /> Edit Profile
                         </button>
                     </div>
 
                     <FormSection title="Personal Information" icon={<FiUser />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pointer-events-none">
                         <Input label="Full Name" value={staff.name || ''} readOnly />
                         <Input label="Gender" value={staff.gender || ''} readOnly />
-                        <Input label="Date of Birth" value={staff.dob ? new Date(staff.dob).toLocaleDateString() : ''} readOnly />
+                        <Input label="Date of Birth" value={formatDate(staff.dob)} readOnly />
                         <Input label="Phone Number" value={staff.phone || ''} readOnly />
                         <Input label="Email Address" value={staff.email || ''} readOnly />
                     </FormSection>
@@ -102,7 +103,7 @@ export default function StaffProfilePage() {
                         <Input label="Role" value={staff.role || ''} readOnly />
                         <Input label="Specialization" value={staff.specialization || ''} readOnly />
                         <Input label="Experience (Years)" value={staff.experienceYears || ''} readOnly />
-                        <Input label="Joining Date" value={staff.joiningDate ? new Date(staff.joiningDate).toLocaleDateString() : (staff.createdAt ? new Date(staff.createdAt).toLocaleDateString() : '')} readOnly />
+                        <Input label="Joining Date" value={formatDate(staff.joiningDate || staff.createdAt)} readOnly />
                         <Input label="Salary / Pay" value={staff.salary ? `₹${staff.salary}` : ''} readOnly />
                     </FormSection>
 

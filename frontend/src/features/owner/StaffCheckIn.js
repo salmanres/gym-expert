@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
-import { FiX, FiMaximize, FiCamera } from 'react-icons/fi';
+import { FiCamera } from 'react-icons/fi';
+import Modal from '../../components/modal/Modal';
 
 export default function StaffCheckIn({ onClose, onSuccess }) {
     const [status, setStatus] = useState('Scanning...');
@@ -18,7 +19,6 @@ export default function StaffCheckIn({ onClose, onSuccess }) {
         const onScanSuccess = async (decodedText, decodedResult) => {
             if (scanned) return; // Prevent multiple scans
             
-          
             if (decodedText.includes('/checkin/')) {
                 setScanned(true);
                 scanner.clear();
@@ -30,7 +30,7 @@ export default function StaffCheckIn({ onClose, onSuccess }) {
                 const userStr = localStorage.getItem('user');
                 const user = userStr ? JSON.parse(userStr) : null;
 
-                if (!user || !user.gym || user.gym !== scannedGymId && user.gym._id !== scannedGymId) {
+                if (!user || !user.gym || (user.gym !== scannedGymId && user.gym._id !== scannedGymId)) {
                     setStatus('Error: QR Code does not match your assigned gym.');
                     toast.error('Invalid QR Code for your gym.');
                     return;
@@ -60,7 +60,6 @@ export default function StaffCheckIn({ onClose, onSuccess }) {
                         } catch (error) {
                             setStatus('Error: ' + (error.response?.data?.message || 'Check-in failed.'));
                             toast.error(error.response?.data?.message || 'Check-in failed.');
-                            // Allow rescanning after error
                             setTimeout(() => setScanned(false), 3000);
                         }
                     },
@@ -76,7 +75,7 @@ export default function StaffCheckIn({ onClose, onSuccess }) {
         };
 
         const onScanFailure = (error) => {
-            // Ignore scan failures (happens constantly while waiting for a valid QR)
+            // Ignore scan failures
         };
 
         scanner.render(onScanSuccess, onScanFailure);
@@ -84,37 +83,32 @@ export default function StaffCheckIn({ onClose, onSuccess }) {
         return () => {
             scanner.clear().catch(error => console.error("Failed to clear scanner", error));
         };
-    }, [scanned, onClose]);
+    }, [scanned, onClose, onSuccess]);
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative flex flex-col">
-                <div className="bg-emerald-600 p-4 text-white flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <FiCamera className="text-xl" />
-                        <h3 className="font-bold text-lg">Staff Check-In</h3>
-                    </div>
-                    <button onClick={onClose} className="p-1 hover:bg-white/20 rounded transition-colors">
-                        <FiX className="text-xl" />
-                    </button>
-                </div>
+        <Modal
+            isOpen={true}
+            onClose={onClose}
+            title="Scan QR to Check In"
+            subtitle="Point your camera at the gym's attendance QR code"
+            icon={FiCamera}
+            maxWidth="max-w-md"
+        >
+            <div className="flex flex-col items-center justify-center p-2 min-h-[280px]">
+                <div id="staff-qr-reader" className="w-full max-w-[280px] overflow-hidden rounded-2xl border-2 border-rose-100 shadow-inner"></div>
                 
-                <div className="p-6 flex flex-col items-center justify-center min-h-[300px]">
-                    {!scanned && (
-                        <div className="mb-4 text-center">
-                            <p className="text-sm text-slate-500 font-medium">Point your camera at the Gym's Check-In QR Code</p>
-                        </div>
-                    )}
-                    
-                    <div id="staff-qr-reader" className="w-full max-w-[300px] overflow-hidden rounded-xl border-2 border-slate-100 shadow-inner"></div>
-                    
-                    <div className="mt-6 text-center">
-                        <p className={`font-bold text-sm ${status.startsWith('Error') ? 'text-rose-500' : status.startsWith('Success') ? 'text-emerald-600' : 'text-slate-600'}`}>
-                            {status}
-                        </p>
-                    </div>
+                <div className="mt-4 text-center">
+                    <p className={`font-bold text-xs ${
+                        status.startsWith('Error') 
+                            ? 'text-rose-600 bg-rose-50 px-3 py-1.5 rounded-xl border border-rose-200' 
+                            : status.startsWith('Success') 
+                                ? 'text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200' 
+                                : 'text-slate-600'
+                    }`}>
+                        {status}
+                    </p>
                 </div>
             </div>
-        </div>
+        </Modal>
     );
 }

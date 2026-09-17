@@ -7,6 +7,7 @@ import Input from '../../components/form/Input';
 import Button from '../../components/form/Button';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
+import { formatDate } from '../../utils/dateUtils';
 import Tabs from '../../components/page/Tabs';
 import GeneralTab from './settings/GeneralTab';
 import ReferralTab from './settings/ReferralTab';
@@ -76,7 +77,7 @@ export default function GymSettings() {
                             id: `REF-${m._id.toString().slice(-4).toUpperCase()}`,
                             referrer: referrer ? `${referrer.firstName} ${referrer.lastName || ''} (${referrer.memberId})`.trim() : 'Unknown Member',
                             referee: `${m.firstName} ${m.lastName || ''} (${m.memberId})`.trim(),
-                            date: new Date(m.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+                            date: formatDate(m.createdAt),
                             reward: m.referralBonusGranted ? 'Granted' : 'Pending',
                             status: m.referralBonusGranted ? 'Credited' : 'Pending'
                         };
@@ -274,8 +275,8 @@ export default function GymSettings() {
                 }}
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 py-4 bg-[#FAEEEF]">
+                <div className="w-full max-w-7xl mx-auto">
                     <form onSubmit={handleSubmit} className="flex flex-col" noValidate>
                         
                         {/* TAB 1: GENERAL & GEOFENCING */}
@@ -312,10 +313,14 @@ export default function GymSettings() {
                             />
                         )}
 
-                        <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-6 pt-6 border-t border-slate-200">
-                            <Button type="submit" loading={saving} className="w-full sm:w-auto px-8">
-                                Save Settings
-                            </Button>
+                        <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-6 pt-4 border-t border-rose-200/60">
+                            <button 
+                                type="submit" 
+                                disabled={saving}
+                                className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-sm rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {saving ? 'Saving Settings...' : 'Save Settings'}
+                            </button>
                         </div>
                     </form>
 

@@ -314,15 +314,15 @@ export default function PaymentForm() {
     };
 
     const customStyles = {
-        control: (provided) => ({
+        control: (provided, state) => ({
             ...provided,
             minHeight: '40px',
-            borderRadius: '0.5rem',
-            borderColor: '#e2e8f0',
+            borderRadius: '0.75rem',
+            borderColor: state.isFocused ? '#CA0410' : '#e2e8f0',
             backgroundColor: '#ffffff',
-            boxShadow: 'none',
+            boxShadow: state.isFocused ? '0 0 0 4px rgba(202, 4, 16, 0.1)' : 'none',
             '&:hover': {
-                borderColor: '#10b981'
+                borderColor: '#CA0410'
             },
             fontSize: '0.875rem',
             fontWeight: '500',
@@ -330,13 +330,13 @@ export default function PaymentForm() {
         }),
         option: (provided, state) => ({
             ...provided,
-            backgroundColor: state.isSelected ? '#10b981' : state.isFocused ? '#ecfdf5' : 'transparent',
+            backgroundColor: state.isSelected ? '#CA0410' : state.isFocused ? '#FFF5F5' : 'transparent',
             color: state.isSelected ? 'white' : '#475569',
             fontSize: '0.875rem',
             fontWeight: '500',
             cursor: 'pointer',
             ':active': {
-                backgroundColor: '#d1fae5'
+                backgroundColor: '#FEE2E2'
             }
         })
     };
@@ -351,8 +351,8 @@ export default function PaymentForm() {
                 showBack={true}
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 pt-0 pb-6 bg-[#FAEEEF]">
+                <div className="max-w-7xl mx-auto">
                     <form id="paymentForm" onSubmit={handleSubmit} className="flex flex-col gap-6">
                         
                         {/* Section 1: Membership Summary */}
@@ -408,14 +408,14 @@ export default function PaymentForm() {
                                     <div className="w-full bg-slate-900 text-slate-300 rounded-2xl p-6 md:p-8 shadow-2xl relative overflow-hidden h-full flex flex-col justify-between">
                                         
                                         {/* Premium subtle background glow */}
-                                        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-32 h-32 bg-emerald-500 rounded-full blur-3xl opacity-20"></div>
-                                        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 bg-blue-500 rounded-full blur-3xl opacity-20"></div>
+                                        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-32 h-32 bg-rose-500 rounded-full blur-3xl opacity-20"></div>
+                                        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 bg-rose-600 rounded-full blur-3xl opacity-15"></div>
 
                                         <div className="relative z-10">
                                             <div className="flex justify-between items-center mb-6">
                                                 <h4 className="text-white font-black tracking-widest uppercase text-sm">Invoice</h4>
                                                 <div className="h-6 w-6 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
-                                                    <FiDollarSign className="text-emerald-400 text-xs" />
+                                                    <FiDollarSign className="text-rose-400 text-xs" />
                                                 </div>
                                             </div>
 
@@ -444,7 +444,7 @@ export default function PaymentForm() {
                                                 </div>
                                                 <div className="flex justify-between items-center group">
                                                     <span className="text-slate-400 group-hover:text-slate-200 transition-colors">{formData.paymentMode || 'Payment'}</span>
-                                                    <span className="text-emerald-400 font-bold">₹{Number(formData.newPaymentAmount || 0).toLocaleString()}</span>
+                                                    <span className="text-rose-400 font-bold">₹{Number(formData.newPaymentAmount || 0).toLocaleString()}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -471,7 +471,7 @@ export default function PaymentForm() {
                                             onChange={handleChange} 
                                             required 
                                             placeholder="Enter amount..." 
-                                            className="text-xl py-3 border-emerald-300 focus:border-emerald-600 font-bold bg-emerald-50/30 text-emerald-900 placeholder:text-emerald-300" 
+                                            className="text-xl py-3 border-rose-300 focus:border-[#CA0410] font-bold bg-rose-50/30 text-slate-900 placeholder:text-rose-300" 
                                         />
                                     </div>
                                     
@@ -509,7 +509,7 @@ export default function PaymentForm() {
                                                             disabled={!formData.memberId || (members.find(m => m._id === formData.memberId)?.walletBalance || 0) <= 0}
                                                             className="peer sr-only"
                                                         />
-                                                        <div className={`w-10 h-5 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all ${(!formData.memberId || (members.find(m => m._id === formData.memberId)?.walletBalance || 0) <= 0) ? 'opacity-50' : 'peer-checked:bg-emerald-500'}`}></div>
+                                                        <div className={`w-10 h-5 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all ${(!formData.memberId || (members.find(m => m._id === formData.memberId)?.walletBalance || 0) <= 0) ? 'opacity-50' : 'peer-checked:bg-[#CA0410]'}`}></div>
                                                     </div>
                                                     <div>
                                                         <span className="text-sm font-extrabold text-slate-800 block">Use Wallet</span>
@@ -526,7 +526,7 @@ export default function PaymentForm() {
                                                         name="walletUsed"
                                                         value={formData.walletUsed}
                                                         onChange={(e) => {
-                                                            const val = Number(e.target.value);
+                                                             const val = Number(e.target.value);
                                                             const maxWallet = members.find(m => m._id === formData.memberId)?.walletBalance || 0;
                                                             if (val <= maxWallet) handleChange(e);
                                                         }}
@@ -544,11 +544,11 @@ export default function PaymentForm() {
                             </div>
                         </div>
 
-                        <div className="flex justify-end items-center gap-3 mt-4 pt-6 border-t border-slate-200">
+                        <div className="flex justify-end items-center gap-3 pt-2">
                             <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/finance')}>
                                 Cancel
                             </Button>
-                            <Button type="submit" form="paymentForm" loading={submitting}>
+                            <Button type="submit" form="paymentForm" loading={submitting} className="bg-[#CA0410] hover:bg-[#a8030d] text-white">
                                 Record Payment
                             </Button>
                         </div>

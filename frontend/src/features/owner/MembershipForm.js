@@ -95,11 +95,11 @@ function MembershipForm() {
         control: (provided, state) => ({
             ...provided,
             minHeight: '38px',
-            borderRadius: '0.5rem',
-            borderColor: state.isFocused ? '#10b981' : '#e2e8f0',
+            borderRadius: '0.75rem',
+            borderColor: state.isFocused ? '#CA0410' : '#e2e8f0',
             backgroundColor: '#ffffff',
-            boxShadow: state.isFocused ? '0 0 0 4px rgba(16, 185, 129, 0.1)' : 'none',
-            '&:hover': { borderColor: '#10b981' },
+            boxShadow: state.isFocused ? '0 0 0 4px rgba(202, 4, 16, 0.1)' : 'none',
+            '&:hover': { borderColor: '#CA0410' },
             fontSize: '0.875rem',
             fontWeight: '500',
             color: '#1e293b',
@@ -108,12 +108,12 @@ function MembershipForm() {
         }),
         option: (provided, state) => ({
             ...provided,
-            backgroundColor: state.isSelected ? '#10b981' : state.isFocused ? '#ecfdf5' : 'transparent',
+            backgroundColor: state.isSelected ? '#CA0410' : state.isFocused ? '#FFF5F5' : 'transparent',
             color: state.isSelected ? 'white' : '#475569',
             fontSize: '0.875rem',
             fontWeight: '500',
             cursor: 'pointer',
-            ':active': { backgroundColor: '#d1fae5' }
+            ':active': { backgroundColor: '#FEE2E2' }
         }),
         singleValue: (provided) => ({
             ...provided,
@@ -125,28 +125,29 @@ function MembershipForm() {
         }),
         menu: (provided) => ({
             ...provided,
-            borderRadius: '0.5rem',
+            borderRadius: '0.75rem',
             boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-            border: '1px solid #e2e8f0',
+            border: '1px solid #fecdd3',
             overflow: 'hidden',
             zIndex: 50
         }),
         multiValue: (provided) => ({
             ...provided,
-            backgroundColor: '#ecfdf5',
-            borderRadius: '0.25rem'
+            backgroundColor: '#FFF5F5',
+            border: '1px solid #FECDD3',
+            borderRadius: '0.375rem'
         }),
         multiValueLabel: (provided) => ({
             ...provided,
-            color: '#047857',
+            color: '#CA0410',
             fontSize: '0.75rem',
-            fontWeight: '600'
+            fontWeight: '700'
         }),
         multiValueRemove: (provided) => ({
             ...provided,
-            color: '#10b981',
+            color: '#CA0410',
             ':hover': {
-                backgroundColor: '#10b981',
+                backgroundColor: '#CA0410',
                 color: 'white',
             },
         })
@@ -160,9 +161,9 @@ function MembershipForm() {
                 showBack={true}
             />
             
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full">
-                    <form onSubmit={handleSubmit} className="flex flex-col">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 pt-0 pb-6 bg-[#FAEEEF]">
+                <div className="max-w-7xl mx-auto">
+                    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                         <FormSection title="Plan Information" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input 
                                 label="Plan Name" 
@@ -241,7 +242,7 @@ function MembershipForm() {
                                 value={formData.description} 
                                 onChange={handleChange} 
                                 rows="3"
-                                placeholder="Enter plan details..."
+                                placeholder="Enter plan details..." 
                             />
                             <Checkbox 
                                 containerClassName="col-span-full mt-2"
@@ -252,11 +253,11 @@ function MembershipForm() {
                             />
                         </FormSection>
                         
-                        <div className="flex justify-end gap-3 w-full mt-4 pt-6 border-t border-slate-200">
+                        <div className="flex justify-end gap-3 w-full pt-4">
                             <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/membership')}>
                                 Cancel
                             </Button>
-                            <Button type="submit" loading={loading}>
+                            <Button type="submit" loading={loading} className="bg-[#CA0410] hover:bg-[#a8030d] text-white">
                                 {isEditMode ? "Update Plan" : "Save Plan"}
                             </Button>
                         </div>

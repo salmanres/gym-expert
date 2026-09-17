@@ -65,42 +65,85 @@ export default function Select({ label, required, error, options = [], children,
     const customStyles = {
         control: (provided, state) => ({
             ...provided,
-            minHeight: '38px',
-            borderRadius: '0.5rem',
-            borderColor: error ? '#f43f5e' : state.isFocused ? '#10b981' : '#e2e8f0',
+            minHeight: '40px',
+            height: '40px',
+            borderRadius: '0.75rem',
+            borderColor: error ? '#f43f5e' : state.isFocused ? '#CA0410' : '#e2e8f0',
             backgroundColor: error ? '#fff1f2' : '#ffffff',
-            boxShadow: state.isFocused ? (error ? '0 0 0 4px rgba(244, 63, 94, 0.2)' : '0 0 0 4px rgba(16, 185, 129, 0.1)') : 'none',
-            '&:hover': { borderColor: error ? '#e11d48' : '#10b981' },
-            fontSize: '0.875rem',
+            boxShadow: state.isFocused ? (error ? '0 0 0 4px rgba(244, 63, 94, 0.15)' : '0 0 0 4px rgba(202, 4, 16, 0.1)') : '0 1px 2px 0 rgba(0, 0, 0, 0.02)',
+            '&:hover': { borderColor: error ? '#e11d48' : '#cbd5e1' },
+            fontSize: '0.8125rem',
             fontWeight: '500',
             color: error ? '#881337' : '#1e293b',
-            transition: 'all 0.2s ease',
-            paddingLeft: '0.25rem'
+            transition: 'all 0.15s ease',
+            paddingLeft: '0.25rem',
+            cursor: 'pointer'
+        }),
+        valueContainer: (provided) => ({
+            ...provided,
+            padding: '0 8px',
+        }),
+        input: (provided) => ({
+            ...provided,
+            margin: '0',
+            padding: '0',
+            color: '#1e293b'
+        }),
+        indicatorSeparator: () => ({
+            display: 'none'
+        }),
+        indicatorsContainer: (provided) => ({
+            ...provided,
+            height: '38px'
+        }),
+        dropdownIndicator: (provided, state) => ({
+            ...provided,
+            color: state.isFocused ? '#CA0410' : '#94a3b8',
+            padding: '6px',
+            '&:hover': { color: '#CA0410' }
+        }),
+        clearIndicator: (provided) => ({
+            ...provided,
+            color: '#94a3b8',
+            padding: '6px',
+            '&:hover': { color: '#f43f5e' }
         }),
         option: (provided, state) => ({
             ...provided,
-            backgroundColor: state.isSelected ? '#10b981' : state.isFocused ? '#ecfdf5' : 'transparent',
-            color: state.isSelected ? 'white' : '#475569',
-            fontSize: '0.875rem',
-            fontWeight: '500',
+            backgroundColor: state.isSelected ? '#CA0410' : state.isFocused ? '#FFF5F5' : 'transparent',
+            color: state.isSelected ? 'white' : state.isFocused ? '#CA0410' : '#334155',
+            fontSize: '0.8125rem',
+            fontWeight: state.isSelected ? '700' : '500',
+            padding: '8px 12px',
             cursor: 'pointer',
-            ':active': { backgroundColor: '#d1fae5' }
+            transition: 'all 0.1s ease',
+            ':active': { backgroundColor: '#FEE2E2' }
         }),
         singleValue: (provided) => ({
             ...provided,
-            color: '#1e293b'
+            color: '#1e293b',
+            fontSize: '0.8125rem',
+            fontWeight: '500'
         }),
         placeholder: (provided) => ({
             ...provided,
-            color: '#94a3b8'
+            color: '#94a3b8',
+            fontSize: '0.8125rem',
+            fontWeight: '400'
         }),
         menu: (provided) => ({
             ...provided,
-            borderRadius: '0.5rem',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-            border: '1px solid #e2e8f0',
+            borderRadius: '0.75rem',
+            boxShadow: '0 12px 28px -4px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.05)',
+            border: '1px solid #fecdd3',
             overflow: 'hidden',
-            zIndex: 50
+            zIndex: 50,
+            padding: '4px'
+        }),
+        menuList: (provided) => ({
+            ...provided,
+            padding: '2px',
+            borderRadius: '0.5rem'
         })
     };
 
@@ -121,10 +164,10 @@ export default function Select({ label, required, error, options = [], children,
     const selectedOption = findSelectedOption(parsedOptions, value);
 
     return (
-        <div className={containerClassName}>
+        <div className={`flex flex-col ${containerClassName}`}>
             {label && (
-                <label className={`block text-xs font-bold mb-1.5 ${error ? 'text-rose-600' : 'text-slate-600'}`}>
-                    {label} {required && <span className="text-rose-500">*</span>}
+                <label className={`block text-[12px] font-bold mb-1.5 tracking-tight ${error ? 'text-rose-600' : 'text-slate-700'}`}>
+                    {label} {required && <span className="text-[#CA0410] ml-0.5">*</span>}
                 </label>
             )}
             
@@ -141,7 +184,7 @@ export default function Select({ label, required, error, options = [], children,
                 {...props}
             />
             
-            {error && <p className="text-[10px] font-bold text-rose-500 mt-1">{error}</p>}
+            {error && <p className="text-[11px] font-semibold text-rose-500 mt-1 flex items-center gap-1">{error}</p>}
         </div>
     );
 }

@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { FiChevronLeft, FiChevronRight, FiCalendar } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
+import { FiChevronLeft, FiChevronRight, FiCalendar, FiChevronRight as FiArrowNext } from 'react-icons/fi';
+import { formatDate } from '../../utils/dateUtils';
 
 export default function FollowUpCalendar({ leads = [], onSelectDate, selectedDate }) {
+    const navigate = useNavigate();
     const [currentMonth, setCurrentMonth] = useState(new Date());
 
     const nextMonth = () => {
@@ -19,7 +22,7 @@ export default function FollowUpCalendar({ leads = [], onSelectDate, selectedDat
         const cells = [];
         // Empty cells for the start of the month
         for (let i = 0; i < firstDayOfMonth; i++) {
-            cells.push(<div key={`empty-${i}`} className="h-10 sm:h-11 border border-slate-100 bg-slate-50/50"></div>);
+            cells.push(<div key={`empty-${i}`} className="h-9 sm:h-10 border border-rose-100/60 bg-rose-50/20"></div>);
         }
 
         // Days of the month
@@ -33,7 +36,6 @@ export default function FollowUpCalendar({ leads = [], onSelectDate, selectedDat
             // Count follow-ups for this day
             const followUps = leads.filter(lead => {
                 if (!lead.followUpDate) return false;
-                // Only active statuses
                 if (['Converted', 'Lost'].includes(lead.status)) return false;
                 
                 const leadDateStr = typeof lead.followUpDate === 'string' && lead.followUpDate.includes('T')
@@ -61,19 +63,19 @@ export default function FollowUpCalendar({ leads = [], onSelectDate, selectedDat
                 <div 
                     key={d} 
                     onClick={() => onSelectDate(isSelected ? null : date)}
-                    className={`h-10 sm:h-11 border border-slate-100 p-1 flex flex-col relative cursor-pointer transition-all
-                        ${isSelected ? 'bg-indigo-50 border-indigo-300 ring-1 ring-indigo-500 z-10' : 'bg-white hover:bg-slate-50'}
+                    className={`h-9 sm:h-10 border border-rose-100/70 p-1 flex flex-col relative cursor-pointer transition-all
+                        ${isSelected ? 'bg-rose-100/80 border-rose-300 ring-1 ring-[#CA0410] z-10' : 'bg-white hover:bg-rose-50/50'}
                     `}
                 >
                     <div className="flex justify-between items-start">
-                        <span className={`text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-emerald-500 text-white' : 'text-slate-600'}`}>
+                        <span className={`text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-[#CA0410] text-white shadow-2xs' : 'text-slate-700'}`}>
                             {d}
                         </span>
                     </div>
                     {hasFollowUps && (
                         <div className="mt-auto flex justify-center pb-0.5">
-                            <span className="flex items-center justify-center bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0 rounded-full shadow-2xs">
-                                {followUps.length} call{followUps.length > 1 ? 's' : ''}
+                            <span className="flex items-center justify-center bg-[#CA0410] text-white text-[8.5px] font-black px-1.5 py-0 rounded-full shadow-2xs">
+                                {followUps.length}
                             </span>
                         </div>
                     )}
@@ -84,49 +86,67 @@ export default function FollowUpCalendar({ leads = [], onSelectDate, selectedDat
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-xs border border-slate-200 overflow-hidden flex flex-col h-full justify-between">
+        <div className="bg-white rounded-2xl shadow-2xs border border-rose-200/80 overflow-hidden flex flex-col h-full justify-between">
             <div>
-                <div className="p-3 sm:p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                    <div className="flex items-center gap-2">
-                        <FiCalendar className="text-indigo-600" />
-                        <h3 className="font-bold text-slate-800 text-sm">Follow-up Calendar</h3>
+                {/* Card Header with Pink Badge and Month Navigation */}
+                <div className="p-4 border-b border-rose-100/80 flex items-center justify-between bg-white">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center border border-rose-200/80 shrink-0 shadow-2xs">
+                            <FiCalendar size={18} />
+                        </div>
+                        <h3 className="font-extrabold text-slate-800 text-sm tracking-tight">Follow Up Calendar</h3>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button onClick={prevMonth} className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors">
-                            <FiChevronLeft />
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                        <button onClick={prevMonth} className="p-1 hover:bg-rose-50 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer">
+                            <FiChevronLeft size={16} />
                         </button>
-                        <span className="text-xs font-bold w-24 text-center text-slate-700">
+                        <span className="min-w-[70px] text-center text-xs font-bold text-slate-700">
                             {currentMonth.toLocaleDateString('default', { month: 'short', year: 'numeric' })}
                         </span>
-                        <button onClick={nextMonth} className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors">
-                            <FiChevronRight />
+                        <button onClick={nextMonth} className="p-1 hover:bg-rose-50 rounded-lg text-slate-500 hover:text-slate-800 transition-colors cursor-pointer">
+                            <FiChevronRight size={16} />
                         </button>
                     </div>
                 </div>
                 
-                <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+                {/* Days of Week */}
+                <div className="grid grid-cols-7 border-b border-rose-100/80 bg-rose-50/50">
                     {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-                        <div key={day} className="py-1.5 text-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wider border-r border-slate-100 last:border-r-0">
+                        <div key={day} className="py-1.5 text-center text-[10px] font-extrabold text-slate-500 uppercase tracking-wider border-r border-rose-100/60 last:border-r-0">
                             {day}
                         </div>
                     ))}
                 </div>
                 
+                {/* Calendar Grid */}
                 <div className="grid grid-cols-7 bg-white">
                     {renderCells()}
                 </div>
             </div>
 
             {selectedDate && (
-                <div className="p-2.5 bg-indigo-50 border-t border-indigo-100 flex items-center justify-between">
-                    <span className="text-xs font-bold text-indigo-800">
-                        Showing follow-ups for {selectedDate.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}
+                <div className="p-2.5 bg-rose-50 border-t border-rose-200 flex items-center justify-between text-xs">
+                    <span className="font-bold text-[#CA0410]">
+                        Showing follow-ups for {formatDate(selectedDate)}
                     </span>
-                    <button onClick={() => onSelectDate(null)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800">
+                    <button onClick={() => onSelectDate(null)} className="text-xs font-bold text-[#CA0410] hover:underline cursor-pointer">
                         Clear Filter
                     </button>
                 </div>
             )}
+
+            {/* Bottom Banner Strip from Figma */}
+            <div className="bg-[#FFF0F2] border-t border-rose-200/70 p-3 px-4 flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold text-slate-600 leading-tight">
+                    Manage your follow-ups, appointments and member interaction
+                </p>
+                <button 
+                    onClick={() => navigate('/dashboard/owner/leads')}
+                    className="bg-[#CA0410] hover:bg-[#a8030d] text-white px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 shrink-0 shadow-2xs cursor-pointer active:scale-95 transition-all"
+                >
+                    View all <FiArrowNext size={12} />
+                </button>
+            </div>
         </div>
     );
 }

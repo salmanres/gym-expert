@@ -4,6 +4,7 @@ import { FiClipboard, FiCheckSquare, FiCreditCard, FiActivity } from 'react-icon
 import { toast } from '../../utils/toast';
 import apiClient from '../../api/apiClient';
 import { io } from 'socket.io-client';
+import { formatDate } from '../../utils/dateUtils';
 
 // Modular Layout Components (Platform vs Gym separation)
 import PlatformSidebar from '../../components/layout/PlatformSidebar';
@@ -164,7 +165,7 @@ function DashboardLayout() {
         if (diffMins < 60) return `${diffMins}m ago`;
         const diffHours = Math.floor(diffMins / 60);
         if (diffHours < 24) return `${diffHours}h ago`;
-        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        return formatDate(d);
     };
 
     // Category Unread Counts
@@ -223,7 +224,7 @@ function DashboardLayout() {
             )}
 
             {/* Main Content Area */}
-            <main className="flex-1 flex flex-col overflow-hidden print:overflow-visible relative bg-white">
+            <main className="flex-1 flex flex-col overflow-hidden print:overflow-visible relative bg-gradient-to-b from-[#FFF5F6] via-[#FAEEEF] to-[#FFF0F2]">
                 {/* Render Platform Navbar or Gym Navbar */}
                 {isPlatformAdmin ? (
                     <PlatformNavbar 
@@ -251,8 +252,8 @@ function DashboardLayout() {
                 )}
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-y-auto print:overflow-visible w-full z-10 bg-white print:bg-white">
-                    <div className="w-full h-full">
+                <div className="flex-1 overflow-y-auto print:overflow-visible w-full z-10 bg-[#FAEEEF] print:bg-white">
+                    <div className="w-full min-h-full">
                         <Outlet />
                     </div>
                 </div>

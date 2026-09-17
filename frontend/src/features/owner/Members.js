@@ -8,9 +8,11 @@ import DataTable from '../../components/page/DataTable';
 import ConfirmModal from '../../components/modal/ConfirmModal';
 import EmptyState from '../../components/page/EmptyState';
 import Loader from '../../components/page/Loader';
-import { FiUsers, FiPhone, FiMail, FiEdit2, FiTrash2, FiPlus, FiCreditCard, FiPauseCircle, FiPlayCircle, FiEye } from 'react-icons/fi';
+import SummaryCards from '../../components/page/SummaryCards';
+import { FiUsers, FiPhone, FiMail, FiEdit2, FiTrash2, FiPlus, FiCreditCard, FiPauseCircle, FiPlayCircle, FiEye, FiUserCheck, FiUserX, FiUserPlus } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
+import { formatDate } from '../../utils/dateUtils';
 
 export default function Members() {
     const navigate = useNavigate();
@@ -19,6 +21,10 @@ export default function Members() {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('All Members');
     
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
     // Filters
     const [filterGender, setFilterGender] = useState('All');
     const [filterStartDate, setFilterStartDate] = useState('');
@@ -97,7 +103,7 @@ export default function Members() {
 
             if (firstMatch) {
                 if (activeTab !== firstMatch.status && activeTab !== 'All Members') {
-                    setActiveTab(firstMatch.status); // Usually 'Active', 'Inactive', 'Frozen'
+                    setActiveTab(firstMatch.status);
                 }
             }
         }
@@ -181,143 +187,318 @@ export default function Members() {
         return searchStr.includes(searchTerm.toLowerCase());
     });
 
-    const columns = [
-        { label: 'Member ID' },
-        { label: 'Member Name' },
-        { label: 'Contact Info' },
-        { label: 'Status' },
-        { label: 'Actions', className: 'text-center' }
+    const totalItems = filteredMembers.length;
+    const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const avatarStyles = [
+        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
+        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
+        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
+        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
+        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
+        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
     ];
 
-    const renderRow = (member) => (
-        <tr key={member._id} className="hover:bg-slate-50 transition-colors group">
-            <td className="py-3 px-4">
-                <span className="inline-flex items-center px-2 py-1 bg-slate-100 text-slate-700 text-xs font-bold rounded border border-slate-200">
-                    {member.memberId}
-                </span>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex items-center gap-3">
-                    {member.profilePhoto ? (
-                        <img src={member.profilePhoto} alt={member.firstName} className="w-10 h-10 rounded-full object-cover shadow-sm border border-slate-200 shrink-0" />
-                    ) : (
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-sm shadow-sm border border-slate-200 shrink-0">
-                            {member.firstName.charAt(0).toUpperCase()}{member.lastName ? member.lastName.charAt(0).toUpperCase() : ''}
-                        </div>
-                    )}
-                    <div>
-                        <p className="font-bold text-slate-800 text-sm">{member.firstName} {member.lastName}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">{member.gender} • Joined: {new Date(member.joiningDate).toLocaleDateString()}</p>
-                        
-                        {/* Multi-Plan Active Badges */}
-                        <div className="flex flex-wrap items-center gap-1 mt-1">
-                            {member.allActiveMemberships && member.allActiveMemberships.length > 0 ? (
-                                member.allActiveMemberships.map((m, i) => {
-                                    const pNameRaw = String(m.membershipPlanId?.name || m.planName || '').toLowerCase();
-                                    const pTypeRaw = String(m.membershipPlanId?.planType || m.planType || '').toLowerCase();
-                                    const isExplicitPT = pTypeRaw.includes('personal training') || pTypeRaw.includes('pt') || pNameRaw.includes('personal training') || pNameRaw.includes('pt package');
-                                    const isPT = Boolean(m.isPTConversion) || isExplicitPT;
-                                    const pName = m.membershipPlanId?.name || m.planName || 'Plan';
-                                    const trName = m.trainerId?.name ? `(Trainer: ${m.trainerId.name})` : '';
-                                    const sessInfo = isPT && m.totalSessions > 0 ? `[${m.usedSessions || 0}/${m.totalSessions}]` : '';
+    const getAvatarStyle = (name, index) => {
+        const charCode = (name || '').charCodeAt(0) || 0;
+        return avatarStyles[(charCode + index) % avatarStyles.length];
+    };
 
-                                    return (
-                                        <span key={m._id || i} className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded border ${
-                                            m.membershipStatus === 'Frozen' 
-                                                ? 'bg-cyan-50 text-cyan-700 border-cyan-200' 
-                                                : isPT 
-                                                    ? 'bg-amber-50 text-amber-800 border-amber-300' 
-                                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                        }`}>
-                                            {isPT ? '🟡 PT' : '🟢 Gym'}: {pName} {sessInfo} {trName}
+    const getInitial = (member) => {
+        const name = (member?.firstName || member?.name || member?.lastName || '').trim();
+        return name ? name.charAt(0).toUpperCase() : 'M';
+    };
+
+    const getStatusStyle = (status) => {
+        switch (status) {
+            case 'Active':
+                return 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]';
+            case 'Frozen':
+                return 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]';
+            case 'Inactive':
+                return 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]';
+            default:
+                return 'bg-slate-50 text-slate-700 border-slate-200';
+        }
+    };
+
+    const columns = [
+        { label: 'MEMBER', className: 'w-[28%] pl-4 pr-3' },
+        { label: 'CONTACT INFO', className: 'w-[18%] px-3' },
+        { label: 'MEMBERSHIP / PLAN', className: 'w-[22%] px-3' },
+        { label: 'STATUS', className: 'w-[12%] px-2 text-center' },
+        { label: 'ACTIONS', className: 'w-[20%] pr-4 pl-1 text-center' }
+    ];
+
+    const renderRow = (member, index) => {
+        return (
+            <tr key={member._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
+                {/* MEMBER */}
+                <td className="py-2.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
+                        {member.profilePhoto ? (
+                            <img 
+                                src={member.profilePhoto} 
+                                alt={member.firstName} 
+                                className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" 
+                            />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                                {getInitial(member)}
+                            </div>
+                        )}
+
+                        <div className="flex flex-col items-start min-w-0">
+                            <button 
+                                onClick={() => navigate(`/dashboard/owner/members/view/${member._id}`, { state: { member } })}
+                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                            >
+                                {member.firstName} {member.lastName}
+                            </button>
+                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                                ID: <span className="font-bold text-slate-700">{member.memberId}</span> • {member.gender || 'Member'} • Joined: {formatDate(member.joiningDate, 'N/A')}
+                            </p>
+
+                            {/* Multi-Plan Active Badges */}
+                            <div className="flex flex-wrap items-center gap-1 mt-1 whitespace-nowrap">
+                                {member.allActiveMemberships && member.allActiveMemberships.length > 0 ? (
+                                    member.allActiveMemberships.map((m, i) => {
+                                        const pNameRaw = String(m.membershipPlanId?.name || m.planName || '').toLowerCase();
+                                        const pTypeRaw = String(m.membershipPlanId?.planType || m.planType || '').toLowerCase();
+                                        const isExplicitPT = pTypeRaw.includes('personal training') || pTypeRaw.includes('pt') || pNameRaw.includes('personal training') || pNameRaw.includes('pt package');
+                                        const isPT = Boolean(m.isPTConversion) || isExplicitPT;
+                                        const pName = m.membershipPlanId?.name || m.planName || 'Plan';
+                                        const trName = m.trainerId?.name ? `(${m.trainerId.name})` : '';
+                                        const sessInfo = isPT && m.totalSessions > 0 ? `[${m.usedSessions || 0}/${m.totalSessions}]` : '';
+
+                                        return (
+                                            <span key={m._id || i} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border shrink-0 ${
+                                                m.membershipStatus === 'Frozen' 
+                                                    ? 'bg-cyan-50 text-cyan-700 border-cyan-200' 
+                                                    : isPT 
+                                                        ? 'bg-amber-50 text-amber-800 border-amber-300' 
+                                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                            }`}>
+                                                {isPT ? '🟡 PT' : '🟢 Gym'}: {pName} {sessInfo} {trName}
+                                            </span>
+                                        );
+                                    })
+                                ) : (
+                                    member.membershipPlan && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border border-slate-200 text-slate-700 bg-slate-50 shrink-0">
+                                             {member.membershipPlan.name}
                                         </span>
-                                    );
-                                })
-                            ) : (
-                                member.membershipPlan && (
-                                    <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                        {member.membershipPlan.name}
-                                    </span>
-                                )
-                            )}
+                                    )
+                                )}
 
-                            {member.walletBalance > 0 && (
-                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
-                                    Wallet: ₹{member.walletBalance}
-                                </span>
-                            )}
+                                {member.walletBalance > 0 && (
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border border-indigo-200 text-indigo-700 bg-indigo-50 shrink-0">
+                                        Wallet: ₹{member.walletBalance}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                        <FiPhone className="text-emerald-500 shrink-0" /> {member.contactNumber}
-                    </div>
-                    {member.email && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                            <FiMail className="text-emerald-500 shrink-0" /> {member.email}
+                </td>
+
+                {/* CONTACT INFO */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
+                            <FiPhone className="text-slate-400 text-xs shrink-0" />
+                            <span>{member.contactNumber || '-'}</span>
                         </div>
-                    )}
-                </div>
-            </td>
-            <td className="py-3 px-4">
-                <span className={`inline-flex px-2 py-1 rounded text-xs font-bold uppercase tracking-wide ${member.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : member.status === 'Frozen' ? 'bg-cyan-50 text-cyan-700 border border-cyan-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                    {member.status}
-                </span>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button onClick={() => navigate(`/dashboard/owner/members/view/${member._id}`, { state: { member } })} className="w-8 h-8 rounded bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="View Profile">
-                        <FiEye className="text-sm" />
-                    </button>
-                    <button 
-                        onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: member } })} 
-                        className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${!member.membershipPlan || member.paymentStatus === 'Paid' ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'}`} 
-                        title={!member.membershipPlan ? 'No Active Plan' : member.paymentStatus === 'Paid' ? 'Fee Fully Paid' : 'Collect Fee'}
-                        disabled={!member.membershipPlan || member.paymentStatus === 'Paid'}
-                    >
-                        <FiCreditCard className="text-sm" />
-                    </button>
-                    
-                    <button 
-                        onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })} 
-                        className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${!member.membershipPlan ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white'}`}
-                        title={member.membershipPlan ? "Renew or Upgrade Plan" : "Assign Plan"}
-                    >
-                        <FiPlus className="text-sm" />
-                    </button>
-                    
-                    {member.status === 'Frozen' ? (
+                        {member.email && (
+                            <div className="flex items-center gap-1.5 text-slate-500 font-normal text-[11.5px]">
+                                <FiMail className="text-slate-400 text-[11px] shrink-0" />
+                                <span className="truncate max-w-[160px]" title={member.email}>{member.email}</span>
+                            </div>
+                        )}
+                    </div>
+                </td>
+
+                {/* MEMBERSHIP / PLAN DETAILS */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                        {member.membershipPlan ? (
+                            <>
+                                <div>
+                                    <span className="text-slate-500 font-normal">Plan: </span>
+                                    <span className="font-semibold text-slate-800">{member.membershipPlan.name}</span>
+                                </div>
+                                {member.planEndDate && (
+                                    <div>
+                                        <span className="text-slate-500 font-normal">Valid: </span>
+                                        <span className="font-semibold text-slate-800">{formatDate(member.planEndDate)}</span>
+                                    </div>
+                                )}
+                                <div>
+                                    <span className="text-slate-500 font-normal">Payment: </span>
+                                    <span className={`font-bold ${member.paymentStatus === 'Paid' ? 'text-emerald-600' : member.paymentStatus === 'Partial' ? 'text-amber-600' : 'text-rose-600'}`}>
+                                        {member.paymentStatus || 'Pending'}
+                                    </span>
+                                </div>
+                            </>
+                        ) : (
+                            <span className="text-slate-400 font-medium italic">No Active Plan</span>
+                        )}
+                    </div>
+                </td>
+
+                {/* STATUS */}
+                <td className="py-2.5 px-2 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${getStatusStyle(member.status)}`}>
+                        {member.status || 'Inactive'}
+                    </span>
+                </td>
+
+                {/* ACTIONS */}
+                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5">
+                        {/* View Profile */}
                         <button 
-                            onClick={() => handleFreezeStatus(member, 'Active')} 
-                            className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${!member.membershipPlan ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'}`} 
-                            title={!member.membershipPlan ? "No Active Plan" : "Unfreeze Membership"}
-                            disabled={!member.membershipPlan}
+                            onClick={() => navigate(`/dashboard/owner/members/view/${member._id}`, { state: { member } })} 
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title="View Member Profile"
                         >
-                            <FiPlayCircle className="text-sm" />
+                            <FiEye size={15} />
                         </button>
-                    ) : (
+
+                        {/* Collect Payment / Dues */}
                         <button 
-                            onClick={() => handleFreezeStatus(member, 'Frozen')} 
-                            className={`w-8 h-8 rounded flex items-center justify-center transition-colors shadow-sm ${!member.membershipPlan ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-600 hover:text-white'}`} 
-                            title={!member.membershipPlan ? "No Active Plan" : "Freeze Membership"}
-                            disabled={!member.membershipPlan}
+                            onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: member } })} 
+                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-2xs active:scale-95 ${
+                                !member.membershipPlan 
+                                    ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed' 
+                                    : member.paymentStatus === 'Paid'
+                                        ? 'border-emerald-200 bg-emerald-50/50 text-emerald-300 cursor-not-allowed'
+                                        : 'border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 cursor-pointer'
+                            }`}
+                            title={!member.membershipPlan ? 'No Active Plan' : member.paymentStatus === 'Paid' ? 'Fee Fully Paid' : 'Collect Fee'}
+                            disabled={!member.membershipPlan || member.paymentStatus === 'Paid'}
                         >
-                            <FiPauseCircle className="text-sm" />
+                            <FiCreditCard size={14} />
                         </button>
-                    )}
-                    <button onClick={() => handleEdit(member)} className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Edit Record">
-                        <FiEdit2 className="text-sm" />
-                    </button>
-                    <button onClick={() => handleDelete(member._id)} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Delete Record">
-                        <FiTrash2 className="text-sm" />
-                    </button>
-                </div>
-            </td>
-        </tr>
-    );
+                        
+                        {/* Assign / Renew Plan */}
+                        <button 
+                            onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })} 
+                            className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-white hover:border-indigo-400 hover:bg-indigo-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title={member.membershipPlan ? "Renew or Upgrade Plan" : "Assign Plan"}
+                        >
+                            <FiPlus size={15} />
+                        </button>
+                        
+                        {/* Freeze / Unfreeze */}
+                        {member.status === 'Frozen' ? (
+                            <button 
+                                onClick={() => handleFreezeStatus(member, 'Active')} 
+                                className="w-8 h-8 rounded-lg border border-cyan-300 text-cyan-600 bg-cyan-50/90 hover:border-cyan-500 hover:bg-cyan-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                title="Unfreeze Membership"
+                            >
+                                <FiPlayCircle size={14} />
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={() => handleFreezeStatus(member, 'Frozen')} 
+                                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-2xs active:scale-95 ${
+                                    !member.membershipPlan 
+                                        ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed' 
+                                        : 'border-cyan-200 text-cyan-600 bg-white hover:border-cyan-400 hover:bg-cyan-50 cursor-pointer'
+                                }`}
+                                title={!member.membershipPlan ? "No Active Plan" : "Freeze Membership"}
+                                disabled={!member.membershipPlan}
+                            >
+                                <FiPauseCircle size={14} />
+                            </button>
+                        )}
+
+                        {/* Edit */}
+                        <button 
+                            onClick={() => handleEdit(member)} 
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title="Edit Record"
+                        >
+                            <FiEdit2 size={14} />
+                        </button>
+
+                        {/* Delete */}
+                        <button 
+                            onClick={() => handleDelete(member._id)} 
+                            className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title="Delete Record"
+                        >
+                            <FiTrash2 size={14} />
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        );
+    };
+
+    const totalMembers = members.length;
+    const activeMembersCount = members.filter(m => m.status === 'Active').length;
+    const inactiveMembersCount = members.filter(m => m.status === 'Inactive' || m.status === 'Expired').length;
+    const frozenMembersCount = members.filter(m => m.status === 'Frozen').length;
+    const withPlanCount = members.filter(m => m.membershipPlan).length;
+    const newThisMonthCount = members.filter(m => {
+        const d = new Date(m.joinDate || m.createdAt);
+        const now = new Date();
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length;
+
+    const summaryCardsData = [
+        {
+            title: 'Total Members',
+            value: totalMembers,
+            percentage: '100%',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'Registered in gym',
+            icon: <FiUsers />,
+            bgClass: 'bg-[#FFECEC]',
+            iconColor: 'text-[#E53935]'
+        },
+        {
+            title: 'Active Members',
+            value: activeMembersCount,
+            percentage: `${totalMembers > 0 ? Math.round((activeMembersCount / totalMembers) * 100) : 0}%`,
+            percentageColor: 'text-emerald-600',
+            subtitle: 'Active subscriptions',
+            icon: <FiUserCheck />,
+            bgClass: 'bg-[#E8F5E9]',
+            iconColor: 'text-[#2E7D32]'
+        },
+        {
+            title: 'Inactive / Expired',
+            value: inactiveMembersCount,
+            percentage: 'Expired',
+            percentageColor: 'text-rose-600',
+            subtitle: 'Needs renewal',
+            icon: <FiUserX />,
+            bgClass: 'bg-[#FFF3E0]',
+            iconColor: 'text-[#EA580C]'
+        },
+        {
+            title: 'Frozen Members',
+            value: frozenMembersCount,
+            percentage: 'On Hold',
+            percentageColor: 'text-blue-600',
+            subtitle: 'Paused memberships',
+            icon: <FiPauseCircle />,
+            bgClass: 'bg-blue-50',
+            iconColor: 'text-blue-600'
+        },
+        {
+            title: 'New This Month',
+            value: newThisMonthCount,
+            percentage: 'New',
+            percentageColor: 'text-purple-600',
+            subtitle: 'Joined recently',
+            icon: <FiUserPlus />,
+            bgClass: 'bg-[#F3E8FF]',
+            iconColor: 'text-[#7E22CE]'
+        }
+    ];
 
     if (loading) return <Loader text="Loading members..." />;
 
@@ -329,6 +510,11 @@ export default function Members() {
                 onAdd={() => navigate('/dashboard/owner/members/add')}
                 addLabel="Add Member"
             />
+            
+            <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
+                <SummaryCards cards={summaryCardsData} />
+            </div>
+
             <Tabs 
                 tabs={['All Members', 'Active', 'Inactive', 'Frozen']}
                 activeTab={activeTab}
@@ -338,36 +524,49 @@ export default function Members() {
                     setFilterGender('All');
                     setFilterStartDate('');
                     setFilterEndDate('');
+                    setCurrentPage(1);
                 }}
             />
 
             <FilterBar 
                 searchTerm={searchTerm} 
-                onSearchChange={setSearchTerm} 
+                onSearchChange={(val) => {
+                    setSearchTerm(val);
+                    setCurrentPage(1);
+                }} 
                 searchPlaceholder="Search by name, phone or ID..."
             >
-                <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm h-10 px-2 transition-all focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 w-full sm:w-auto">
+                <div className="flex items-center bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl shadow-2xs h-9 px-2.5 transition-all focus-within:border-[#CA0410] focus-within:ring-2 focus-within:ring-[#CA0410]/20 w-full sm:w-auto">
                     <input 
                         type="date" 
                         value={filterStartDate}
-                        onChange={(e) => setFilterStartDate(e.target.value)}
-                        className="text-sm focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
+                        onChange={(e) => {
+                            setFilterStartDate(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
                         title="Joining Date From"
                     />
-                    <span className="text-slate-300 mx-2 font-medium text-xs">TO</span>
+                    <span className="text-slate-300 mx-2 font-medium text-[10px]">TO</span>
                     <input 
                         type="date" 
                         value={filterEndDate}
-                        onChange={(e) => setFilterEndDate(e.target.value)}
-                        className="text-sm focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
+                        onChange={(e) => {
+                            setFilterEndDate(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
                         title="Joining Date To"
                     />
                 </div>
                 
                 <select 
                     value={filterGender} 
-                    onChange={(e) => setFilterGender(e.target.value)}
-                    className="w-full sm:w-auto h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm"
+                    onChange={(e) => {
+                        setFilterGender(e.target.value);
+                        setCurrentPage(1);
+                    }}
+                    className="h-9 px-3 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 text-slate-600 shadow-2xs w-full sm:w-auto"
                 >
                     <option value="All">All Genders</option>
                     <option value="Male">Male</option>
@@ -376,27 +575,23 @@ export default function Members() {
                 </select>
             </FilterBar>
 
-            {filteredMembers.length > 0 ? (
-                <div className="px-4 py-4 flex-1 overflow-y-auto w-full">
-                    <DataTable 
-                        columns={columns} 
-                        data={filteredMembers} 
-                        loading={loading}
-                        emptyMessage="No members found."
-                        renderRow={renderRow} 
-                    />
-                </div>
-            ) : (
-                <div className="flex-1 overflow-y-auto">
-                    <EmptyState 
-                        icon={<FiUsers size={48} />}
-                        title={searchTerm ? "No members found" : "No members yet"}
-                        description={searchTerm ? `No members match "${searchTerm}"` : "Get started by adding your first gym member."}
-                        actionLabel={!searchTerm ? "Add Member" : null}
-                        onAction={!searchTerm ? () => navigate('/dashboard/owner/members/add') : null}
-                    />
-                </div>
-            )}
+            <div className="px-6 md:px-8 pb-6 pt-1 bg-[#FAEEEF] w-full flex flex-col gap-4 min-h-0 flex-1">
+                <DataTable 
+                    columns={columns} 
+                    data={paginatedMembers} 
+                    loading={loading}
+                    emptyMessage={searchTerm ? `No members match "${searchTerm}"` : "No members found."}
+                    renderRow={renderRow} 
+                    pagination={{
+                        currentPage: currentPage,
+                        totalItems: totalItems,
+                        pageSize: pageSize,
+                        onPageChange: (p) => setCurrentPage(p),
+                        onPageSizeChange: (s) => setPageSize(s),
+                        itemLabel: "members"
+                    }}
+                />
+            </div>
 
             <ConfirmModal 
                 isOpen={confirmModal.isOpen}

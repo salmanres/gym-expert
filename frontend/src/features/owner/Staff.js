@@ -7,7 +7,8 @@ import ConfirmModal from '../../components/modal/ConfirmModal';
 import EmptyState from '../../components/page/EmptyState';
 import Loader from '../../components/page/Loader';
 import FilterBar from '../../components/page/FilterBar';
-import { FiUsers, FiEdit2, FiTrash2, FiPhone, FiMail, FiEye, FiLock } from 'react-icons/fi';
+import SummaryCards from '../../components/page/SummaryCards';
+import { FiUsers, FiEdit2, FiTrash2, FiPhone, FiMail, FiEye, FiLock, FiClock, FiUserCheck, FiAward, FiDollarSign } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 
@@ -18,6 +19,10 @@ export default function Staff() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('All');
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDestructive: false });
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     // Check Current User Role
     const userStr = localStorage.getItem('user');
@@ -77,16 +82,24 @@ export default function Staff() {
         return searchStr.includes(searchTerm.toLowerCase());
     });
 
-    const columns = [
-        { label: 'Name' },
-        { label: 'Contact Info' },
-        { label: 'Role' },
-        { label: 'Wallet (Rewards)' },
-        { label: 'Status' },
-        { label: 'Actions', className: 'text-center' }
+    const totalItems = filteredStaff.length;
+    const paginatedStaff = filteredStaff.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const avatarStyles = [
+        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
+        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
+        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
+        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
+        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
+        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
     ];
 
-    const getRoleBadgeColor = (role) => {
+    const getAvatarStyle = (name, index) => {
+        const charCode = (name || '').charCodeAt(0) || 0;
+        return avatarStyles[(charCode + index) % avatarStyles.length];
+    };
+
+    const getRoleBadgeStyle = (role) => {
         switch (role) {
             case 'ADMIN':
             case 'BRANCH_MANAGER': return 'bg-purple-50 text-purple-700 border-purple-200';
@@ -104,67 +117,180 @@ export default function Staff() {
         }
     };
 
-    const renderRow = (staff) => (
-        <tr key={staff._id} className="hover:bg-slate-50 transition-colors group">
-            <td className="py-3 px-4">
-                <div className="flex items-center gap-3">
-                    {staff.profilePhoto ? (
-                        <img src={staff.profilePhoto} alt={staff.name} className="w-10 h-10 rounded-full object-cover shadow-sm border border-slate-200 shrink-0" />
-                    ) : (
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-sm shadow-sm border border-slate-200 shrink-0">
-                            {staff.name.charAt(0).toUpperCase()}
+    const columns = [
+        { label: 'STAFF MEMBER', className: 'w-[28%] pl-4 pr-3' },
+        { label: 'CONTACT INFO', className: 'w-[18%] px-3' },
+        { label: 'ROLE & SHIFT', className: 'w-[20%] px-3' },
+        { label: 'WALLET (REWARDS)', className: 'w-[14%] px-3' },
+        { label: 'STATUS', className: 'w-[10%] px-2 text-center' },
+        { label: 'ACTIONS', className: 'w-[10%] pr-4 pl-1 text-center' }
+    ];
+
+    const renderRow = (staff, index) => {
+        return (
+            <tr key={staff._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
+                {/* STAFF NAME & ID */}
+                <td className="py-2.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
+                        {staff.profilePhoto ? (
+                            <img 
+                                src={staff.profilePhoto} 
+                                alt={staff.name} 
+                                className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" 
+                            />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                                {(staff.name || 'S').charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                        <div className="flex flex-col items-start min-w-0">
+                            <button 
+                                onClick={() => navigate(`/dashboard/owner/staff/view/${staff._id}`, { state: { staff } })}
+                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                            >
+                                {staff.name}
+                            </button>
+                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                                ID: <span className="font-bold text-slate-700">{staff.staffId || staff.employeeId || `STF-${staff._id.slice(-4).toUpperCase()}`}</span> • {staff.gender || 'Staff'}
+                            </p>
                         </div>
-                    )}
-                    <p className="font-bold text-slate-800 text-sm">{staff.name}</p>
-                </div>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex flex-col gap-1">
-                    {staff.phone && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                            <FiPhone className="text-emerald-500 shrink-0" /> {staff.phone}
-                        </div>
-                    )}
-                    <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                        <FiMail className="text-emerald-500 shrink-0" /> {staff.email}
                     </div>
-                </div>
-            </td>
-            <td className="py-3 px-4">
-                <span className={`inline-flex px-2 py-1 rounded text-xs font-bold uppercase tracking-wide border ${getRoleBadgeColor(staff.role)}`}>
-                    {getRoleLabel(staff.role)}
-                </span>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex items-center gap-1.5 font-black text-slate-800">
-                    <span className="text-emerald-500 font-bold">₹</span>
-                    {staff.walletBalance || 0}
-                </div>
-            </td>
-            <td className="py-3 px-4">
-                <span className={`inline-flex px-2 py-1 rounded text-xs font-bold uppercase tracking-wide border ${staff.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
-                    {staff.status || 'Active'}
-                </span>
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                    <button onClick={() => navigate(`/dashboard/owner/staff/view/${staff._id}`, { state: { staff } })} className="w-8 h-8 rounded bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="View Profile">
-                        <FiEye className="text-sm" />
-                    </button>
-                    {isOwner && (
-                        <>
-                            <button onClick={() => handleEdit(staff)} className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Edit Record">
-                                <FiEdit2 className="text-sm" />
+                </td>
+
+                {/* CONTACT INFO */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                        {staff.phone && (
+                            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
+                                <FiPhone className="text-slate-400 text-xs shrink-0" />
+                                <span>{staff.phone}</span>
+                            </div>
+                        )}
+                        {staff.email && (
+                            <div className="flex items-center gap-1.5 text-slate-500 font-normal text-[11.5px]">
+                                <FiMail className="text-slate-400 text-[11px] shrink-0" />
+                                <span className="truncate max-w-[150px]" title={staff.email}>{staff.email}</span>
+                            </div>
+                        )}
+                    </div>
+                </td>
+
+                {/* ROLE & SHIFT */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border w-max ${getRoleBadgeStyle(staff.role)}`}>
+                            {getRoleLabel(staff.role)}
+                        </span>
+                        {staff.shiftStart && staff.shiftEnd ? (
+                            <div className="flex items-center gap-1 text-slate-500 font-normal text-[11.5px]">
+                                <FiClock className="text-slate-400 text-[10px] shrink-0" />
+                                <span>{staff.shiftStart} - {staff.shiftEnd}</span>
+                            </div>
+                        ) : null}
+                    </div>
+                </td>
+
+                {/* WALLET (REWARDS) */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex items-center gap-1 font-bold text-slate-900 text-[13.5px]">
+                        <span className="text-emerald-600 font-bold">₹</span>
+                        <span>{Number(staff.walletBalance || 0).toLocaleString()}</span>
+                    </div>
+                </td>
+
+                {/* STATUS */}
+                <td className="py-2.5 px-2 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${staff.status === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                        {staff.status || 'Active'}
+                    </span>
+                </td>
+
+                {/* ACTIONS */}
+                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5">
+                        {/* View Profile */}
+                        <button 
+                            onClick={() => navigate(`/dashboard/owner/staff/view/${staff._id}`, { state: { staff } })} 
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title="View Profile"
+                        >
+                            <FiEye size={15} />
+                        </button>
+
+                        {/* Edit */}
+                        {isOwner && (
+                            <button 
+                                onClick={() => handleEdit(staff)} 
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="Edit Record"
+                            >
+                                <FiEdit2 size={14} />
                             </button>
-                            <button onClick={() => handleDelete(staff._id)} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Delete Record">
-                                <FiTrash2 className="text-sm" />
+                        )}
+
+                        {/* Delete */}
+                        {isOwner && (
+                            <button 
+                                onClick={() => handleDelete(staff._id)} 
+                                className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="Delete Record"
+                            >
+                                <FiTrash2 size={14} />
                             </button>
-                        </>
-                    )}
-                </div>
-            </td>
-        </tr>
-    );
+                        )}
+                    </div>
+                </td>
+            </tr>
+        );
+    };
+
+    const totalStaff = staffList.length;
+    const trainersCount = staffList.filter(s => (s.role || '').toUpperCase() === 'TRAINER').length;
+    const supportStaffCount = staffList.filter(s => (s.role || '').toUpperCase() !== 'TRAINER').length;
+    const activeStaffCount = staffList.filter(s => s.status === 'Active' || !s.status).length;
+
+    const summaryCardsData = [
+        {
+            title: 'Total Staff',
+            value: totalStaff,
+            percentage: 'Team',
+            percentageColor: 'text-purple-600',
+            subtitle: 'Registered staff',
+            icon: <FiUsers />,
+            bgClass: 'bg-[#FFECEC]',
+            iconColor: 'text-[#E53935]'
+        },
+        {
+            title: 'Trainers',
+            value: trainersCount,
+            percentage: 'Coach',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'Fitness instructors',
+            icon: <FiAward />,
+            bgClass: 'bg-[#E8F5E9]',
+            iconColor: 'text-[#2E7D32]'
+        },
+        {
+            title: 'Support Staff',
+            value: supportStaffCount,
+            percentage: 'Support',
+            percentageColor: 'text-amber-600',
+            subtitle: 'Ops & helper staff',
+            icon: <FiClock />,
+            bgClass: 'bg-[#FFF3E0]',
+            iconColor: 'text-[#EA580C]'
+        },
+        {
+            title: 'Active Duty',
+            value: activeStaffCount,
+            percentage: 'Active',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'Working status',
+            icon: <FiUserCheck />,
+            bgClass: 'bg-[#E3F2FD]',
+            iconColor: 'text-[#1976D2]'
+        }
+    ];
 
     if (loading) return <Loader text="Loading staff..." />;
 
@@ -177,8 +303,12 @@ export default function Staff() {
                 addLabel={isOwner ? "Add Staff" : null}
             />
 
+            <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
+                <SummaryCards cards={summaryCardsData} />
+            </div>
+
             {!isOwner && (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-bold flex items-center gap-2">
+                <div className="mx-6 md:mx-8 my-2 p-3 bg-amber-50/90 backdrop-blur-sm border border-amber-200/80 rounded-xl text-amber-800 text-xs font-bold flex items-center gap-2 shadow-2xs">
                     <FiLock className="text-amber-600 text-sm shrink-0" />
                     <span>Admin Mode: You have full access to view and manage leads, members, memberships, and reports. Staff creation & editing is reserved for Gym Owner.</span>
                 </div>
@@ -186,13 +316,19 @@ export default function Staff() {
 
             <FilterBar 
                 searchTerm={searchTerm} 
-                onSearchChange={setSearchTerm} 
+                onSearchChange={(val) => {
+                    setSearchTerm(val);
+                    setCurrentPage(1);
+                }} 
                 searchPlaceholder="Search by name, email or phone..."
             >
                 <select 
                     value={filterRole} 
-                    onChange={(e) => setFilterRole(e.target.value)}
-                    className="w-full sm:w-auto h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm"
+                    onChange={(e) => {
+                        setFilterRole(e.target.value);
+                        setCurrentPage(1);
+                    }}
+                    className="h-9 px-3 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 text-slate-600 shadow-2xs w-full sm:w-auto"
                 >
                     <option value="All">All Roles</option>
                     <option value="TRAINER">Trainers</option>
@@ -201,25 +337,23 @@ export default function Staff() {
                 </select>
             </FilterBar>
 
-            {filteredStaff.length > 0 ? (
+            <div className="px-6 md:px-8 pb-6 pt-1 bg-[#FAEEEF] w-full flex flex-col gap-4 min-h-0 flex-1">
                 <DataTable 
                     columns={columns} 
-                    data={filteredStaff} 
+                    data={paginatedStaff} 
                     loading={loading}
-                    emptyMessage="No staff members found."
+                    emptyMessage={searchTerm ? `No staff match "${searchTerm}"` : "No staff members found."}
                     renderRow={renderRow} 
+                    pagination={{
+                        currentPage: currentPage,
+                        totalItems: totalItems,
+                        pageSize: pageSize,
+                        onPageChange: (p) => setCurrentPage(p),
+                        onPageSizeChange: (s) => setPageSize(s),
+                        itemLabel: "staff members"
+                    }}
                 />
-            ) : (
-                <div className="flex-1 overflow-y-auto">
-                    <EmptyState 
-                        icon={<FiUsers size={48} />}
-                        title={searchTerm ? "No staff found" : "No staff yet"}
-                        description={searchTerm ? `No staff match "${searchTerm}"` : "Get started by adding your first trainer or admin."}
-                        actionLabel={!searchTerm && isOwner ? "Add Staff" : null}
-                        onAction={!searchTerm && isOwner ? () => navigate('/dashboard/owner/staff/add') : null}
-                    />
-                </div>
-            )}
+            </div>
 
             <ConfirmModal 
                 isOpen={confirmModal.isOpen}

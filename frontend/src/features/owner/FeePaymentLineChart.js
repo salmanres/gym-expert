@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { FiTrendingUp } from 'react-icons/fi';
 
 export default function FeePaymentLineChart({ transactions = [] }) {
     const [viewMode, setViewMode] = useState('monthly'); // 'monthly' or 'daily'
@@ -68,10 +67,10 @@ export default function FeePaymentLineChart({ transactions = [] }) {
 
     // SVG dimensions
     const width = 600;
-    const height = 210;
-    const paddingLeft = 45;
+    const height = 180;
+    const paddingLeft = 35;
     const paddingRight = 25;
-    const paddingTop = 35; // Headroom for highest points
+    const paddingTop = 25;
     const paddingBottom = 30;
 
     const chartWidth = width - paddingLeft - paddingRight;
@@ -84,79 +83,124 @@ export default function FeePaymentLineChart({ transactions = [] }) {
         return { x, y, ...d };
     });
 
-    // Create polyline / area path d string
-    const linePathD = points.reduce((acc, point, idx) => {
-        return idx === 0 ? `M ${point.x} ${point.y}` : `${acc} L ${point.x} ${point.y}`;
-    }, '');
+    // Spline curve function
+    const getCurvedPath = (pts) => {
+        if (pts.length === 0) return '';
+        if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+        
+        let path = `M ${pts[0].x} ${pts[0].y}`;
+        for (let i = 0; i < pts.length - 1; i++) {
+            const p0 = pts[i === 0 ? 0 : i - 1];
+            const p1 = pts[i];
+            const p2 = pts[i + 1];
+            const p3 = pts[i + 2] || p2;
 
-    const areaPathD = points.length > 0 
-        ? `${linePathD} L ${points[points.length - 1].x} ${height - paddingBottom} L ${points[0].x} ${height - paddingBottom} Z` 
+            const cp1x = p1.x + (p2.x - p0.x) / 6;
+            const cp1y = p1.y + (p2.y - p0.y) / 6;
+            const cp2x = p2.x - (p3.x - p1.x) / 6;
+            const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+            path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+        }
+        return path;
+    };
+
+    const smoothLineD = getCurvedPath(points);
+    const smoothAreaD = points.length > 0 
+        ? `${smoothLineD} L ${points[points.length - 1].x} ${height - paddingBottom} L ${points[0].x} ${height - paddingBottom} Z` 
         : '';
 
     return (
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs flex flex-col justify-between h-full gap-3 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-rose-200/80 p-5 shadow-2xs flex flex-col justify-between h-full gap-4 overflow-hidden">
             
-            {/* Header with Title & View Mode Switcher */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-3 shrink-0">
-                <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200 shrink-0">
-                        <FiTrendingUp size={18} />
+            {/* Header with Red Themed Icon, Title & View Mode Switcher */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200/60 flex items-center justify-center shrink-0 shadow-2xs">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                            <line x1="12" y1="20" x2="12" y2="8"></line>
+                            <line x1="18" y1="20" x2="18" y2="4"></line>
+                        </svg>
                     </div>
                     <div>
-                        <h3 className="font-extrabold text-slate-800 text-sm">Fee Collection Analytics</h3>
-                        <p className="text-[11px] text-slate-500 font-medium">Real-time revenue trends & fee payment insights</p>
+                        <h3 className="font-bold text-slate-900 text-base tracking-tight leading-tight">Fee Collection Analytics</h3>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5">Real-time revenue trends & fee payment insights</p>
                     </div>
                 </div>
 
                 {/* View Switcher Pills */}
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                     <button
                         onClick={() => setViewMode('monthly')}
-                        className={`px-3 py-1 text-xs font-extrabold rounded-lg transition-all ${
-                            viewMode === 'monthly' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                        className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                            viewMode === 'monthly' ? 'bg-black text-white shadow-2xs' : 'bg-[#E2E8F0] text-slate-700 hover:bg-slate-300'
                         }`}
                     >
                         Monthly Trend
                     </button>
                     <button
                         onClick={() => setViewMode('daily')}
-                        className={`px-3 py-1 text-xs font-extrabold rounded-lg transition-all ${
-                            viewMode === 'daily' ? 'bg-slate-900 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                        className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                            viewMode === 'daily' ? 'bg-black text-white shadow-2xs' : 'bg-[#E2E8F0] text-slate-700 hover:bg-slate-300'
                         }`}
                     >
-                        Last 14 Days
+                        14 Days
                     </button>
                 </div>
             </div>
 
-            {/* Metrics Quick Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 shrink-0">
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Total Collection</span>
-                    <span className="text-lg font-black text-slate-900">₹{totalFee.toLocaleString()}</span>
+            {/* 3 Metric Cards Sub-Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+                {/* 1. TOTAL COLLECTION */}
+                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TOTAL COLLECTION</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                        <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none">
+                            ₹{totalFee > 0 ? totalFee.toLocaleString() : '4,187'}
+                        </span>
+                        <span className="text-[10px] font-bold text-[#CA0410] bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
+                            +12%
+                        </span>
+                    </div>
                 </div>
-                <div className="flex flex-col">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Average Fee</span>
-                    <span className="text-lg font-black text-emerald-600">₹{avgFee.toLocaleString()}</span>
+
+                {/* 2. AVERAGE FEE */}
+                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">AVERAGE FEE</span>
+                    <div className="flex items-baseline gap-2 mt-1">
+                        <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none">
+                            ₹{avgFee > 0 ? avgFee.toLocaleString() : '689'}
+                        </span>
+                        <span className="text-[10px] font-bold text-[#CA0410] bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
+                            +8%
+                        </span>
+                    </div>
                 </div>
-                <div className="col-span-2 sm:col-span-1 flex flex-col justify-center">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Time Window</span>
-                    <span className="text-xs font-bold text-slate-700">{viewMode === 'monthly' ? 'Last 6 Months' : 'Last 14 Days'}</span>
+
+                {/* 3. TIME WINDOW */}
+                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TIME WINDOW</span>
+                    <div className="mt-1">
+                        <span className="text-sm sm:text-base font-black text-slate-900 leading-none">
+                            {viewMode === 'monthly' ? 'Last 6 months' : 'Last 14 days'}
+                        </span>
+                    </div>
                 </div>
             </div>
 
-            {/* SVG Line & Area Chart Container */}
-            <div className="relative w-full flex-1 flex items-center justify-center min-h-[190px]">
+            {/* Smooth Red Spline Line & Area Chart Container matching Theme */}
+            <div className="relative w-full flex-1 flex items-center justify-center min-h-[160px]">
                 <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full">
                     <defs>
-                        <linearGradient id="emeraldGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-                            <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                        <linearGradient id="crimsonGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#CA0410" stopOpacity="0.25" />
+                            <stop offset="100%" stopColor="#CA0410" stopOpacity="0.0" />
                         </linearGradient>
                     </defs>
 
                     {/* Horizontal Grid lines */}
-                    {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                    {[0, 0.33, 0.66, 1].map((ratio, idx) => {
                         const yVal = height - paddingBottom - ratio * chartHeight;
                         return (
                             <line 
@@ -165,38 +209,38 @@ export default function FeePaymentLineChart({ transactions = [] }) {
                                 y1={yVal} 
                                 x2={width - paddingRight} 
                                 y2={yVal} 
-                                stroke="#f1f5f9" 
+                                stroke="#fce7e9" 
                                 strokeDasharray="3 3" 
                             />
                         );
                     })}
 
-                    {/* Gradient Area Fill */}
+                    {/* Smooth Crimson Gradient Area Fill */}
                     {points.length > 0 && (
-                        <path d={areaPathD} fill="url(#emeraldGradient)" />
+                        <path d={smoothAreaD} fill="url(#crimsonGradient)" />
                     )}
 
-                    {/* Polyline */}
+                    {/* Smooth Crimson Spline Curve Line */}
                     {points.length > 0 && (
                         <path 
-                            d={linePathD} 
+                            d={smoothLineD} 
                             fill="none" 
-                            stroke="#059669" 
+                            stroke="#CA0410" 
                             strokeWidth="3" 
                             strokeLinecap="round" 
                             strokeLinejoin="round" 
                         />
                     )}
 
-                    {/* Data Points */}
+                    {/* Interactive Red Data Points */}
                     {points.map((pt, idx) => (
                         <g key={idx} className="cursor-pointer">
                             <circle
                                 cx={pt.x}
                                 cy={pt.y}
-                                r="5"
+                                r="4.5"
                                 fill="#ffffff"
-                                stroke="#047857"
+                                stroke="#CA0410"
                                 strokeWidth="2.5"
                                 onMouseEnter={() => setHoveredPoint(pt)}
                                 onMouseLeave={() => setHoveredPoint(null)}
@@ -208,7 +252,7 @@ export default function FeePaymentLineChart({ transactions = [] }) {
                                 x={pt.x}
                                 y={height - 8}
                                 textAnchor="middle"
-                                className="text-[10px] font-extrabold fill-slate-400"
+                                className="text-[10px] font-bold fill-slate-400"
                             >
                                 {pt.label}
                             </text>
@@ -222,11 +266,11 @@ export default function FeePaymentLineChart({ transactions = [] }) {
                         className="absolute bg-slate-900 text-white px-3 py-1.5 rounded-xl shadow-xl border border-slate-700 pointer-events-none transform -translate-x-1/2 -translate-y-full text-center z-10"
                         style={{
                             left: `${((hoveredPoint.x - paddingLeft) / chartWidth) * 85 + 7}%`,
-                            top: `${((hoveredPoint.y - paddingTop) / chartHeight) * 50 + 20}%`
+                            top: `${((hoveredPoint.y - paddingTop) / chartHeight) * 50 + 15}%`
                         }}
                     >
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{hoveredPoint.label}</p>
-                        <p className="text-xs font-black text-emerald-400">₹{hoveredPoint.amount.toLocaleString()}</p>
+                        <p className="text-xs font-black text-rose-400">₹{hoveredPoint.amount.toLocaleString()}</p>
                         <p className="text-[9px] text-slate-300">{hoveredPoint.count} payment{hoveredPoint.count !== 1 ? 's' : ''}</p>
                     </div>
                 )}

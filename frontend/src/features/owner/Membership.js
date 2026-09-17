@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { FiEdit2, FiTrash2, FiCheckCircle, FiXCircle, FiPlus, FiAlertCircle, FiCreditCard, FiRefreshCw, FiGift } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiPlus, FiCreditCard, FiRefreshCw, FiGift, FiPhone, FiCheckCircle, FiClock, FiAlertCircle, FiXCircle, FiUsers, FiEye } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import DataTable from '../../components/page/DataTable';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
+import SummaryCards from '../../components/page/SummaryCards';
+import { formatDate } from '../../utils/dateUtils';
 
 function Memberships() {
     const navigate = useNavigate();
@@ -15,10 +17,14 @@ function Memberships() {
     const [members, setMembers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [activeTab, setActiveTab] = useState('Plans'); // 'Plans', 'Assign', 'Active', 'Expired', 'Renewals'
+    const [activeTab, setActiveTab] = useState('Plans'); // 'Plans', 'Assign', 'Active', 'Scheduled', 'Expired', 'Renewals'
     const [bonusModal, setBonusModal] = useState({ open: false, membership: null, days: '', reason: '' });
     const [gymSettings, setGymSettings] = useState(null);
     
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
     // Filters
     const [filterPaymentStatus, setFilterPaymentStatus] = useState('All');
 
@@ -135,9 +141,22 @@ function Memberships() {
         });
     };
 
+    const avatarStyles = [
+        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
+        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
+        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
+        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
+        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
+        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
+    ];
+
+    const getAvatarStyle = (name, index) => {
+        const charCode = (name || '').charCodeAt(0) || 0;
+        return avatarStyles[(charCode + index) % avatarStyles.length];
+    };
+
     const filteredMemberships = memberships.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()));
     const filteredMembers = getMembersByStatus().filter(m => {
-        // Payment Status Filter
         if (filterPaymentStatus !== 'All' && (m.paymentStatus || 'Pending') !== filterPaymentStatus) return false;
 
         return (
@@ -146,66 +165,111 @@ function Memberships() {
         );
     });
 
+    // Paginated datasets
+    const totalPlans = filteredMemberships.length;
+    const paginatedPlans = filteredMemberships.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const totalMembersInTab = filteredMembers.length;
+    const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
     // Column Definitions
     const planColumns = [
-        { label: 'Plan Name' },
-        { label: 'Type' },
-        { label: 'Duration' },
-        { label: 'Price' },
-        { label: 'Status' },
-        { label: 'Actions', className: 'text-center' }
+        { label: 'PLAN NAME', className: 'w-[28%] pl-4 pr-3' },
+        { label: 'TYPE & SESSIONS', className: 'w-[22%] px-3' },
+        { label: 'DURATION', className: 'w-[14%] px-3' },
+        { label: 'PRICE', className: 'w-[14%] px-3' },
+        { label: 'STATUS', className: 'w-[10%] px-2 text-center' },
+        { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
     ];
 
     const memberColumns = [
-        { label: 'Member' },
-        { label: 'Contact' },
-        { label: 'Plan Details' },
-        { label: 'End Date' },
-        { label: 'Payment' },
-        { label: 'Action', className: 'text-center' }
+        { label: 'MEMBER', className: 'w-[25%] pl-4 pr-3' },
+        { label: 'CONTACT', className: 'w-[15%] px-3' },
+        { label: 'PLAN DETAILS', className: 'w-[24%] px-3' },
+        { label: 'VALIDITY / STATUS', className: 'w-[14%] px-2 text-center' },
+        { label: 'PAYMENT', className: 'w-[10%] px-2 text-center' },
+        { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
     ];
 
-    // Render Rows
-    const renderPlanRow = (m) => (
-        <tr key={m._id} className="hover:bg-slate-50 transition-colors">
-            <td className="py-3 px-4">
-                <p className="font-bold text-slate-800 text-sm">{m.name}</p>
-                {m.sessions > 0 && <span className="text-[10px] text-slate-500 font-medium">{m.sessions} Sessions</span>}
-            </td>
-            <td className="py-3 px-4 text-sm text-slate-600 font-medium">
-                <div className="flex flex-wrap gap-1.5">
-                    {(() => {
-                        const rawTypes = Array.isArray(m.planType) ? m.planType : [m.planType || 'Gym Access'];
-                        const flattened = rawTypes.flatMap(pt => typeof pt === 'string' ? pt.split('+').map(s => s.trim()) : [pt]);
-                        return flattened.map((pt, i) => (
-                            <span key={i} className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs font-medium border border-slate-200">
-                                {pt}
-                            </span>
-                        ));
-                    })()}
-                </div>
-            </td>
-            <td className="py-3 px-4 text-sm text-slate-600">{m.duration} {m.durationUnit || 'Months'}</td>
-            <td className="py-3 px-4 text-sm font-semibold text-emerald-600">₹{m.price}</td>
-            <td className="py-3 px-4">
-                {m.isActive ? 
-                    <span className="flex items-center gap-1 text-emerald-600 text-xs font-bold bg-emerald-50 px-2 py-1 rounded w-max"><FiCheckCircle /> Active</span> : 
-                    <span className="flex items-center gap-1 text-rose-600 text-xs font-bold bg-rose-50 px-2 py-1 rounded w-max"><FiXCircle /> Inactive</span>}
-            </td>
-            <td className="py-3 px-4">
-                <div className="flex items-center justify-center gap-2">
-                    <button onClick={() => handleEdit(m)} className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center shadow-sm" title="Edit">
-                        <FiEdit2 className="text-sm" />
-                    </button>
-                    <button onClick={() => handleDelete(m._id)} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center shadow-sm" title="Delete">
-                        <FiTrash2 className="text-sm" />
-                    </button>
-                </div>
-            </td>
-        </tr>
-    );
+    // Render Rows for Plans
+    const renderPlanRow = (m, index) => {
+        return (
+            <tr key={m._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
+                <td className="py-2.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            {(m.name || 'P').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col items-start min-w-0">
+                            <button 
+                                onClick={() => handleEdit(m)}
+                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                            >
+                                {m.name}
+                            </button>
+                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                                {m.sessions > 0 ? `${m.sessions} Sessions` : 'Unlimited Access'}
+                            </p>
+                        </div>
+                    </div>
+                </td>
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-wrap gap-1">
+                        {(() => {
+                            const rawTypes = Array.isArray(m.planType) ? m.planType : [m.planType || 'Gym Access'];
+                            const flattened = rawTypes.flatMap(pt => typeof pt === 'string' ? pt.split('+').map(s => s.trim()) : [pt]);
+                            return flattened.map((pt, i) => (
+                                <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                                    {pt}
+                                </span>
+                            ));
+                        })()}
+                    </div>
+                </td>
+                <td className="py-2.5 px-3 align-middle">
+                    <span className="font-bold text-slate-900 text-[13px]">
+                        {m.duration} {m.durationUnit || 'Months'}
+                    </span>
+                </td>
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex items-center gap-1 font-bold text-emerald-600 text-[14px]">
+                        <span>₹</span>
+                        <span>{Number(m.price || 0).toLocaleString()}</span>
+                    </div>
+                </td>
+                <td className="py-2.5 px-2 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
+                        m.isActive 
+                            ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
+                            : 'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}>
+                        {m.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5">
+                        <button 
+                            onClick={() => handleEdit(m)} 
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title="Edit Plan"
+                        >
+                            <FiEdit2 size={14} />
+                        </button>
+                        <button 
+                            onClick={() => handleDelete(m._id)} 
+                            className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title="Delete Plan"
+                        >
+                            <FiTrash2 size={14} />
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        );
+    };
 
-    const renderMemberRow = (m) => {
+    // Render Rows for Member Assignments
+    const renderMemberRow = (m, index) => {
         const isScheduledTab = activeTab === 'Scheduled' && m.scheduledMembership;
         const currentMem = isScheduledTab ? m.scheduledMembership : m.activeMembership;
         const planName = currentMem?.membershipPlanId?.name || currentMem?.planName || m.membershipPlan?.name;
@@ -219,99 +283,189 @@ function Memberships() {
         const isRenewingSoon = !isScheduledTab && endDate && endDate >= today && endDate <= nextWeek;
 
         return (
-            <tr key={m._id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
+            <tr key={m._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
+                <td className="py-2.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
                         {m.profilePhoto ? (
-                            <img src={m.profilePhoto} alt={m.firstName} className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-200 shrink-0" />
+                            <img src={m.profilePhoto} alt={m.firstName} className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs shadow-sm border border-slate-200 shrink-0">
-                                {m.firstName.charAt(0).toUpperCase()}{m.lastName ? m.lastName.charAt(0).toUpperCase() : ''}
+                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                                {(m.firstName || 'M').charAt(0).toUpperCase()}
                             </div>
                         )}
-                        <div>
-                            <p className="font-bold text-slate-800 text-sm">{m.firstName} {m.lastName}</p>
-                            <p className="text-xs text-slate-500">{m.memberId}</p>
+                        <div className="flex flex-col items-start min-w-0">
+                            <button 
+                                onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
+                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                            >
+                                {m.firstName} {m.lastName}
+                            </button>
+                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                                ID: <span className="font-bold text-slate-700">{m.memberId}</span> • {m.gender || 'Member'}
+                            </p>
                         </div>
                     </div>
                 </td>
-                <td className="py-3 px-4 text-sm text-slate-600 font-medium">
-                    {m.contactNumber}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
+                        <FiPhone className="text-slate-400 text-xs shrink-0" />
+                        <span>{m.contactNumber || '-'}</span>
+                    </div>
                 </td>
-                <td className="py-3 px-4">
+                <td className="py-2.5 px-3 align-middle">
                     {planName ? (
-                        <div>
-                            <p className="font-bold text-slate-700 text-sm">{planName}</p>
-                            <p className="text-[10px] text-slate-500">
-                                {startDate ? startDate.toLocaleDateString() : ''} to {isPartial && paidUntilDate ? paidUntilDate.toLocaleDateString() : (endDate ? endDate.toLocaleDateString() : '')}
-                            </p>
-                            {isPartial && paidUntilDate && (
-                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block mt-0.5">
-                                    Paid till {paidUntilDate.toLocaleDateString()} (₹{currentMem?.paidAmount || 0} / ₹{currentMem?.finalPrice || 0})
+                        <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                            <span className="font-semibold text-slate-800 text-[12.5px]">{planName}</span>
+                            <div className="flex items-center gap-1 flex-wrap">
+                                <span className="text-slate-500 font-normal text-[11.5px]">
+                                    {startDate ? formatDate(startDate) : ''} - {isPartial && paidUntilDate ? formatDate(paidUntilDate) : (endDate ? formatDate(endDate) : '')}
                                 </span>
-                            )}
-                            {currentMem?.bonusDays > 0 && (
-                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded ml-1">+{currentMem.bonusDays} Bonus Days</span>
+                                {currentMem?.bonusDays > 0 && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        +{currentMem.bonusDays}d
+                                    </span>
+                                )}
+                            </div>
+                            {isPartial && paidUntilDate && (
+                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 w-max">
+                                    Paid till {formatDate(paidUntilDate)} (₹{currentMem?.paidAmount || 0} / ₹{currentMem?.finalPrice || 0})
+                                </span>
                             )}
                         </div>
                     ) : (
-                        <span className="text-xs text-slate-400 italic">No Plan</span>
+                        <span className="text-slate-400 font-medium italic text-xs">No Active Plan</span>
                     )}
                 </td>
-                <td className="py-3 px-4">
+                <td className="py-2.5 px-2 text-center align-middle">
                     {isScheduledTab ? (
-                        <span className="text-xs font-bold px-2 py-1 rounded flex items-center gap-1 w-max bg-indigo-50 text-indigo-700 border border-indigo-100">
-                            <FiCheckCircle /> Scheduled
+                        <span className="inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs bg-indigo-50 text-indigo-700 border-indigo-200">
+                            Scheduled
                         </span>
                     ) : endDate ? (
-                        <span className={`text-xs font-bold px-2 py-1 rounded flex items-center gap-1 w-max ${isExpired ? 'bg-rose-50 text-rose-600' : isRenewingSoon ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                            {isExpired ? <FiXCircle /> : isRenewingSoon ? <FiAlertCircle /> : <FiCheckCircle />}
+                        <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
+                            isExpired 
+                                ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                                : isRenewingSoon 
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
                             {isExpired ? 'Expired' : isRenewingSoon ? 'Expiring Soon' : 'Active'}
                         </span>
                     ) : '-'}
                 </td>
-                <td className="py-3 px-4 text-sm">
-                    {paymentStat === 'Paid' ? (
-                        <span className="text-emerald-600 font-bold flex items-center gap-1">
-                            <FiCheckCircle className="text-xs" /> Paid
-                        </span>
-                    ) : paymentStat === 'Partial' ? (
-                        <span className="text-amber-600 font-bold flex flex-col">
-                            <span>Partial</span>
-                            <span className="text-[10px] font-normal text-slate-500">₹{currentMem?.paidAmount || 0} paid</span>
-                        </span>
-                    ) : (
-                        <span className="text-rose-600 font-bold flex flex-col">
-                            <span>Pending</span>
-                            <span className="text-[10px] font-normal text-slate-500">Unpaid</span>
-                        </span>
-                    )}
+                <td className="py-2.5 px-2 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
+                        paymentStat === 'Paid' 
+                            ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
+                            : paymentStat === 'Partial' 
+                                ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}>
+                        {paymentStat || 'Pending'}
+                    </span>
                 </td>
-                <td className="py-3 px-4">
-                    <div className="flex flex-wrap items-center justify-center gap-2">
+                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5">
                         {(m.paymentStatus === 'Pending' || m.paymentStatus === 'Partial') && m.membershipPlan && activeTab !== 'Assign' && (
-                            <button onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: m } })} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Collect Fee">
-                                <FiCreditCard className="text-sm" />
+                            <button 
+                                onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: m } })} 
+                                className="w-8 h-8 rounded-lg border border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="Collect Fee"
+                            >
+                                <FiCreditCard size={14} />
                             </button>
                         )}
                         {activeTab === 'Active' && m.activeMembership && (
-                            <button onClick={() => setBonusModal({ open: true, membership: m.activeMembership, days: '', reason: '' })} className="w-8 h-8 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Add Bonus Days / Offer">
-                                <FiGift className="text-sm" />
+                            <button 
+                                onClick={() => setBonusModal({ open: true, membership: m.activeMembership, days: '', reason: '' })} 
+                                className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-white hover:border-indigo-400 hover:bg-indigo-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="Add Bonus Days / Offer"
+                            >
+                                <FiGift size={14} />
                             </button>
                         )}
                         {(activeTab === 'Expired' || activeTab === 'Renewals') && (
-                            <button onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, isRenew: true } })} className="w-8 h-8 rounded bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Renew Plan">
-                                <FiRefreshCw className="text-sm" />
+                            <button 
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, isRenew: true } })} 
+                                className="w-8 h-8 rounded-lg border border-blue-200 text-blue-600 bg-white hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="Renew Plan"
+                            >
+                                <FiRefreshCw size={14} />
                             </button>
                         )}
-                        <button onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m } })} className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title={activeTab === 'Assign' ? 'Assign Plan' : 'Update Membership'}>
-                            {activeTab === 'Assign' ? <FiPlus className="text-sm" /> : <FiEdit2 className="text-sm" />}
+                        <button 
+                            onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })} 
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title="View Profile"
+                        >
+                            <FiEye size={15} />
                         </button>
                     </div>
                 </td>
             </tr>
         );
     };
+
+    const totalPlansCount = memberships.length;
+    const activeMembershipsCount = members.filter(m => m.activeMembership).length;
+    const scheduledMembershipsCount = members.filter(m => m.scheduledMembership).length;
+    const expiredCount = members.filter(m => {
+        if (!m.planEndDate) return false;
+        const d = new Date(m.paidUntilDate || m.planEndDate);
+        return d < new Date();
+    }).length;
+    const expiringSoonCount = members.filter(m => {
+        if (!m.planEndDate) return false;
+        const d = new Date(m.paidUntilDate || m.planEndDate);
+        const now = new Date();
+        const in30 = new Date();
+        in30.setDate(now.getDate() + 30);
+        return d >= now && d <= in30;
+    }).length;
+    const totalMembersCount = members.length;
+
+    const summaryCardsData = [
+        {
+            title: 'Membership Plans',
+            value: totalPlansCount,
+            percentage: 'Active',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'Packages offered',
+            icon: <FiCreditCard />,
+            bgClass: 'bg-[#FFECEC]',
+            iconColor: 'text-[#E53935]'
+        },
+        {
+            title: 'Active Memberships',
+            value: activeMembershipsCount,
+            percentage: `${totalMembersCount > 0 ? Math.round((activeMembershipsCount / totalMembersCount) * 100) : 0}%`,
+            percentageColor: 'text-emerald-600',
+            subtitle: 'Current running plans',
+            icon: <FiCheckCircle />,
+            bgClass: 'bg-[#E8F5E9]',
+            iconColor: 'text-[#2E7D32]'
+        },
+        {
+            title: 'Expiring Soon',
+            value: expiringSoonCount,
+            percentage: '30 Days',
+            percentageColor: 'text-amber-600',
+            subtitle: 'Renewal follow-up',
+            icon: <FiAlertCircle />,
+            bgClass: 'bg-[#FFF3E0]',
+            iconColor: 'text-[#EA580C]'
+        },
+        {
+            title: 'Expired Plans',
+            value: expiredCount,
+            percentage: 'Overdue',
+            percentageColor: 'text-rose-600',
+            subtitle: 'Action required',
+            icon: <FiXCircle />,
+            bgClass: 'bg-[#FFEBEE]',
+            iconColor: 'text-[#E53935]'
+        }
+    ];
 
     const tabs = ['Plans', 'Assign', 'Active', 'Scheduled', 'Expired', 'Renewals'];
 
@@ -324,6 +478,10 @@ function Memberships() {
                 addLabel={activeTab === 'Plans' ? "Add Plan" : ""} 
             />
             
+            <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
+                <SummaryCards cards={summaryCardsData} />
+            </div>
+
             <Tabs 
                 tabs={tabs} 
                 activeTab={activeTab} 
@@ -331,19 +489,26 @@ function Memberships() {
                     setActiveTab(tab); 
                     setSearchTerm(''); 
                     setFilterPaymentStatus('All');
+                    setCurrentPage(1);
                 }} 
             />
 
             <FilterBar 
                 searchTerm={searchTerm} 
-                onSearchChange={setSearchTerm} 
+                onSearchChange={(val) => {
+                    setSearchTerm(val);
+                    setCurrentPage(1);
+                }} 
                 searchPlaceholder={activeTab === 'Plans' ? "Search plans..." : "Search members..."}
             >
                 {activeTab !== 'Plans' && (
                     <select 
                         value={filterPaymentStatus} 
-                        onChange={(e) => setFilterPaymentStatus(e.target.value)}
-                        className="w-full sm:w-auto h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm"
+                        onChange={(e) => {
+                            setFilterPaymentStatus(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="h-9 px-3 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 text-slate-600 shadow-2xs w-full sm:w-auto"
                     >
                         <option value="All">All Payment Statuses</option>
                         <option value="Paid">Paid</option>
@@ -353,37 +518,51 @@ function Memberships() {
                 )}
             </FilterBar>
 
-            <div className="flex-1 min-h-0 p-4 lg:p-6 w-full">
+            <div className="px-6 md:px-8 pb-6 pt-1 bg-[#FAEEEF] w-full flex flex-col gap-4 min-h-0 flex-1">
                 {activeTab === 'Plans' ? (
                     <DataTable 
-                        className="h-full"
                         columns={planColumns} 
-                        data={filteredMemberships} 
+                        data={paginatedPlans} 
                         loading={loading} 
                         emptyMessage="No membership plans found." 
                         renderRow={renderPlanRow} 
+                        pagination={{
+                            currentPage: currentPage,
+                            totalItems: totalPlans,
+                            pageSize: pageSize,
+                            onPageChange: (p) => setCurrentPage(p),
+                            onPageSizeChange: (s) => setPageSize(s),
+                            itemLabel: "plans"
+                        }}
                     />
                 ) : (
                     <DataTable 
-                        className="h-full"
                         columns={memberColumns} 
-                        data={filteredMembers} 
+                        data={paginatedMembers} 
                         loading={loading} 
                         emptyMessage={`No ${activeTab.toLowerCase()} members found.`} 
                         renderRow={renderMemberRow} 
+                        pagination={{
+                            currentPage: currentPage,
+                            totalItems: totalMembersInTab,
+                            pageSize: pageSize,
+                            onPageChange: (p) => setCurrentPage(p),
+                            onPageSizeChange: (s) => setPageSize(s),
+                            itemLabel: "members"
+                        }}
                     />
                 )}
             </div>
 
             {/* Bonus Days Modal */}
             {bonusModal.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
-                        <div className="bg-indigo-600 p-4 text-white flex items-center gap-3">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-rose-100">
+                        <div className="bg-[#CA0410] p-4 text-white flex items-center gap-3">
                             <FiGift className="text-2xl" />
                             <div>
                                 <h3 className="font-bold text-lg">Add Bonus Days</h3>
-                                <p className="text-xs text-indigo-200">Reward member with extra validity</p>
+                                <p className="text-xs text-rose-100">Reward member with extra validity</p>
                             </div>
                         </div>
                         <form onSubmit={handleAddBonus} className="p-5 space-y-4">
@@ -392,7 +571,7 @@ function Memberships() {
                                 <input 
                                     type="number" 
                                     required 
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-sm font-bold"
                                     value={bonusModal.days}
                                     onChange={e => setBonusModal({ ...bonusModal, days: e.target.value })}
                                     placeholder="e.g. 5 (or -5 to remove)"
@@ -402,7 +581,7 @@ function Memberships() {
                                 <label className="block text-xs font-bold text-slate-700 mb-1">Select Offer / Reason <span className="text-rose-500">*</span></label>
                                 {gymSettings?.couponOffers?.filter(c => c.isActive && c.bonusDays > 0).length > 0 && (
                                     <select
-                                        className="w-full px-3 py-2 mb-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none text-sm bg-slate-50 font-semibold"
+                                        className="w-full px-3 py-2 mb-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-sm bg-slate-50 font-semibold cursor-pointer"
                                         onChange={(e) => {
                                             const selected = gymSettings.couponOffers.find(c => c.code === e.target.value);
                                             if (selected) {
@@ -424,17 +603,17 @@ function Memberships() {
                                 <input 
                                     type="text" 
                                     required 
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-sm font-medium"
                                     value={bonusModal.reason}
                                     onChange={e => setBonusModal({ ...bonusModal, reason: e.target.value })}
                                     placeholder="e.g. 100% Attendance Reward"
                                 />
                             </div>
                             <div className="flex justify-end gap-3 pt-2">
-                                <button type="button" onClick={() => setBonusModal({ open: false, membership: null, days: '', reason: '' })} className="px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+                                <button type="button" onClick={() => setBonusModal({ open: false, membership: null, days: '', reason: '' })} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
                                     Cancel
                                 </button>
-                                <button type="submit" className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors">
+                                <button type="submit" className="px-4 py-2 text-xs font-bold text-white bg-[#CA0410] hover:bg-[#a8030d] rounded-xl transition-colors cursor-pointer shadow-2xs">
                                     Add Days
                                 </button>
                             </div>

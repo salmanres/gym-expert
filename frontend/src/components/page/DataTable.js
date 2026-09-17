@@ -1,5 +1,6 @@
 import React from 'react';
 import Loader from './Loader';
+import Pagination from './Pagination';
 
 export default function DataTable({
     columns,
@@ -8,59 +9,52 @@ export default function DataTable({
     emptyMessage,
     renderRow,
     darkHeader = false,
-    className = ''
+    redHeader = true,
+    headerBgClass = '',
+    className = '',
+    pagination = null
 }) {
     if (loading) {
-        return <Loader text="Loading data..." />;
+        return (
+            <div className={`w-full overflow-hidden rounded-2xl bg-white border border-rose-200/50 shadow-2xs p-12 flex flex-col items-center justify-center ${className}`}>
+                <div className="w-10 h-10 border-4 border-rose-200 border-t-[#CA0410] rounded-full animate-spin"></div>
+                <p className="text-slate-500 font-bold text-xs mt-3">Loading data...</p>
+            </div>
+        );
     }
 
-    return (
-        <div
-            className={`
-                bg-[#FEFFFE]
-                rounded-xl
-                border border-slate-200
-                shadow-sm
-                overflow-hidden
-                w-full
-                flex flex-col
-                font-['Roboto',sans-serif]
-                ${className}
-            `}
-        >
-            <div className="w-full overflow-x-auto custom-scrollbar flex-1 min-h-0">
-                <table className="w-full table-fixed border-collapse text-left">
+    const getHeaderBg = () => {
+        if (darkHeader) return 'bg-[#162544] text-white';
+        if (headerBgClass) return headerBgClass;
+        return 'bg-[#CA0410] text-white';
+    };
 
-                    {/* HEADER */}
-                    <thead
-                        className={`
-                            sticky top-0 z-10
-                            ${
-                                darkHeader
-                                    ? 'bg-[#162544] text-white'
-                                    : 'bg-[#FEFFFE] text-[#737373]'
-                            }
-                        `}
-                    >
-                        <tr className="border-b border-slate-200">
+    return (
+        <div className={`w-full overflow-hidden rounded-xl bg-white border border-slate-200/90 shadow-2xs font-['Roboto',sans-serif] ${className}`}>
+            <div className="w-full overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left table-fixed min-w-[1000px] border-collapse">
+                    {/* TABLE HEADER */}
+                    <thead>
+                        <tr className={`h-8 ${getHeaderBg()}`}>
                             {columns.map((col, index) => (
                                 <th
                                     key={index}
                                     className={`
-                                        h-9
-                                        px-4
-                                        py-2
-                                        text-sm
+                                        h-8
+                                        py-1
+                                        px-3
+                                        font-['Roboto',sans-serif]
+                                        text-[10.5px]
                                         font-bold
-                                        normal-case
-                                        tracking-normal
+                                        tracking-wider
+                                        uppercase
                                         whitespace-nowrap
+                                        overflow-hidden
+                                        text-ellipsis
                                         align-middle
-                                        ${
-                                            darkHeader
-                                                ? 'text-white'
-                                                : 'text-[#737373]'
-                                        }
+                                        first:rounded-tl-xl
+                                        last:rounded-tr-xl
+                                        ${darkHeader ? 'text-white !bg-[#162544]' : (headerBgClass ? '' : 'text-white !bg-[#CA0410]')}
                                         ${col.className || ''}
                                     `}
                                 >
@@ -71,12 +65,12 @@ export default function DataTable({
                     </thead>
 
                     {/* BODY */}
-                    <tbody className="divide-y divide-slate-100 bg-[#FEFFFE]">
+                    <tbody className="divide-y divide-slate-100 bg-white">
                         {!data || data.length === 0 ? (
-                            <tr>
+                            <tr className="h-36">
                                 <td
                                     colSpan={columns.length}
-                                    className="h-[160px] text-center"
+                                    className="h-36 text-center bg-white align-middle"
                                 >
                                     <p className="text-slate-400 font-medium text-xs">
                                         {emptyMessage || 'No data found.'}
@@ -84,11 +78,22 @@ export default function DataTable({
                                 </td>
                             </tr>
                         ) : (
-                            data.map((row, index) => renderRow(row, index))
+                            data.map((row, index) => renderRow(row, index, index === data.length - 1))
                         )}
                     </tbody>
                 </table>
             </div>
+
+            {/* INTEGRATED PAGINATION */}
+            {pagination && (
+                <div className="border-t border-slate-100 bg-white px-4 py-1">
+                    {React.isValidElement(pagination) ? (
+                        pagination
+                    ) : (
+                        <Pagination {...pagination} />
+                    )}
+                </div>
+            )}
         </div>
     );
 }

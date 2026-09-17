@@ -140,11 +140,11 @@ export default function StaffForm() {
                 showBack={true}
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 pt-0 pb-6 bg-[#FAEEEF]">
+                <div className="max-w-7xl mx-auto space-y-6">
                     
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
-                        <div className="w-24 h-24 shrink-0 rounded-full bg-slate-100 flex items-center justify-center border-2 border-dashed border-slate-300 text-slate-400 overflow-hidden relative group">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 p-6 bg-white rounded-2xl border border-rose-200/70 shadow-2xs">
+                        <div className="w-24 h-24 shrink-0 rounded-full bg-rose-50/60 flex items-center justify-center border-2 border-dashed border-rose-200 text-rose-300 overflow-hidden relative group">
                             {formData.profilePhoto ? (
                                 <>
                                     <img src={formData.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
@@ -153,7 +153,7 @@ export default function StaffForm() {
                                     </div>
                                 </>
                             ) : (
-                                <FiUser size={32} />
+                                <FiUser size={32} className="text-rose-400" />
                             )}
                         </div>
                         <div>
@@ -167,10 +167,10 @@ export default function StaffForm() {
                                     ref={fileInputRef} 
                                     onChange={handleFileUpload} 
                                 />
-                                <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors border border-slate-200 shadow-sm">
+                                <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl text-xs font-bold transition-colors border border-slate-200 shadow-2xs cursor-pointer">
                                     <FiUpload /> Upload Image
                                 </button>
-                                <button type="button" onClick={() => setIsCapturing(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition-colors border border-emerald-100 shadow-sm">
+                                <button type="button" onClick={() => setIsCapturing(true)} className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-[#CA0410] hover:bg-[#CA0410] hover:text-white rounded-xl text-xs font-bold transition-colors border border-rose-200 shadow-2xs cursor-pointer">
                                     <FiCamera /> Take Photo
                                 </button>
                             </div>
@@ -179,12 +179,12 @@ export default function StaffForm() {
 
                     {isCapturing && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-                            <div className="bg-white p-4 rounded-xl shadow-xl w-full max-w-md relative flex flex-col items-center">
-                                <button type="button" onClick={() => setIsCapturing(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 z-10 bg-white rounded-full p-1 shadow-sm">
-                                    <FiX size={20} />
+                            <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md relative flex flex-col items-center border border-rose-100">
+                                <button type="button" onClick={() => setIsCapturing(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 z-10 bg-slate-100 hover:bg-slate-200 rounded-full p-1.5 transition-colors cursor-pointer">
+                                    <FiX size={18} />
                                 </button>
                                 <h3 className="text-sm font-bold text-slate-800 mb-4 self-start">Capture Photo</h3>
-                                <div className="w-full rounded-lg overflow-hidden border-2 border-slate-200 bg-black aspect-square flex items-center justify-center">
+                                <div className="w-full rounded-xl overflow-hidden border border-slate-200 bg-black aspect-square flex items-center justify-center">
                                     <Webcam
                                         audio={false}
                                         ref={webcamRef}
@@ -193,14 +193,14 @@ export default function StaffForm() {
                                         className="w-full h-full object-cover"
                                     />
                                 </div>
-                                <Button type="button" onClick={capturePhoto} className="mt-4 w-full flex justify-center items-center gap-2">
+                                <Button type="button" onClick={capturePhoto} className="mt-4 w-full flex justify-center items-center gap-2 bg-[#CA0410] hover:bg-[#a8030d] text-white">
                                     <FiCamera /> Capture Image
                                 </Button>
                             </div>
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="flex flex-col" noValidate>
+                    <form onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
                         <FormSection title="Personal Information" icon={<FiUser />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             <Input label="Full Name" name="name" value={formData.name || ''} onChange={handleChange} required placeholder="Name" error={errors.name} />
                             <Select label="Gender" name="gender" value={formData.gender || ''} onChange={handleChange} options={['Male', 'Female', 'Other']} />
@@ -242,11 +242,11 @@ export default function StaffForm() {
                             />
                         </FormSection>
 
-                        <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-4 pt-6 border-t border-slate-200">
+                        <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 pt-2">
                             <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/staff')} className="w-full sm:w-auto">
                                 Cancel
                             </Button>
-                            <Button type="submit" loading={submitting} className="w-full sm:w-auto px-8">
+                            <Button type="submit" loading={submitting} className="w-full sm:w-auto px-8 bg-[#CA0410] hover:bg-[#a8030d] text-white">
                                 {isEdit ? 'Update Staff' : 'Add Staff'}
                             </Button>
                         </div>

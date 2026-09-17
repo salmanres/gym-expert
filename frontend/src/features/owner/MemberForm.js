@@ -11,6 +11,7 @@ import Loader from '../../components/page/Loader';
 import { FiUser, FiMapPin, FiActivity, FiMessageSquare, FiCamera, FiUpload, FiX, FiTrash2, FiGift, FiAward, FiCheckCircle, FiCalendar, FiCreditCard, FiTag } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from '../../utils/toast';
+import { formatDate } from '../../utils/dateUtils';
 import Webcam from 'react-webcam';
 
 export default function MemberForm() {
@@ -297,37 +298,42 @@ export default function MemberForm() {
                 showBack={true}
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 pt-0 pb-6 bg-[#FAEEEF]">
+                <div className="w-full max-w-7xl mx-auto">
                     {/* Read-Only Active Membership Info for Context */}
                     {isEdit && location.state?.member?.activeMembership && (
-                        <div className="mb-6 p-4 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-wrap items-center justify-between gap-4">
+                        <div className="mb-6 p-5 bg-white rounded-2xl border border-rose-200/70 shadow-2xs flex flex-wrap items-center justify-between gap-4">
                             <div>
-                                <h3 className="text-sm font-black text-indigo-800 uppercase tracking-wider mb-1">Active Membership</h3>
-                                <p className="text-lg font-bold text-slate-800">{location.state.member.activeMembership.membershipPlanId?.name || 'Unknown Plan'}</p>
-                                <p className="text-xs font-medium text-slate-600 mt-0.5">
-                                    Valid till: <span className="font-bold text-indigo-700">{new Date(location.state.member.activeMembership.endDate).toLocaleDateString()}</span>
+                                <h3 className="text-xs font-bold text-[#CA0410] uppercase tracking-wider mb-1">Active Membership</h3>
+                                <p className="text-base font-bold text-slate-800">{location.state.member.activeMembership.membershipPlanId?.name || 'Unknown Plan'}</p>
+                                <p className="text-xs font-medium text-slate-500 mt-0.5">
+                                    Valid till: <span className="font-bold text-slate-800">{formatDate(location.state.member.activeMembership.endDate)}</span>
                                 </p>
                             </div>
                             <div className="text-right">
-                                <h3 className="text-sm font-black text-indigo-800 uppercase tracking-wider mb-1">Payment Status</h3>
-                                <span className={`inline-flex px-3 py-1 rounded text-xs font-bold uppercase tracking-wide border ${location.state.member.activeMembership.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200'}`}>
+                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Payment Status</h3>
+                                <span className={`inline-flex px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wide border shadow-2xs ${location.state.member.activeMembership.paymentStatus === 'Paid' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
                                     {location.state.member.activeMembership.paymentStatus}
                                 </span>
                                 {location.state.member.activeMembership.remainingBalance > 0 && (
-                                    <p className="text-xs font-bold text-rose-600 mt-1.5">Due: ₹{location.state.member.activeMembership.remainingBalance}</p>
+                                    <p className="text-xs font-bold text-[#CA0410] mt-1.5">Due: ₹{location.state.member.activeMembership.remainingBalance}</p>
                                 )}
                             </div>
                             <div className="w-full sm:w-auto">
-                                <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member: location.state.member } })} className="w-full sm:w-auto !bg-white border-indigo-200 text-indigo-700 hover:!bg-indigo-600 hover:text-white">
+                                <button 
+                                    type="button" 
+                                    onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member: location.state.member } })} 
+                                    className="w-full sm:w-auto px-4 py-2 bg-rose-50 hover:bg-rose-100 text-[#CA0410] border border-rose-200 font-bold text-xs rounded-xl transition-all shadow-2xs active:scale-95 cursor-pointer"
+                                >
                                     Manage Plan & Payment
-                                </Button>
+                                </button>
                             </div>
                         </div>
                     )}
 
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6 p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
-                        <div className="w-24 h-24 shrink-0 rounded-full bg-slate-100 flex items-center justify-center border-2 border-dashed border-slate-300 text-slate-400 overflow-hidden relative group">
+                    {/* Profile Photo Card */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 mb-6 p-6 bg-white rounded-2xl border border-rose-200/70 shadow-2xs">
+                        <div className="w-24 h-24 shrink-0 rounded-2xl bg-rose-50/50 flex items-center justify-center border-2 border-dashed border-rose-200 text-slate-400 overflow-hidden relative group">
                             {formData.profilePhoto ? (
                                 <>
                                     <img src={formData.profilePhoto} alt="Profile" className="w-full h-full object-cover" />
@@ -336,12 +342,12 @@ export default function MemberForm() {
                                     </div>
                                 </>
                             ) : (
-                                <FiUser size={32} />
+                                <FiUser className="text-[#CA0410]" size={32} />
                             )}
                         </div>
                         <div>
-                            <h3 className="text-sm font-bold text-slate-800">Profile Photo</h3>
-                            <p className="text-xs text-slate-500 mt-1 mb-3">Upload a clear photo or take one using your camera.</p>
+                            <h3 className="text-[14px] font-bold text-slate-900 leading-none">Profile Photo</h3>
+                            <p className="text-[11.5px] text-slate-500 font-normal mt-1 mb-3">Upload a clear member photo or capture one using your webcam.</p>
                             <div className="flex flex-wrap items-center gap-2">
                                 <input 
                                     type="file" 
@@ -350,10 +356,18 @@ export default function MemberForm() {
                                     ref={fileInputRef} 
                                     onChange={handleFileUpload} 
                                 />
-                                <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-lg text-xs font-bold transition-colors border border-slate-200 shadow-sm">
+                                <button 
+                                    type="button" 
+                                    onClick={() => fileInputRef.current?.click()} 
+                                    className="flex items-center gap-2 px-3.5 py-1.5 bg-white text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all border border-slate-200 shadow-2xs cursor-pointer active:scale-95"
+                                >
                                     <FiUpload /> Upload Image
                                 </button>
-                                <button type="button" onClick={() => setIsCapturing(true)} className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-lg text-xs font-bold transition-colors border border-emerald-100 shadow-sm">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsCapturing(true)} 
+                                    className="flex items-center gap-2 px-3.5 py-1.5 bg-rose-50 text-[#CA0410] hover:bg-rose-100 rounded-xl text-xs font-bold transition-all border border-rose-200 shadow-2xs cursor-pointer active:scale-95"
+                                >
                                     <FiCamera /> Take Photo
                                 </button>
                             </div>
@@ -361,13 +375,13 @@ export default function MemberForm() {
                     </div>
 
                     {isCapturing && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-                            <div className="bg-white p-4 rounded-xl shadow-xl w-full max-w-md relative flex flex-col items-center">
-                                <button type="button" onClick={() => setIsCapturing(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 z-10 bg-white rounded-full p-1 shadow-sm">
-                                    <FiX size={20} />
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+                            <div className="bg-white p-5 rounded-2xl shadow-xl w-full max-w-md relative flex flex-col items-center border border-rose-200">
+                                <button type="button" onClick={() => setIsCapturing(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 z-10 bg-slate-100 rounded-full p-1 shadow-sm cursor-pointer">
+                                    <FiX size={18} />
                                 </button>
                                 <h3 className="text-sm font-bold text-slate-800 mb-4 self-start">Capture Photo</h3>
-                                <div className="w-full rounded-lg overflow-hidden border-2 border-slate-200 bg-black aspect-square flex items-center justify-center">
+                                <div className="w-full rounded-xl overflow-hidden border-2 border-rose-200 bg-black aspect-square flex items-center justify-center">
                                     <Webcam
                                         audio={false}
                                         ref={webcamRef}
@@ -376,9 +390,13 @@ export default function MemberForm() {
                                         className="w-full h-full object-cover"
                                     />
                                 </div>
-                                <Button type="button" onClick={capturePhoto} className="mt-4 w-full flex justify-center items-center gap-2">
+                                <button 
+                                    type="button" 
+                                    onClick={capturePhoto} 
+                                    className="mt-4 w-full py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl shadow-2xs flex justify-center items-center gap-2 transition-all cursor-pointer active:scale-95"
+                                >
                                     <FiCamera /> Capture Image
-                                </Button>
+                                </button>
                             </div>
                         </div>
                     )}
@@ -397,7 +415,7 @@ export default function MemberForm() {
                         </FormSection>
 
                         {/* Dedicated Referral Section */}
-                        <FormSection title="Referral Source" icon={<FiGift className="text-emerald-600" />} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormSection title="Referral Source" icon={<FiGift />} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="flex flex-col justify-end">
                                 <Select
                                     label="Referred By Existing Member (Optional)"
@@ -462,15 +480,21 @@ export default function MemberForm() {
                             <Textarea containerClassName="sm:col-span-2 lg:col-span-3 xl:col-span-4" label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
                         </FormSection>
 
-
-
-                        <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-4 pt-6 border-t border-slate-200">
-                            <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/members')} className="w-full sm:w-auto">
+                        <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-4 pt-4 border-t border-rose-200/60">
+                            <button 
+                                type="button" 
+                                onClick={() => navigate('/dashboard/owner/members')} 
+                                className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer active:scale-95"
+                            >
                                 Cancel
-                            </Button>
-                            <Button type="submit" loading={submitting} className="w-full sm:w-auto px-8">
-                                {isEdit ? 'Update Member' : 'Register Member'}
-                            </Button>
+                            </button>
+                            <button 
+                                type="submit" 
+                                disabled={submitting}
+                                className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-50"
+                            >
+                                {submitting ? 'Saving Member...' : (isEdit ? 'Update Member' : 'Register Member')}
+                            </button>
                         </div>
                     </form>
                 </div>

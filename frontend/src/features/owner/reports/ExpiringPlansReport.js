@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import SummaryCards from '../../../components/page/SummaryCards';
 import LineChart from '../../../components/page/LineChart';
 import DataTable from '../../../components/page/DataTable';
 import EmptyState from '../../../components/page/EmptyState';
-import { FiAlertCircle, FiCalendar, FiDollarSign, FiCheckCircle, FiMessageSquare, FiLayers } from 'react-icons/fi';
+import { FiAlertCircle, FiCalendar, FiDollarSign, FiCheckCircle, FiMessageSquare, FiLayers, FiPhone, FiCreditCard } from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
+import { formatDate } from '../../../utils/dateUtils';
 
 export default function ExpiringPlansReport({ 
     expiringPlans = [], 
@@ -15,6 +17,10 @@ export default function ExpiringPlansReport({
     sevenDaysLater.setDate(today.getDate() + 7);
     const thirtyDaysLater = new Date();
     thirtyDaysLater.setDate(today.getDate() + 30);
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     const expiring30 = allActivePlans.filter(p => p.endDate && new Date(p.endDate) >= today && new Date(p.endDate) <= thirtyDaysLater);
     const expiring7 = allActivePlans.filter(p => p.endDate && new Date(p.endDate) >= today && new Date(p.endDate) <= sevenDaysLater);
@@ -27,10 +33,46 @@ export default function ExpiringPlansReport({
     const totalExpiringVal = expiringPlans.reduce((sum, p) => sum + (Number(p.finalPrice || p.originalPrice || p.totalAmount) || 0), 0);
 
     const cards = [
-        { title: 'Critical Expiring (Next 7 Days)', value: `${expiring7.length} Plans`, icon: <FiAlertCircle />, textColor: 'text-rose-600', valueColor: 'text-rose-600', bgClass: 'bg-rose-50', iconColor: 'text-rose-600' },
-        { title: 'Expiring Soon (Next 30 Days)', value: `${expiring30.length} Plans`, icon: <FiCalendar />, textColor: 'text-amber-600', valueColor: 'text-amber-600', bgClass: 'bg-amber-50', iconColor: 'text-amber-600' },
-        { title: 'Estimated Renewal Value', value: `₹${totalExpiringVal.toLocaleString()}`, icon: <FiDollarSign />, textColor: 'text-indigo-600', valueColor: 'text-indigo-600', bgClass: 'bg-indigo-50', iconColor: 'text-indigo-600' },
-        { title: 'Renewed This Month', value: `${renewedThisMonth.length} Plans`, icon: <FiCheckCircle />, textColor: 'text-emerald-600', valueColor: 'text-emerald-600', bgClass: 'bg-emerald-50', iconColor: 'text-emerald-600' }
+        { 
+            title: 'Critical (7 Days)', 
+            value: `${expiring7.length} Plans`, 
+            percentage: 'Critical',
+            percentageColor: 'text-rose-600',
+            icon: <FiAlertCircle />, 
+            subtitle: 'Immediate renewal', 
+            bgClass: 'bg-[#FFECEC]', 
+            iconColor: 'text-[#E53935]' 
+        },
+        { 
+            title: 'Expiring (30 Days)', 
+            value: `${expiring30.length} Plans`, 
+            percentage: 'Upcoming',
+            percentageColor: 'text-amber-600',
+            icon: <FiCalendar />, 
+            subtitle: 'In next 30 days', 
+            bgClass: 'bg-[#FFF3E0]', 
+            iconColor: 'text-[#EA580C]' 
+        },
+        { 
+            title: 'Renewal Pipeline', 
+            value: `₹${Math.round(totalExpiringVal).toLocaleString()}`, 
+            percentage: 'Revenue',
+            percentageColor: 'text-emerald-600',
+            icon: <FiDollarSign />, 
+            subtitle: 'Estimated value', 
+            bgClass: 'bg-[#E8F5E9]', 
+            iconColor: 'text-[#2E7D32]' 
+        },
+        { 
+            title: 'Renewed This Month', 
+            value: `${renewedThisMonth.length} Plans`, 
+            percentage: 'Renewed',
+            percentageColor: 'text-purple-600',
+            icon: <FiCheckCircle />, 
+            subtitle: 'Current month', 
+            bgClass: 'bg-[#F3E8FF]', 
+            iconColor: 'text-[#7E22CE]' 
+        }
     ];
 
     // Build Expiring Plans 7-Day Expiration Forecast Line Chart Points
@@ -79,9 +121,9 @@ export default function ExpiringPlansReport({
             targetPlans.forEach((p, idx) => {
                 setTimeout(() => {
                     const planName = p.membershipPlanId?.name || p.planName || 'General Plan';
-                    const expDateStr = new Date(p.paidUntilDate || p.endDate).toLocaleDateString();
+                    const expDateStr = formatDate(p.paidUntilDate || p.endDate);
                     sendWhatsAppReminder(p.memberId, planName, expDateStr);
-                }, idx * 1200); // Stagger by 1.2s to prevent popup blocker
+                }, idx * 1200);
             });
         }
     };
@@ -102,21 +144,34 @@ export default function ExpiringPlansReport({
     const planBreakdownList = Object.values(planBreakdownMap)
         .sort((a, b) => b.totalValue - a.totalValue);
 
-    const columns = [
-        { label: 'Member ID' },
-        { label: 'Member Name' },
-        { label: 'Contact Number' },
-        { label: 'Membership Plan' },
-        { label: 'Start Date' },
-        { label: 'Expiry Date' },
-        { label: 'Days Left' },
-        { label: 'Renewal Amount' },
-        { label: 'Assigned Trainer' },
-        { label: 'Status' },
-        { label: 'Actions' }
+    const avatarStyles = [
+        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
+        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
+        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
+        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
+        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
+        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
     ];
 
-    const renderRow = (p) => {
+    const getAvatarStyle = (name, index) => {
+        const charCode = (name || '').charCodeAt(0) || 0;
+        return avatarStyles[(charCode + index) % avatarStyles.length];
+    };
+
+    const totalItems = expiringPlans.length;
+    const paginatedExpiringPlans = expiringPlans.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const columns = [
+        { label: 'MEMBER', className: 'w-[24%] pl-4 pr-3' },
+        { label: 'CONTACT', className: 'w-[14%] px-3' },
+        { label: 'MEMBERSHIP PLAN', className: 'w-[18%] px-3' },
+        { label: 'EXPIRY & DAYS LEFT', className: 'w-[18%] px-3' },
+        { label: 'RENEWAL AMOUNT', className: 'w-[12%] px-3' },
+        { label: 'STATUS', className: 'w-[8%] px-2 text-center' },
+        { label: 'ACTIONS', className: 'w-[6%] pr-4 pl-1 text-center' }
+    ];
+
+    const renderRow = (p, index) => {
         const relevantEndDateStr = p.paidUntilDate || p.endDate;
         const endDate = new Date(relevantEndDateStr);
         const daysLeft = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
@@ -124,73 +179,105 @@ export default function ExpiringPlansReport({
         const memberName = p.memberId?.firstName ? `${p.memberId.firstName} ${p.memberId.lastName || ''}`.trim() : 'Gym Member';
         const phone = p.memberId?.contactNumber || 'N/A';
         const planName = p.membershipPlanId?.name || p.planName || 'General Plan';
-        const startDateStr = p.startDate ? new Date(p.startDate).toLocaleDateString() : 'N/A';
-        const expiryDateStr = relevantEndDateStr ? new Date(relevantEndDateStr).toLocaleDateString() : 'N/A';
+        const expiryDateStr = formatDate(relevantEndDateStr, 'N/A');
         const renewalAmount = p.finalPrice || p.originalPrice || 0;
-        const trainerName = p.assignedTrainer?.name || p.assignedBy?.name || 'General Trainer';
+        const trainerName = p.assignedTrainer?.name || p.assignedBy?.name || null;
         const statusLabel = daysLeft <= 0 ? 'Expired' : daysLeft <= 7 ? 'Critical' : 'Active';
 
         return (
-            <tr key={p._id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4 text-xs font-mono font-bold text-slate-700">
-                    {memberCustomId}
+            <tr key={p._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
+                {/* MEMBER */}
+                <td className="py-2.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            {(memberName || 'M').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="font-bold text-slate-900 text-[13.5px] leading-tight truncate">
+                                {memberName}
+                            </span>
+                            <span className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                                ID: <span className="font-bold text-slate-700">{memberCustomId}</span> {trainerName ? `• Trainer: ${trainerName}` : ''}
+                            </span>
+                        </div>
+                    </div>
                 </td>
-                <td className="py-3 px-4 font-bold text-slate-800 text-sm">
-                    {memberName}
+
+                {/* CONTACT */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
+                        <FiPhone className="text-slate-400 text-xs shrink-0" />
+                        <span>{phone}</span>
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-xs font-semibold text-slate-600">
-                    {phone}
+
+                {/* PLAN */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-tight">
+                        <span className="font-bold text-slate-900 text-[12.5px]">{planName}</span>
+                        {p.startDate && (
+                            <span className="text-slate-500 font-normal text-[11px]">
+                                Started: {formatDate(p.startDate)}
+                            </span>
+                        )}
+                    </div>
                 </td>
-                <td className="py-3 px-4 font-medium text-slate-600 text-xs">
-                    {planName}
+
+                {/* EXPIRY & DAYS LEFT */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-tight">
+                        <div className="flex items-center gap-1 font-bold text-[#CA0410]">
+                            <FiCalendar className="text-xs shrink-0" />
+                            <span>{expiryDateStr}</span>
+                        </div>
+                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold w-max border ${
+                            daysLeft <= 0 ? 'bg-rose-100 text-rose-800 border-rose-300' :
+                            daysLeft <= 7 ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                            'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                            {daysLeft <= 0 ? 'Expired' : `${daysLeft} Days Left`}
+                        </span>
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-xs font-medium text-slate-500">
-                    {startDateStr}
+
+                {/* RENEWAL AMOUNT */}
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex items-center gap-1 font-bold text-emerald-600 text-[14px]">
+                        <span>₹</span>
+                        <span>{Number(renewalAmount).toLocaleString()}</span>
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-xs font-bold text-rose-600">
-                    {expiryDateStr}
-                </td>
-                <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold ${
-                        daysLeft <= 0 ? 'bg-rose-100 text-rose-800 border border-rose-300' :
-                        daysLeft <= 7 ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                        'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}>
-                        {daysLeft <= 0 ? 'Expired' : `${daysLeft} Days`}
-                    </span>
-                </td>
-                <td className="py-3 px-4 font-black text-emerald-600 text-sm">
-                    ₹{Number(renewalAmount).toLocaleString()}
-                </td>
-                <td className="py-3 px-4 text-xs font-medium text-slate-600">
-                    {trainerName}
-                </td>
-                <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-0.5 text-xs font-bold rounded uppercase ${
-                        statusLabel === 'Critical' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                        statusLabel === 'Expired' ? 'bg-slate-100 text-slate-700 border border-slate-300' :
-                        'bg-emerald-50 text-emerald-700 border border-emerald-200'
+
+                {/* STATUS */}
+                <td className="py-2.5 px-2 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
+                        statusLabel === 'Critical' ? 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]' :
+                        statusLabel === 'Expired' ? 'bg-slate-100 text-slate-700 border-slate-300' :
+                        'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
                     }`}>
                         {statusLabel}
                     </span>
                 </td>
-                <td className="py-3 px-4">
-                    <div className="flex items-center gap-1.5">
+
+                {/* ACTIONS */}
+                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5">
                         {/* WhatsApp Reminder Button */}
                         <button
                             onClick={() => sendWhatsAppReminder(p.memberId, planName, expiryDateStr)}
-                            className="p-1.5 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
+                            className="w-8 h-8 rounded-lg border border-emerald-200 text-[#22C55E] bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title="Send WhatsApp Renewal Reminder"
                         >
-                            <FiMessageSquare className="text-sm" />
+                            <FaWhatsapp size={15} />
                         </button>
 
                         <Link 
                             to="/dashboard/owner/finance/collect" 
                             state={{ autoOpenMember: p.memberId }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors whitespace-nowrap"
+                            className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-white hover:border-indigo-400 hover:bg-indigo-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="Renew / Collect Payment"
                         >
-                            Renew / Collect
+                            <FiCheckCircle size={15} />
                         </Link>
                     </div>
                 </td>
@@ -201,55 +288,49 @@ export default function ExpiringPlansReport({
     return (
         <div className="space-y-4 w-full m-0 p-0">
             {/* Quick Auto WhatsApp Trigger Bar */}
-            <div className="px-4 pt-2 flex items-center justify-between flex-wrap gap-2">
+            <div className="px-6 md:px-8 pt-2 flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Quick Reminders:</span>
                     <button 
                         onClick={() => sendBulkReminders(3)}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
                     >
                         <FiMessageSquare size={13} /> 🚨 Bulk 3-Day WhatsApp Alert
                     </button>
                     <button 
                         onClick={() => sendBulkReminders(7)}
-                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-black flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
                     >
                         <FiMessageSquare size={13} /> 📲 Bulk 7-Day WhatsApp Alert
                     </button>
                 </div>
             </div>
 
-            {/* 1. App Theme Summary Cards */}
-            <div className="px-4 pt-1">
-                <SummaryCards cards={cards} />
-            </div>
-
-            {/* 2. Half Half Grid (50% Expiration Forecast Chart / 50% Membership Plans Breakdown Table) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch px-4">
-                {/* Left 50%: 7-Day Forecast Line Chart */}
-                <div className="w-full">
+            {/* 1. Side-by-Side 7-Day Line Forecast & Plan Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch px-6 md:px-8">
+                {/* Left Side: 7-Day Expiry Forecast Line Chart */}
+                <div className="lg:col-span-2">
                     <LineChart 
-                        title="Plan Expirations Forecast (Next 7 Days)"
-                        subtitle="Daily plan expiration schedule to manage proactive member renewals."
+                        title="Expiring Plans (Next 7-Days Forecast)"
+                        subtitle="Expected membership expirations daily projection"
                         points={chartPoints}
                         color="#f59e0b"
                     />
                 </div>
 
-                {/* Right 50%: Membership Plan-Wise Breakdown Table */}
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between w-full">
+                {/* Right Side: Plan-Wise Grouping Breakdown Card */}
+                <div className="lg:col-span-1 bg-white p-5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between">
                     <div>
-                        <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                        <div className="flex items-center justify-between mb-3">
                             <div>
-                                <h4 className="font-extrabold text-slate-800 text-xs tracking-wider uppercase flex items-center gap-1.5">
-                                    <FiLayers className="text-amber-500 text-sm" />
+                                <h4 className="font-extrabold text-slate-800 text-xs tracking-wider uppercase">
                                     EXPIRING PLANS BY CATEGORY
                                 </h4>
                                 <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
                                     Membership plan-wise distribution of upcoming renewals
                                 </p>
                             </div>
-                            <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs font-bold rounded border border-amber-200">
+                            <span className="px-2 py-0.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-full border border-amber-200">
                                 {planBreakdownList.length} Categories
                             </span>
                         </div>
@@ -274,7 +355,7 @@ export default function ExpiringPlansReport({
                                                             <span>{planItem.name}</span>
                                                             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-1 max-w-[140px]">
                                                                 <div 
-                                                                    style={{ width: `${percent}%` }}
+                                                                    style={{ width: `${percent}%` }} 
                                                                     className="bg-amber-500 h-full rounded-full"
                                                                 ></div>
                                                             </div>
@@ -308,11 +389,22 @@ export default function ExpiringPlansReport({
                 </div>
             </div>
 
-
             {/* 4. Full Data Table */}
-            <div className="px-4 pb-4">
+            <div className="px-6 md:px-8 pb-6 pt-1">
                 {expiringPlans.length > 0 ? (
-                    <DataTable columns={columns} data={expiringPlans} renderRow={renderRow} />
+                    <DataTable 
+                        columns={columns} 
+                        data={paginatedExpiringPlans} 
+                        renderRow={renderRow} 
+                        pagination={{
+                            currentPage: currentPage,
+                            totalItems: totalItems,
+                            pageSize: pageSize,
+                            onPageChange: (p) => setCurrentPage(p),
+                            onPageSizeChange: (s) => setPageSize(s),
+                            itemLabel: "expiring plans"
+                        }}
+                    />
                 ) : (
                     <EmptyState 
                         icon={<FiCalendar size={48} />} 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { FiActivity, FiSearch } from 'react-icons/fi';
 import AppModal from '../form/AppModal';
+import { formatDate } from '../../utils/dateUtils';
 
 function ActivityLogModal({ 
     viewAllModalOpen, 
@@ -109,7 +110,7 @@ function ActivityLogModal({
                                             <span className="text-[10px] font-medium text-slate-400">· {timeAgo}</span>
                                         </div>
                                         <span className="text-[10px] font-bold text-slate-400 shrink-0">
-                                            {new Date(log.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                            {formatDate(log.createdAt)}
                                         </span>
                                     </div>
                                     <p className={`text-xs mt-0.5 leading-snug ${

@@ -10,6 +10,7 @@ import PageHeader from '../../components/page/PageHeader';
 import Loader from '../../components/page/Loader';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
+import { formatDate } from '../../utils/dateUtils';
 
 export default function MemberProfilePage() {
     const { id } = useParams();
@@ -210,10 +211,11 @@ export default function MemberProfilePage() {
                 onBack={() => navigate('/dashboard/owner/members')}
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 py-4 bg-[#FAEEEF]">
+                <div className="max-w-7xl mx-auto space-y-6">
                 
                 {/* HERO HEADER CARD */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden relative">
+                <div className="bg-white rounded-2xl border border-rose-200/70 shadow-2xs overflow-hidden relative">
                     <div className="h-32 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 relative">
                         <div className="absolute inset-0 bg-[radial-gradient(#opacity_0.15)] bg-[size:16px_16px] opacity-20"></div>
                     </div>
@@ -249,7 +251,7 @@ export default function MemberProfilePage() {
                                         ID: {customMemberId}
                                     </span>
                                     <span>•</span>
-                                    <span>Joined {joiningDate ? new Date(joiningDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</span>
+                                    <span>Joined {formatDate(joiningDate, 'N/A')}</span>
                                 </p>
                             </div>
                         </div>
@@ -280,7 +282,7 @@ export default function MemberProfilePage() {
                         <div className="p-4 px-6">
                             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Plan Expiry</p>
                             <p className={`text-base font-black mt-0.5 ${isPlanExpired ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                {planEnd ? planEnd.toLocaleDateString() : 'No Active Expiry'}
+                                {planEnd ? formatDate(planEnd) : 'No Active Expiry'}
                             </p>
                         </div>
                         <div className="p-4 px-6">
@@ -351,7 +353,7 @@ export default function MemberProfilePage() {
                                 <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-100">
                                     <p className="text-[10px] text-slate-400 font-bold uppercase">Date of Birth</p>
                                     <p className="text-xs font-black text-slate-800 mt-0.5">
-                                        {dob ? new Date(dob).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                                        {formatDate(dob, 'N/A')}
                                     </p>
                                 </div>
                             </div>
@@ -484,8 +486,8 @@ export default function MemberProfilePage() {
                                             const isExplicitPT = pTypeRaw.includes('personal training') || pTypeRaw.includes('pt') || pNameRaw.includes('personal training') || pNameRaw.includes('pt package');
                                             const isPT = Boolean(m.isPTConversion) || isExplicitPT;
                                             const pName = m.membershipPlanId?.name || m.planName || 'Active Package';
-                                            const mStart = m.startDate ? new Date(m.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-                                            const mEnd = m.endDate ? new Date(m.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+                                            const mStart = formatDate(m.startDate, 'N/A');
+                                            const mEnd = formatDate(m.endDate, 'N/A');
 
                                             return (
                                                 <div key={m._id || idx} className={`p-4 rounded-xl border transition-all ${isFrozen ? 'bg-cyan-50/60 border-cyan-200' : isPT ? 'bg-gradient-to-r from-slate-900 to-indigo-950 text-white border-indigo-900 shadow-md' : 'bg-slate-900 text-white border-slate-800 shadow-md'}`}>
@@ -610,11 +612,11 @@ export default function MemberProfilePage() {
                                                 <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Scheduled Package</span>
                                                 <h4 className="text-xl font-black text-white mt-0.5">{scheduledMembership.membershipPlanId?.name || scheduledMembership.planName}</h4>
                                                 <p className="text-xs text-indigo-200 mt-1 font-medium">
-                                                    Starts: <strong>{new Date(scheduledMembership.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</strong> to {new Date(scheduledMembership.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    Starts: <strong>{formatDate(scheduledMembership.startDate)}</strong> to {formatDate(scheduledMembership.endDate)}
                                                 </p>
                                                 {scheduledMembership.paymentStatus === 'Partial' && scheduledMembership.paidUntilDate && (
                                                     <span className="text-[10px] font-bold text-amber-300 bg-amber-950/70 border border-amber-500/40 px-2 py-0.5 rounded inline-block mt-1.5">
-                                                        Paid till {new Date(scheduledMembership.paidUntilDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} (₹{scheduledMembership.paidAmount || 0} / ₹{scheduledMembership.finalPrice || 0})
+                                                        Paid till {formatDate(scheduledMembership.paidUntilDate)} (₹{scheduledMembership.paidAmount || 0} / ₹{scheduledMembership.finalPrice || 0})
                                                     </span>
                                                 )}
                                             </div>
@@ -744,7 +746,7 @@ export default function MemberProfilePage() {
                                             {transactions.map(tx => (
                                                 <tr key={tx._id} className="hover:bg-slate-50 transition-colors">
                                                     <td className="px-4 py-3 font-bold text-slate-800">
-                                                        {new Date(tx.paymentDate || tx.createdAt).toLocaleDateString()}
+                                                        {formatDate(tx.paymentDate || tx.createdAt)}
                                                     </td>
                                                     <td className="px-4 py-3 text-indigo-600 font-bold">
                                                         {tx.planName || tx.planId?.name || 'Membership Plan'}
@@ -807,7 +809,7 @@ export default function MemberProfilePage() {
 
                     </div>
                 </div>
-
+                </div>
             </div>
 
             {/* COLLECT FEE MODAL */}
@@ -844,7 +846,7 @@ export default function MemberProfilePage() {
                                 <label className="block text-xs font-bold text-slate-700 mb-1">Amount to Pay (₹)</label>
                                 <input 
                                     type="number" 
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-emerald-500 outline-none text-sm font-bold text-emerald-900 bg-emerald-50/40"
+                                    className="w-full px-3 py-2 rounded-xl border border-rose-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-sm font-bold text-slate-900 bg-rose-50/30"
                                     value={collectModal.amount} 
                                     onChange={(e) => setCollectModal(prev => ({ ...prev, amount: e.target.value }))} 
                                     placeholder="Enter amount"
@@ -854,7 +856,7 @@ export default function MemberProfilePage() {
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 mb-1">Payment Method</label>
                                 <select 
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-emerald-500 outline-none text-sm font-medium bg-white"
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-sm font-medium bg-white cursor-pointer"
                                     value={collectModal.paymentMode} 
                                     onChange={(e) => setCollectModal(prev => ({ ...prev, paymentMode: e.target.value }))}
                                 >
@@ -866,8 +868,8 @@ export default function MemberProfilePage() {
                             </div>
 
                             {(member?.walletBalance || 0) > 0 && (
-                                <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 flex items-center justify-between">
-                                    <label className="flex items-center gap-2 text-xs font-bold text-indigo-900 cursor-pointer">
+                                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex items-center justify-between">
+                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer">
                                         <input 
                                             type="checkbox" 
                                             checked={collectModal.useWallet} 
@@ -876,15 +878,16 @@ export default function MemberProfilePage() {
                                                 useWallet: e.target.checked, 
                                                 walletUsed: e.target.checked ? Math.min(member.walletBalance, collectModal.membership.balanceAmount) : 0 
                                             }))} 
+                                            className="w-4 h-4 text-[#CA0410] rounded focus:ring-[#CA0410]"
                                         />
-                                        Use Wallet (Available: ₹{member.walletBalance})
+                                        Use Wallet (Available: <span className="text-[#CA0410] font-bold">₹{member.walletBalance}</span>)
                                     </label>
                                 </div>
                             )}
 
                             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                                <button type="button" onClick={() => setCollectModal({ open: false, membership: null })} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg">Cancel</button>
-                                <button type="submit" disabled={collectModal.submitting} className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm">
+                                <button type="button" onClick={() => setCollectModal({ open: false, membership: null })} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Cancel</button>
+                                <button type="submit" disabled={collectModal.submitting} className="px-4 py-2 text-xs font-bold text-white bg-[#CA0410] hover:bg-[#a8030d] rounded-xl shadow-2xs cursor-pointer">
                                     {collectModal.submitting ? 'Recording...' : 'Submit Payment'}
                                 </button>
                             </div>

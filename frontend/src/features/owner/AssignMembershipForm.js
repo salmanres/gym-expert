@@ -12,6 +12,7 @@ import {
 import apiClient from '../../api/apiClient';
 import { toast } from '../../utils/toast';
 import Loader from '../../components/page/Loader';
+import { formatDate } from '../../utils/dateUtils';
 import ReactSelect from 'react-select';
 
 export default function AssignMembershipForm() {
@@ -435,26 +436,26 @@ export default function AssignMembershipForm() {
     };
 
     const customStyles = {
-        control: (provided) => ({
+        control: (provided, state) => ({
             ...provided,
             minHeight: '42px',
             borderRadius: '0.75rem',
-            borderColor: '#cbd5e1',
+            borderColor: state.isFocused ? '#CA0410' : '#cbd5e1',
             backgroundColor: '#ffffff',
-            boxShadow: 'none',
-            '&:hover': { borderColor: '#10b981' },
+            boxShadow: state.isFocused ? '0 0 0 4px rgba(202, 4, 16, 0.1)' : 'none',
+            '&:hover': { borderColor: '#CA0410' },
             fontSize: '0.875rem',
             fontWeight: '500',
             color: '#1e293b'
         }),
         option: (provided, state) => ({
             ...provided,
-            backgroundColor: state.isSelected ? '#10b981' : state.isFocused ? '#ecfdf5' : 'transparent',
+            backgroundColor: state.isSelected ? '#CA0410' : state.isFocused ? '#FFF5F5' : 'transparent',
             color: state.isSelected ? 'white' : '#475569',
             fontSize: '0.875rem',
             fontWeight: '500',
             cursor: 'pointer',
-            ':active': { backgroundColor: '#d1fae5' }
+            ':active': { backgroundColor: '#FEE2E2' }
         })
     };
 
@@ -477,22 +478,22 @@ export default function AssignMembershipForm() {
                 showBack={true}
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 pt-0 pb-6 bg-[#FAEEEF]">
+                <div className="max-w-7xl mx-auto">
                     <form onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
                         
                         {selectedMemberActiveMem && (
-                            <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-indigo-900 shadow-sm">
+                            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-950 shadow-2xs">
                                 <div className="flex items-start gap-3">
-                                    <FiCalendar className="text-indigo-600 text-lg shrink-0 mt-0.5" />
+                                    <FiCalendar className="text-[#CA0410] text-lg shrink-0 mt-0.5" />
                                     <div className="text-xs">
-                                        <p className="font-extrabold text-sm text-indigo-950">
-                                            {editMode ? `Editing Active Plan: ${selectedMemberActiveMem.planName || 'Current Plan'}` : `Member Active Till ${new Date(selectedMemberActiveMem.paidUntilDate || selectedMemberActiveMem.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+                                        <p className="font-extrabold text-sm text-slate-900">
+                                            {editMode ? `Editing Active Plan: ${selectedMemberActiveMem.planName || 'Current Plan'}` : `Member Active Till ${formatDate(selectedMemberActiveMem.paidUntilDate || selectedMemberActiveMem.endDate)}`}
                                         </p>
-                                        <p className="mt-0.5 text-indigo-700 font-medium">
+                                        <p className="mt-0.5 text-slate-600 font-medium">
                                             {editMode 
                                                 ? `You are modifying details for the active membership.`
-                                                : `This new plan will be saved as a Scheduled (Future) Plan starting on ${formData.planStartDate ? new Date(formData.planStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'future date'}.`}
+                                                : `This new plan will be saved as a Scheduled (Future) Plan starting on ${formData.planStartDate ? formatDate(formData.planStartDate) : 'future date'}.`}
                                         </p>
                                     </div>
                                 </div>
@@ -519,7 +520,7 @@ export default function AssignMembershipForm() {
                                             }));
                                         }
                                     }}
-                                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shrink-0 transition-colors shadow-xs"
+                                    className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold shrink-0 transition-colors shadow-2xs cursor-pointer"
                                 >
                                     {editMode ? 'Switch to Schedule Future Plan' : 'Edit Active Plan Instead'}
                                 </button>
@@ -533,7 +534,7 @@ export default function AssignMembershipForm() {
                                 <div className="flex items-center justify-between mb-1.5">
                                     <label className="block text-xs font-bold text-slate-600">Select Member <span className="text-rose-500">*</span></label>
                                     {selectedMember && walletBalanceAvailable > 0 && (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-rose-50 text-[#CA0410] border border-rose-200 px-2 py-0.5 rounded-md">
                                             <FiAward size={12} /> Wallet: ₹{walletBalanceAvailable}
                                         </span>
                                     )}
@@ -576,13 +577,13 @@ export default function AssignMembershipForm() {
                             <Input type="number" label="Bonus Days (Optional)" name="bonusDays" value={formData.bonusDays} onChange={handleChange} placeholder="e.g. 5" />
                             
                             {/* Referral / Discount Coupon Box */}
-                            <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 p-4 bg-linear-to-r from-emerald-50/70 to-teal-50/70 border border-emerald-200/80 rounded-xl space-y-3">
+                            <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 p-4 bg-rose-50/50 border border-rose-200/80 rounded-2xl space-y-3">
                                 <div className="flex items-center justify-between">
                                     <span className="text-xs font-extrabold text-slate-800 flex items-center gap-2">
-                                        <FiTag className="text-emerald-600" /> Active Coupon Offer / Referral Code
+                                        <FiTag className="text-[#CA0410]" /> Active Coupon Offer / Referral Code
                                     </span>
                                     {appliedCoupon && (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full">
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-rose-100 text-[#CA0410] px-2.5 py-0.5 rounded-full">
                                             <FiCheckCircle size={12} /> Coupon Active
                                         </span>
                                     )}
@@ -595,7 +596,7 @@ export default function AssignMembershipForm() {
                                                 onChange={(e) => {
                                                     if (e.target.value) handleApplyCoupon(e.target.value);
                                                 }}
-                                                className="h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 cursor-pointer"
+                                                className="h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410] cursor-pointer"
                                             >
                                                 <option value="">-- Choose Gym Offer --</option>
                                                 {availableCoupons.map((c, i) => (
@@ -614,22 +615,22 @@ export default function AssignMembershipForm() {
                                                 value={couponCode}
                                                 onChange={(e) => setCouponCode(e.target.value)}
                                                 placeholder="Enter Coupon / Referral (e.g. MEM-0001)"
-                                                className="flex-1 h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500 uppercase tracking-wider"
+                                                className="flex-1 h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410] uppercase tracking-wider"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => handleApplyCoupon()}
-                                                className="px-4 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-lg transition-colors shadow-xs"
+                                                className="px-4 h-10 bg-[#CA0410] hover:bg-[#a8030d] text-white font-extrabold text-xs rounded-xl transition-colors shadow-2xs cursor-pointer"
                                             >
                                                 Apply
                                             </button>
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-emerald-200">
+                                    <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-rose-200">
                                         <div>
                                             <div className="text-xs font-extrabold text-slate-900 font-mono">
-                                                {appliedCoupon.code} - <span className="text-emerald-700">{appliedCoupon.description}</span>
+                                                {appliedCoupon.code} - <span className="text-[#CA0410]">{appliedCoupon.description}</span>
                                             </div>
                                             <div className="text-[11px] text-slate-500">
                                                 Discount of ₹{appliedCoupon.discountAmount} applied.
@@ -638,7 +639,7 @@ export default function AssignMembershipForm() {
                                         <button
                                             type="button"
                                             onClick={handleRemoveCoupon}
-                                            className="text-xs font-bold text-rose-600 hover:text-rose-700 underline"
+                                            className="text-xs font-bold text-rose-600 hover:text-rose-700 underline cursor-pointer"
                                         >
                                             Remove Coupon
                                         </button>
@@ -656,7 +657,7 @@ export default function AssignMembershipForm() {
                                     name="trainerId"
                                     value={formData.trainerId}
                                     onChange={handleChange}
-                                    className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500"
+                                    className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410]"
                                 >
                                     <option value="">-- Select Trainer --</option>
                                     {staffList.map(s => (
@@ -671,7 +672,7 @@ export default function AssignMembershipForm() {
                                     name="salesPersonId"
                                     value={formData.salesPersonId}
                                     onChange={handleChange}
-                                    className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-emerald-500"
+                                    className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410]"
                                 >
                                     <option value="">-- Select Reference Staff --</option>
                                     {staffList.map(s => (
@@ -692,13 +693,13 @@ export default function AssignMembershipForm() {
                             </div>
 
                             <div className="col-span-1 flex flex-col justify-end">
-                                <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors h-10">
+                                <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors h-10">
                                     <input 
-                                        type="checkbox"
-                                        name="isPTConversion"
-                                        checked={formData.isPTConversion}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, isPTConversion: e.target.checked }))}
-                                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                                        type="checkbox" 
+                                        name="isPTConversion" 
+                                        checked={formData.isPTConversion} 
+                                        onChange={(e) => setFormData(prev => ({ ...prev, isPTConversion: e.target.checked }))} 
+                                        className="w-4 h-4 text-[#CA0410] rounded focus:ring-[#CA0410]" 
                                     />
                                     <span className="text-xs font-extrabold text-slate-700">PT Conversion</span>
                                 </label>
@@ -709,8 +710,8 @@ export default function AssignMembershipForm() {
                         <FormSection title="Payment Collection & Receipt Details" icon={<FiCreditCard />} className="space-y-5">
                             
                             {/* Dynamic Price Summary Header Cards */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200/80">
-                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
+                                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                                     <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Plan Fee (₹)</p>
                                     <input 
                                         type="number"
@@ -728,26 +729,26 @@ export default function AssignMembershipForm() {
                                                 };
                                             });
                                         }}
-                                        className="w-full h-9 text-sm font-black text-slate-800 bg-slate-50 border border-slate-200 px-3 rounded-lg focus:bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
+                                        className="w-full h-9 text-sm font-black text-slate-800 bg-slate-50 border border-slate-200 px-3 rounded-lg focus:bg-white focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
                                         placeholder={selectedPlan ? String(selectedPlan.price || 0) : "0"}
                                     />
                                 </div>
-                                <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                                     <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Discount (₹)</p>
                                     <input 
                                         type="number"
                                         name="discount"
                                         value={formData.discount}
                                         onChange={handleChange}
-                                        className="w-full h-9 text-sm font-black text-emerald-600 bg-emerald-50/50 border border-emerald-200 px-3 rounded-lg focus:bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
+                                        className="w-full h-9 text-sm font-black text-[#CA0410] bg-rose-50/50 border border-rose-200 px-3 rounded-lg focus:bg-white focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
                                         placeholder="0"
                                     />
                                 </div>
-                                <div className="bg-white p-3 rounded-lg border border-emerald-200/80 bg-emerald-50/30">
-                                    <p className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">Net Payable</p>
-                                    <p className="text-lg font-black text-emerald-700 mt-0.5">₹{netPayable.toLocaleString()}</p>
+                                <div className="bg-white p-3.5 rounded-xl border border-rose-200/80 bg-rose-50/20 shadow-2xs">
+                                    <p className="text-[10px] font-extrabold text-[#CA0410] uppercase tracking-wider">Net Payable</p>
+                                    <p className="text-lg font-black text-[#CA0410] mt-0.5">₹{netPayable.toLocaleString()}</p>
                                 </div>
-                                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
                                     <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Payment Status</p>
                                     <div className="mt-1">
                                         {remainingBalance === 0 && netPayable > 0 ? (
@@ -769,7 +770,7 @@ export default function AssignMembershipForm() {
 
                             {/* Wallet Usage Toggle */}
                             {selectedMember && walletBalanceAvailable > 0 && (
-                                <div className="p-3.5 bg-amber-50/80 border border-amber-200/80 rounded-xl flex items-center justify-between">
+                                <div className="p-3.5 bg-rose-50/80 border border-rose-200/80 rounded-xl flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <input 
                                             type="checkbox"
@@ -777,14 +778,14 @@ export default function AssignMembershipForm() {
                                             name="useWallet"
                                             checked={formData.useWallet}
                                             onChange={handleChange}
-                                            className="w-4 h-4 text-emerald-600 rounded-md focus:ring-emerald-500 cursor-pointer"
+                                            className="w-4 h-4 text-[#CA0410] rounded-md focus:ring-[#CA0410] cursor-pointer"
                                         />
-                                        <label htmlFor="useWallet" className="text-xs font-bold text-amber-900 cursor-pointer">
-                                            Use Member Wallet Balance (Available: <span className="font-black text-amber-950">₹{walletBalanceAvailable}</span>)
+                                        <label htmlFor="useWallet" className="text-xs font-bold text-slate-800 cursor-pointer">
+                                            Use Member Wallet Balance (Available: <span className="font-black text-[#CA0410]">₹{walletBalanceAvailable}</span>)
                                         </label>
                                     </div>
                                     {formData.useWallet && (
-                                        <span className="text-xs font-extrabold text-emerald-700 bg-white px-3 py-1 rounded-lg border border-amber-200 shadow-2xs">
+                                        <span className="text-xs font-extrabold text-[#CA0410] bg-white px-3 py-1 rounded-lg border border-rose-200 shadow-2xs">
                                             Deducting ₹{calculatedWalletUsed} from wallet
                                         </span>
                                     )}
@@ -809,7 +810,7 @@ export default function AssignMembershipForm() {
                                         name="paymentMode"
                                         value={formData.paymentMode}
                                         onChange={handleChange}
-                                        className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-emerald-500 cursor-pointer"
+                                        className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410] cursor-pointer"
                                     >
                                         <option value="Cash">Cash</option>
                                         <option value="UPI">UPI / GPay / PhonePe / Paytm</option>
@@ -841,11 +842,11 @@ export default function AssignMembershipForm() {
                         </FormSection>
 
                         {/* SUBMIT BUTTONS */}
-                        <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-4 pt-6 border-t border-slate-200">
+                        <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 pt-2">
                             <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/membership')} className="w-full sm:w-auto">
                                 Cancel
                             </Button>
-                            <Button type="submit" loading={submitting} className="w-full sm:w-auto px-8 bg-emerald-600 hover:bg-emerald-700 text-white font-black">
+                            <Button type="submit" loading={submitting} className="w-full sm:w-auto px-8 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold">
                                 {editMode 
                                     ? `Update Plan & Process Payment (₹${totalCollected})` 
                                     : `Assign Membership & Collect Payment (₹${totalCollected})`}

@@ -12,6 +12,7 @@ import Textarea from '../../components/form/Textarea';
 import Checkbox from '../../components/form/Checkbox';
 import Button from '../../components/form/Button';
 import Loader from '../../components/page/Loader';
+import { formatDate } from '../../utils/dateUtils';
 import { useRef } from 'react';
 
 const toInputDateFormat = (dateVal) => {
@@ -313,8 +314,8 @@ export default function LeadForm() {
                 showBack={true}
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                <div className="w-full">
+            <div className="flex-1 overflow-y-auto px-6 md:px-8 pt-0 pb-6 bg-[#FAEEEF]">
+                <div className="w-full max-w-7xl mx-auto">
                     <form id="leadForm" onSubmit={handleSubmit} className="flex flex-col" noValidate>
                         {/* The top 'Save As' toggle has been moved to the footer as a checkbox */}
 
@@ -515,7 +516,7 @@ export default function LeadForm() {
                                                 [...formData.followUpHistory].reverse().map((history, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-50">
                                                         <td className="py-2.5 px-3 font-bold text-slate-800 whitespace-nowrap">
-                                                            {new Date(history.contactDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                            {formatDate(history.contactDate)}
                                                         </td>
                                                         <td className="py-2.5 px-3 text-slate-700 italic max-w-xs break-words">
                                                             "{history.response}"
@@ -528,7 +529,7 @@ export default function LeadForm() {
                                                         <td className="py-2.5 px-3 whitespace-nowrap">
                                                             <div className="flex flex-col gap-0.5">
                                                                 {history.nextFollowUpDate ? (
-                                                                    <span className="font-bold text-indigo-600">{new Date(history.nextFollowUpDate).toLocaleDateString('en-GB')}</span>
+                                                                    <span className="font-bold text-indigo-600">{formatDate(history.nextFollowUpDate)}</span>
                                                                 ) : <span className="text-slate-400">-</span>}
                                                                 {history.nextFollowUpTime && (
                                                                     <span className="text-[10px] text-slate-500">{history.nextFollowUpTime}</span>
@@ -554,18 +555,26 @@ export default function LeadForm() {
                             </FormSection>
                         )}
 
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full gap-4 mt-2 pt-6 border-t border-slate-200">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full gap-4 mt-2 pt-4 border-t border-rose-200/60">
                             <div className="flex items-center gap-6 w-full sm:w-auto flex-wrap">
                                 <Checkbox label="Send Text/Email" name="sendTextAndEmail" checked={formData.sendTextAndEmail} onChange={handleChange} />
                                 <Checkbox label="Send WhatsApp" name="sendWhatsApp" checked={formData.sendWhatsApp} onChange={handleChange} />
                             </div>
                             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                                <Button type="button" variant="secondary" onClick={() => navigate('/dashboard/owner/leads')} className="w-full sm:w-auto">
+                                <button 
+                                    type="button" 
+                                    onClick={() => navigate('/dashboard/owner/leads')} 
+                                    className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer active:scale-95"
+                                >
                                     Cancel
-                                </Button>
-                                <Button type="submit" loading={submitting} className="w-full sm:w-auto">
-                                    {formData.status === 'Converted' ? 'Save & Convert to Member' : (isEdit ? 'Update Enquiry' : 'Save Enquiry')}
-                                </Button>
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    disabled={submitting}
+                                    className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-50"
+                                >
+                                    {submitting ? 'Saving Enquiry...' : (formData.status === 'Converted' ? 'Save & Convert to Member' : (isEdit ? 'Update Enquiry' : 'Save Enquiry'))}
+                                </button>
                             </div>
                         </div>
                     </form>

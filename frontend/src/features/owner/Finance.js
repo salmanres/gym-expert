@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/page/PageLayout';
@@ -7,18 +7,22 @@ import PageHeader from '../../components/page/PageHeader';
 import DataTable from '../../components/page/DataTable';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
-import Button from '../../components/form/Button';
-import { FiCreditCard, FiCheckCircle, FiClock, FiAlertCircle, FiEye, FiTrash2 } from 'react-icons/fi';
+import SummaryCards from '../../components/page/SummaryCards';
+import { FiCreditCard, FiEye, FiTrash2, FiPhone, FiDollarSign, FiTrendingUp, FiAlertCircle, FiCheckCircle, FiClock } from 'react-icons/fi';
+import { formatDate } from '../../utils/dateUtils';
 
 export default function Finance() {
-
-
     const [members, setMembers] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('Payments'); // 'Payments', 'Pending Dues', 'Transactions'
     
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    // Filters
     const [filterStatus, setFilterStatus] = useState('All');
     const [filterMode, setFilterMode] = useState('All');
     const [filterStartDate, setFilterStartDate] = useState('');
@@ -47,6 +51,7 @@ export default function Finance() {
                     member.paymentStatus = membership.paymentStatus;
                     member.amountPaid = membership.paidAmount;
                     member.planStartDate = membership.startDate;
+                    member.planEndDate = membership.endDate;
                 }
                 return member;
             }).filter(m => m.membershipPlan);
@@ -77,8 +82,22 @@ export default function Finance() {
         fetchData();
     }, []);
 
+    const avatarStyles = [
+        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
+        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
+        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
+        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
+        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
+        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
+    ];
+
+    const getAvatarStyle = (name, index) => {
+        const charCode = (name || '').charCodeAt(0) || 0;
+        return avatarStyles[(charCode + index) % avatarStyles.length];
+    };
+
     const filteredMembers = members.filter(m => {
-        const matchesSearch = (m.firstName + ' ' + m.lastName).toLowerCase().includes(searchTerm.toLowerCase()) || m.contactNumber.includes(searchTerm);
+        const matchesSearch = (m.firstName + ' ' + (m.lastName || '')).toLowerCase().includes(searchTerm.toLowerCase()) || (m.contactNumber || '').includes(searchTerm);
         if (!matchesSearch) return false;
         
         // Apply Dropdown Filters
@@ -113,7 +132,7 @@ export default function Finance() {
     const filteredTransactions = transactions.filter(t => {
         const member = t.memberId;
         if (!member) return false;
-        const matchesSearch = (member.firstName + ' ' + member.lastName).toLowerCase().includes(searchTerm.toLowerCase()) || member.contactNumber.includes(searchTerm);
+        const matchesSearch = (member.firstName + ' ' + (member.lastName || '')).toLowerCase().includes(searchTerm.toLowerCase()) || (member.contactNumber || '').includes(searchTerm);
         if (!matchesSearch) return false;
         
         if (filterStatus !== 'All' && (t.paymentStatus || 'Paid') !== filterStatus) return false;
@@ -140,53 +159,105 @@ export default function Finance() {
         return true;
     });
 
+    // Pagination Slices
+    const totalItems = activeTab === 'Transactions' ? filteredTransactions.length : filteredMembers.length;
+    const paginatedData = (activeTab === 'Transactions' ? filteredTransactions : filteredMembers).slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
     const columns = activeTab === 'Transactions' 
         ? [
-            { label: 'Member' },
-            { label: 'Date' },
-            { label: 'Paid Amount' },
-            { label: 'Payment Mode' },
-            { label: 'Txn ID' },
-            { label: 'Actions', className: 'text-center' }
+            { label: 'MEMBER', className: 'w-[28%] pl-4 pr-3' },
+            { label: 'RECEIPT NO', className: 'w-[16%] px-3' },
+            { label: 'DATE & TIME', className: 'w-[16%] px-3' },
+            { label: 'AMOUNT PAID', className: 'w-[14%] px-3' },
+            { label: 'PAYMENT MODE', className: 'w-[14%] px-2 text-center' },
+            { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
         ]
         : [
-            { label: 'Member' },
-            { label: 'Plan Details' },
-            { label: 'Amount Paid' },
-            { label: 'Status' },
-            { label: 'Actions', className: 'text-center' }
+            { label: 'MEMBER', className: 'w-[26%] pl-4 pr-3' },
+            { label: 'PLAN & TOTAL', className: 'w-[20%] px-3' },
+            { label: 'AMOUNT PAID', className: 'w-[16%] px-3' },
+            { label: 'BALANCE / DUES', className: 'w-[14%] px-3' },
+            { label: 'PAYMENT STATUS', className: 'w-[12%] px-2 text-center' },
+            { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
         ];
 
-
-
-
-    const renderTransactionRow = (t) => {
+    const renderTransactionRow = (t, index) => {
         const member = t.memberId || {};
+        const receiptNo = t.transactionId || `REC-${(t._id || '').substring(0, 6).toUpperCase()}`;
+
         return (
-            <tr key={t._id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4">
-                    <p className="font-bold text-slate-800 text-sm">{member.firstName} {member.lastName}</p>
-                    <p className="text-xs text-slate-500">{member.contactNumber}</p>
+            <tr key={t._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
+                <td className="py-2.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
+                        {member.profilePhoto ? (
+                            <img src={member.profilePhoto} alt={member.firstName} className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                                {(member.firstName || 'M').charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                        <div className="flex flex-col items-start min-w-0">
+                            <span className="font-bold text-slate-900 text-[13.5px] leading-tight truncate">
+                                {member.firstName} {member.lastName}
+                            </span>
+                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                                {member.contactNumber || '-'}
+                            </p>
+                        </div>
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-sm text-slate-700">
-                    {t.paymentDate ? new Date(t.paymentDate).toLocaleDateString() : 'N/A'}
+
+                <td className="py-2.5 px-3 align-middle">
+                    <span className="font-mono font-bold text-slate-800 text-[12.5px]">
+                        {receiptNo}
+                    </span>
                 </td>
-                <td className="py-3 px-4 text-sm font-bold text-emerald-600">
-                    ₹{t.amountPaid || 0}
+
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col text-[11.5px] leading-tight">
+                        <span className="font-bold text-slate-900 text-[12.5px]">
+                            {formatDate(t.paymentDate, 'N/A')}
+                        </span>
+                        <span className="text-slate-500 text-[11px] font-normal mt-0.5">
+                            {t.paymentDate ? new Date(t.paymentDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-sm text-slate-700">
-                    {t.paymentMode || 'N/A'}
+
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex items-center gap-1 font-bold text-emerald-600 text-[14px]">
+                        <span>₹</span>
+                        <span>{Number(t.amountPaid || 0).toLocaleString()}</span>
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-sm text-slate-700">
-                    {t.transactionId || 'N/A'}
+
+                <td className="py-2.5 px-2 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
+                        (t.paymentMode || '').toLowerCase() === 'cash' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                        (t.paymentMode || '').toLowerCase() === 'upi' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                        'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}>
+                        {t.paymentMode || 'Cash'}
+                    </span>
                 </td>
-                <td className="py-3 px-4">
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                        <button onClick={() => navigate(`/dashboard/owner/finance/receipt/${member._id}`)} className="w-8 h-8 rounded bg-slate-50 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="View Receipt">
-                            <FiEye className="text-base" />
-                        </button>
-                        <button onClick={() => handleDeleteTransaction(t._id)} className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="Delete Transaction">
-                            <FiTrash2 className="text-base" />
+
+                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5">
+                        {member._id && (
+                            <button 
+                                onClick={() => navigate(`/dashboard/owner/finance/receipt/${member._id}`)} 
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="View Receipt"
+                            >
+                                <FiEye size={15} />
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => handleDeleteTransaction(t._id)} 
+                            className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title="Delete Transaction"
+                        >
+                            <FiTrash2 size={14} />
                         </button>
                     </div>
                 </td>
@@ -194,48 +265,86 @@ export default function Finance() {
         );
     };
 
-    const renderRow = (m) => {
+    const renderRow = (m, index) => {
         const isPaid = m.paymentStatus === 'Paid';
         const isPartial = m.paymentStatus === 'Partial';
+        const planPrice = Number(m.membershipPlan?.price || 0);
+        const paidAmount = Number(m.amountPaid || 0);
+        const dueAmount = Math.max(0, planPrice - paidAmount);
 
         return (
-            <tr key={m._id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
+            <tr key={m._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
+                <td className="py-2.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
                         {m.profilePhoto ? (
-                            <img src={m.profilePhoto} alt={m.firstName} className="w-8 h-8 rounded-full object-cover shadow-sm border border-slate-200 shrink-0" />
+                            <img src={m.profilePhoto} alt={m.firstName} className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs shadow-sm border border-slate-200 shrink-0">
-                                {m.firstName.charAt(0).toUpperCase()}{m.lastName ? m.lastName.charAt(0).toUpperCase() : ''}
+                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                                {(m.firstName || 'M').charAt(0).toUpperCase()}
                             </div>
                         )}
-                        <div>
-                            <p className="font-bold text-slate-800 text-sm">{m.firstName} {m.lastName}</p>
-                            <p className="text-xs text-slate-500">{m.contactNumber}</p>
+                        <div className="flex flex-col items-start min-w-0">
+                            <button 
+                                onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
+                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                            >
+                                {m.firstName} {m.lastName}
+                            </button>
+                            <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                                <FiPhone className="text-slate-400 text-xs shrink-0" />
+                                <span>{m.contactNumber || '-'}</span>
+                            </div>
                         </div>
                     </div>
                 </td>
-                <td className="py-3 px-4">
-                    <p className="font-bold text-slate-700 text-sm">{m.membershipPlan?.name}</p>
-                    <p className="text-[10px] text-slate-500">₹{m.membershipPlan?.price} total</p>
+
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                        <span className="font-bold text-slate-900 text-[12.5px]">{m.membershipPlan?.name || 'General Plan'}</span>
+                        <span className="text-slate-500 font-normal text-[11.5px]">Total: ₹{planPrice.toLocaleString()}</span>
+                    </div>
                 </td>
-                <td className="py-3 px-4 text-sm font-semibold text-emerald-600">
-                    ₹{m.amountPaid || 0}
+
+                <td className="py-2.5 px-3 align-middle">
+                    <div className="flex items-center gap-1 font-bold text-emerald-600 text-[14px]">
+                        <span>₹</span>
+                        <span>{paidAmount.toLocaleString()}</span>
+                    </div>
                 </td>
-                <td className="py-3 px-4">
-                    <span className={`text-xs font-bold px-2 py-1 rounded flex items-center gap-1 w-max ${isPaid ? 'bg-emerald-50 text-emerald-600' : isPartial ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}`}>
-                        {isPaid ? <FiCheckCircle /> : isPartial ? <FiAlertCircle /> : <FiClock />}
+
+                <td className="py-2.5 px-3 align-middle">
+                    <div className={`flex items-center gap-1 font-bold text-[13.5px] ${dueAmount > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                        <span>₹</span>
+                        <span>{dueAmount.toLocaleString()}</span>
+                    </div>
+                </td>
+
+                <td className="py-2.5 px-2 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
+                        isPaid ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
+                        isPartial ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                        'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}>
                         {m.paymentStatus || 'Pending'}
                     </span>
                 </td>
-                <td className="py-3 px-4">
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                        <button onClick={() => openPaymentModal(m)} className="w-8 h-8 rounded bg-slate-100 text-slate-700 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm" title={isPaid ? 'Update Fee' : 'Collect Fee'}>
-                            <FiCreditCard className="text-sm" />
+
+                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5">
+                        <button 
+                            onClick={() => openPaymentModal(m)} 
+                            className="w-8 h-8 rounded-lg border border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            title={isPaid ? 'Update Fee' : 'Collect Fee'}
+                        >
+                            <FiCreditCard size={14} />
                         </button>
-                        {(m.amountPaid > 0 || isPaid || isPartial) && (
-                            <button onClick={() => navigate(`/dashboard/owner/finance/receipt/${m._id}`)} className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white flex items-center justify-center transition-colors shadow-sm" title="View Receipt">
-                                <FiEye className="text-sm" />
+                        {(paidAmount > 0 || isPaid || isPartial) && (
+                            <button 
+                                onClick={() => navigate(`/dashboard/owner/finance/receipt/${m._id}`)} 
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="View Receipt"
+                            >
+                                <FiEye size={15} />
                             </button>
                         )}
                     </div>
@@ -244,6 +353,60 @@ export default function Finance() {
         );
     };
 
+    const totalRevenue = transactions.reduce((sum, t) => sum + (Number(t.amountPaid) || 0), 0);
+    const thisMonthRevenue = transactions.filter(t => {
+        const d = new Date(t.paymentDate || t.createdAt);
+        const now = new Date();
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).reduce((sum, t) => sum + (Number(t.amountPaid) || 0), 0);
+    const totalPendingDues = members.filter(m => m.paymentStatus === 'Partial' || m.paymentStatus === 'Pending').reduce((sum, m) => sum + Math.max(0, (m.membershipPlan?.price || 0) - (m.amountPaid || 0)), 0);
+    const totalTxCount = transactions.length;
+    const fullyPaidMembersCount = members.filter(m => m.paymentStatus === 'Paid').length;
+    const dueMembersCount = members.filter(m => m.paymentStatus === 'Partial' || m.paymentStatus === 'Pending').length;
+
+    const summaryCardsData = [
+        {
+            title: 'Total Revenue',
+            value: `₹${Math.round(totalRevenue).toLocaleString()}`,
+            percentage: '+15%',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'Lifetime collected',
+            icon: <FiDollarSign />,
+            bgClass: 'bg-[#E8F5E9]',
+            iconColor: 'text-[#2E7D32]'
+        },
+        {
+            title: 'This Month',
+            value: `₹${Math.round(thisMonthRevenue).toLocaleString()}`,
+            percentage: 'Current',
+            percentageColor: 'text-emerald-600',
+            subtitle: 'Monthly collection',
+            icon: <FiTrendingUp />,
+            bgClass: 'bg-[#FFECEC]',
+            iconColor: 'text-[#E53935]'
+        },
+        {
+            title: 'Outstanding Dues',
+            value: `₹${Math.round(totalPendingDues).toLocaleString()}`,
+            percentage: `${dueMembersCount} Due`,
+            percentageColor: 'text-rose-600',
+            subtitle: 'Pending collection',
+            icon: <FiAlertCircle />,
+            bgClass: 'bg-[#FFF3E0]',
+            iconColor: 'text-[#EA580C]'
+        },
+        {
+            title: 'Paid Members',
+            value: fullyPaidMembersCount,
+            percentage: `${members.length > 0 ? Math.round((fullyPaidMembersCount / members.length) * 100) : 0}%`,
+            percentageColor: 'text-emerald-600',
+            subtitle: '100% Cleared fees',
+            icon: <FiCheckCircle />,
+            bgClass: 'bg-[#F3E8FF]',
+            iconColor: 'text-[#7E22CE]'
+        }
+    ];
+
     return (
         <PageLayout>
             <PageHeader 
@@ -251,6 +414,10 @@ export default function Finance() {
                 subtitle="Track and collect membership fees" 
             />
             
+            <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
+                <SummaryCards cards={summaryCardsData} />
+            </div>
+
             <Tabs 
                 tabs={['Payments', 'Pending Dues', 'Transactions']} 
                 activeTab={activeTab} 
@@ -261,28 +428,39 @@ export default function Finance() {
                     setFilterMode('All');
                     setFilterStartDate('');
                     setFilterEndDate('');
+                    setCurrentPage(1);
                 }} 
             />
 
             <FilterBar 
                 searchTerm={searchTerm} 
-                onSearchChange={setSearchTerm} 
-                searchPlaceholder="Search members by name or phone..."
+                onSearchChange={(val) => {
+                    setSearchTerm(val);
+                    setCurrentPage(1);
+                }} 
+                searchPlaceholder={activeTab === 'Transactions' ? "Search transactions by member, receipt or mode..." : "Search members by name, phone or plan..."}
             >
-                <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm h-10 px-2 transition-all focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 w-full sm:w-auto">
+                <div className="flex items-center bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl shadow-2xs h-9 px-2.5 transition-all focus-within:border-[#CA0410] focus-within:ring-2 focus-within:ring-[#CA0410]/20 w-full sm:w-auto">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">From:</span>
                     <input 
                         type="date" 
                         value={filterStartDate}
-                        onChange={(e) => setFilterStartDate(e.target.value)}
-                        className="text-sm focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
+                        onChange={(e) => {
+                            setFilterStartDate(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
                         title="Start Date"
                     />
-                    <span className="text-slate-300 mx-2 font-medium text-xs">TO</span>
+                    <span className="text-slate-300 mx-2 font-medium text-[10px]">TO</span>
                     <input 
                         type="date" 
                         value={filterEndDate}
-                        onChange={(e) => setFilterEndDate(e.target.value)}
-                        className="text-sm focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
+                        onChange={(e) => {
+                            setFilterEndDate(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
                         title="End Date"
                     />
                 </div>
@@ -290,8 +468,11 @@ export default function Finance() {
                 {activeTab === 'Payments' && (
                     <select 
                         value={filterStatus} 
-                        onChange={(e) => setFilterStatus(e.target.value)}
-                        className="w-full sm:w-auto h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm"
+                        onChange={(e) => {
+                            setFilterStatus(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="h-9 px-3 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 text-slate-600 shadow-2xs w-full sm:w-auto"
                     >
                         <option value="All">All Statuses</option>
                         <option value="Paid">Paid</option>
@@ -303,8 +484,11 @@ export default function Finance() {
                 {activeTab === 'Transactions' && (
                     <select 
                         value={filterMode} 
-                        onChange={(e) => setFilterMode(e.target.value)}
-                        className="w-full sm:w-auto h-10 px-3 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm"
+                        onChange={(e) => {
+                            setFilterMode(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="h-9 px-3 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 text-slate-600 shadow-2xs w-full sm:w-auto"
                     >
                         <option value="All">All Payment Modes</option>
                         <option value="Cash">Cash</option>
@@ -316,17 +500,23 @@ export default function Finance() {
                 )}
             </FilterBar>
 
-            <div className="flex-1 min-h-0 p-4 lg:p-6 w-full">
+            <div className="px-6 md:px-8 pb-6 pt-1 bg-[#FAEEEF] w-full flex flex-col gap-4 min-h-0 flex-1">
                 <DataTable 
-                    className="h-full"
                     columns={columns} 
-                    data={activeTab === 'Transactions' ? filteredTransactions : filteredMembers} 
+                    data={paginatedData} 
                     loading={loading} 
                     emptyMessage="No records found for the selected filter." 
                     renderRow={activeTab === 'Transactions' ? renderTransactionRow : renderRow} 
+                    pagination={{
+                        currentPage: currentPage,
+                        totalItems: totalItems,
+                        pageSize: pageSize,
+                        onPageChange: (p) => setCurrentPage(p),
+                        onPageSizeChange: (s) => setPageSize(s),
+                        itemLabel: activeTab === 'Transactions' ? "transactions" : "records"
+                    }}
                 />
             </div>
-
         </PageLayout>
     );
 }

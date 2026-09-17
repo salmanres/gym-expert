@@ -19,7 +19,7 @@ function GymNavbar({
     formatTimeAgo 
 }) {
     return (
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-20 sticky top-0 print:hidden shadow-xs">
+        <header className="h-16 bg-white/90 backdrop-blur-md border-b border-rose-200/80 flex items-center justify-between px-6 shrink-0 z-20 sticky top-0 print:hidden shadow-2xs">
             <div className="flex items-center gap-4">
                 <button 
                     onClick={() => setSidebarOpen(true)} 

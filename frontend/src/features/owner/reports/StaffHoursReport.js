@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import SummaryCards from '../../../components/page/SummaryCards';
 import DataTable from '../../../components/page/DataTable';
 import EmptyState from '../../../components/page/EmptyState';
-import { FiUsers, FiCheckCircle, FiClock, FiActivity, FiEye, FiX, FiCalendar, FiDownload } from 'react-icons/fi';
+import { FiUsers, FiCheckCircle, FiClock, FiActivity, FiEye, FiX, FiCalendar, FiDownload, FiXCircle, FiTrendingUp } from 'react-icons/fi';
 import apiClient from '../../../api/apiClient';
+import { formatDate } from '../../../utils/dateUtils';
 
 export default function StaffHoursReport({ 
     staffAttendance = []
@@ -53,29 +54,86 @@ export default function StaffHoursReport({
     });
 
     const cards = [
-        { title: 'Total Staff', value: `${totalStaffCount} Staff`, icon: <FiUsers />, textColor: 'text-indigo-600', valueColor: 'text-indigo-600', bgClass: 'bg-indigo-50', iconColor: 'text-indigo-600' },
-        { title: 'Present Today', value: `${presentTodayStaff.length} Staff`, icon: <FiCheckCircle />, textColor: 'text-emerald-600', valueColor: 'text-emerald-600', bgClass: 'bg-emerald-50', iconColor: 'text-emerald-600' },
-        { title: 'Currently On Duty', value: `${onDutyStaff.length} Staff`, icon: <FiActivity />, textColor: 'text-cyan-600', valueColor: 'text-cyan-600', bgClass: 'bg-cyan-50', iconColor: 'text-cyan-600' },
-        { title: 'Late Check-ins', value: `${lateStaff.length} Staff`, icon: <FiClock />, textColor: 'text-amber-600', valueColor: 'text-amber-600', bgClass: 'bg-amber-50', iconColor: 'text-amber-600' }
+        { 
+            title: 'Total Staff', 
+            value: `${totalStaffCount} Staff`, 
+            percentage: 'Team',
+            percentageColor: 'text-purple-600',
+            icon: <FiUsers />, 
+            subtitle: 'On team roster', 
+            bgClass: 'bg-[#FFECEC]', 
+            iconColor: 'text-[#E53935]' 
+        },
+        { 
+            title: 'Present Today', 
+            value: `${presentTodayStaff.length} Staff`, 
+            percentage: `${totalStaffCount > 0 ? Math.round((presentTodayStaff.length / totalStaffCount) * 100) : 0}%`,
+            percentageColor: 'text-emerald-600',
+            icon: <FiCheckCircle />, 
+            subtitle: 'Checked in today', 
+            bgClass: 'bg-[#E8F5E9]', 
+            iconColor: 'text-[#2E7D32]' 
+        },
+        { 
+            title: 'On Floor Duty', 
+            value: `${onDutyStaff.length} Staff`, 
+            percentage: 'Active',
+            percentageColor: 'text-blue-600',
+            icon: <FiActivity />, 
+            subtitle: 'Currently working', 
+            bgClass: 'bg-[#E3F2FD]', 
+            iconColor: 'text-[#1976D2]' 
+        },
+        { 
+            title: 'Late Check-ins', 
+            value: `${lateStaff.length} Staff`, 
+            percentage: 'Late',
+            percentageColor: 'text-amber-600',
+            icon: <FiClock />, 
+            subtitle: 'Late arrivals', 
+            bgClass: 'bg-[#FFF3E0]', 
+            iconColor: 'text-[#EA580C]' 
+        }
     ];
 
-    // Main Staff Attendance Summary Table (NO Working Hours or Overtime columns)
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    const avatarStyles = [
+        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
+        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
+        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
+        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
+        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
+        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
+    ];
+
+    const getAvatarStyle = (name, index) => {
+        const charCode = (name || '').charCodeAt(0) || 0;
+        return avatarStyles[(charCode + index) % avatarStyles.length];
+    };
+
+    const totalItems = staffAttendance.length;
+    const paginatedStaffAttendance = staffAttendance.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    // Main Staff Attendance Summary Table
     const columns = [
-        { label: 'Staff ID' },
-        { label: 'Staff Name' },
-        { label: 'Role' },
-        { label: 'Date' },
-        { label: 'Total Attendance' },
-        { label: 'Attendance Status' },
-        { label: 'Shift Status' },
-        { label: 'Action' }
+        { label: 'STAFF MEMBER', className: 'w-[22%] pl-6' },
+        { label: 'ROLE', className: 'w-[14%] pl-3' },
+        { label: 'DATE', className: 'w-[13%] pl-3' },
+        { label: 'TOTAL ATTENDANCE', className: 'w-[15%] pl-3' },
+        { label: 'ATTENDANCE STATUS', className: 'w-[14%] pl-1 text-left' },
+        { label: 'SHIFT STATUS', className: 'w-[13%] pl-1 text-left' },
+        { label: 'ACTIONS', className: 'w-[9%] text-center pr-6' }
     ];
 
-    const renderRow = (item) => {
+    const renderRow = (item, index) => {
         const staffCustomId = item.staffId || item.user?.staffId || item.employeeId || 'STF-00' + (item._id || '').substring(0, 3).toUpperCase();
         const staffName = item.user?.name || item.name || 'Staff Member';
         const role = item.user?.role || item.role || 'Trainer';
-        const dateStr = item.attendance?.date ? new Date(item.attendance.date).toLocaleDateString() : new Date().toLocaleDateString();
+        const dateStr = formatDate(item.attendance?.date || new Date());
+        const avatarStyle = getAvatarStyle(staffName, index);
 
         const checkInTime = item.attendance?.checkInTime;
         const checkOutTime = item.attendance?.checkOutTime;
@@ -97,49 +155,78 @@ export default function StaffHoursReport({
         const shiftStatus = checkOutTime ? 'Completed' : checkInTime ? 'On Duty' : 'Not Checked In';
 
         return (
-            <tr key={item.user?._id || item._id} className="hover:bg-slate-50 transition-colors">
-                <td className="py-3 px-4 text-xs font-mono font-bold text-slate-700">
-                    {staffCustomId}
+            <tr key={item.user?._id || item._id} className="bg-white hover:bg-slate-50/70 transition-colors duration-150 group">
+                {/* STAFF MEMBER */}
+                <td className="py-2.5 pl-6 pr-3 align-middle">
+                    <div className="flex items-center gap-2.5">
+                        <div className={`w-9 h-9 rounded-full ${avatarStyle.bg} ${avatarStyle.text} font-bold text-sm flex items-center justify-center shrink-0`}>
+                            {(staffName || 'S').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="font-bold text-[#111827] text-[13px] leading-tight truncate">
+                                {staffName}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                ID: {staffCustomId}
+                            </span>
+                        </div>
+                    </div>
                 </td>
-                <td className="py-3 px-4 font-bold text-slate-800 text-sm">
-                    {staffName}
+
+                {/* ROLE */}
+                <td className="py-2.5 px-3 align-middle">
+                    <span className="inline-flex px-2 py-0.5 bg-purple-50 border border-purple-200 text-purple-700 rounded-full text-[11px] font-bold uppercase">
+                        {role}
+                    </span>
                 </td>
-                <td className="py-3 px-4 text-xs font-medium text-slate-600">
-                    {role}
+
+                {/* DATE */}
+                <td className="py-2.5 px-3 align-middle">
+                    <span className="text-slate-700 font-bold text-[12px]">
+                        {dateStr}
+                    </span>
                 </td>
-                <td className="py-3 px-4 text-xs font-medium text-slate-500">
-                    {dateStr}
-                </td>
-                <td className="py-3 px-4 text-xs font-bold text-indigo-700">
-                    <span className="inline-flex px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-extrabold">
+
+                {/* TOTAL ATTENDANCE */}
+                <td className="py-2.5 px-3 align-middle">
+                    <span className="inline-flex px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full text-[11px] font-bold">
                         {totalDaysPresent} Days
                     </span>
                 </td>
-                <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                        attendanceStatus === 'Present' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        attendanceStatus === 'Late' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                        'bg-rose-50 text-rose-700 border border-rose-200'
+
+                {/* ATTENDANCE STATUS */}
+                <td className="py-2.5 pl-1 pr-3 text-left align-middle">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-0.5 border leading-none shadow-2xs ${
+                        attendanceStatus === 'Present' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
+                        attendanceStatus === 'Late' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                        'bg-rose-50 text-rose-700 border-rose-200'
                     }`}>
                         {attendanceStatus}
                     </span>
                 </td>
-                <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase ${
+
+                {/* SHIFT STATUS */}
+                <td className="py-2.5 pl-1 pr-3 text-left align-middle">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-0.5 border leading-none shadow-2xs ${
                         shiftStatus === 'Completed' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 
                         shiftStatus === 'On Duty' ? 'bg-cyan-50 text-cyan-700 border border-cyan-200' : 
-                        'bg-slate-100 text-slate-600'
+                        'bg-slate-100 text-slate-600 border border-slate-200'
                     }`}>
                         {shiftStatus}
                     </span>
                 </td>
-                <td className="py-3 px-4">
-                    <button 
-                        onClick={() => setSelectedStaff(item)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors whitespace-nowrap shadow-sm"
-                    >
-                        <FiEye className="text-sm" /> View Attendance
-                    </button>
+
+                {/* ACTIONS */}
+                <td className="py-2.5 pl-2 pr-6 text-center align-middle">
+                    <div className="flex items-center justify-center">
+                        <button 
+                            onClick={() => setSelectedStaff(item)}
+                            className="w-7 h-7 rounded-md border border-slate-200 text-slate-500 bg-white hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer"
+                            title="View Attendance History"
+                        >
+                            <FiEye size={14} />
+                        </button>
+                    </div>
                 </td>
             </tr>
         );
@@ -159,7 +246,7 @@ export default function StaffHoursReport({
             }
         }
         return {
-            date: new Date(log.date || log.checkInTime || log.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            date: formatDate(log.date || log.checkInTime || log.createdAt),
             checkIn,
             checkOut,
             workingHours: hrs,
@@ -206,16 +293,22 @@ export default function StaffHoursReport({
 
     return (
         <div className="space-y-4 w-full m-0 p-0">
-            {/* 4 App Theme Summary Cards */}
-            <div className="px-4 pt-3">
-                <SummaryCards cards={cards} />
-            </div>
-
-
             {/* Attendance Table */}
-            <div className="px-4 pb-4">
+            <div className="px-6 md:px-8 pb-6 pt-1">
                 {staffAttendance.length > 0 ? (
-                    <DataTable columns={columns} data={staffAttendance} renderRow={renderRow} />
+                    <DataTable 
+                        columns={columns} 
+                        data={paginatedStaffAttendance} 
+                        renderRow={renderRow} 
+                        pagination={{
+                            currentPage: currentPage,
+                            totalItems: totalItems,
+                            pageSize: pageSize,
+                            onPageChange: (p) => setCurrentPage(p),
+                            onPageSizeChange: (s) => setPageSize(s),
+                            itemLabel: "staff records"
+                        }}
+                    />
                 ) : (
                     <EmptyState 
                         icon={<FiClock size={48} />} 
@@ -290,59 +383,56 @@ export default function StaffHoursReport({
                         </div>
 
                         {/* Modal Body: Full Day Attendance Log Table */}
-                        <div className="p-5 flex-1 overflow-y-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-slate-200 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50/60">
-                                        <th className="py-3 px-4">Date</th>
-                                        <th className="py-3 px-4">Check In</th>
-                                        <th className="py-3 px-4">Check Out</th>
-                                        <th className="py-3 px-4">Working Hours</th>
-                                        <th className="py-3 px-4">Late Deduction</th>
-                                        <th className="py-3 px-4 text-right">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 text-xs">
-                                    {modalDailyLogs.map((log, index) => (
-                                        <tr key={index} className="hover:bg-slate-50 transition-colors">
-                                            <td className="py-3 px-4 font-bold text-slate-800">
-                                                {log.date}
-                                            </td>
-                                            <td className={`py-3 px-4 font-bold ${log.status === 'Absent' ? 'text-slate-400' : 'text-emerald-600'}`}>
-                                                {log.checkIn}
-                                            </td>
-                                            <td className="py-3 px-4 font-bold text-slate-600">
-                                                {log.checkOut}
-                                            </td>
-                                            <td className="py-3 px-4 font-black text-slate-800">
-                                                {log.workingHours}
-                                            </td>
-                                            <td className="py-3 px-4">
-                                                {log.lateMinutes > 0 ? (
-                                                    <span className="inline-flex flex-col text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded">
-                                                        <span>{log.lateMinutes}m Late</span>
-                                                        <span className="font-extrabold text-rose-600">-₹{log.deductionAmount.toFixed(2)}</span>
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-slate-400 font-medium">None</span>
-                                                )}
-                                            </td>
-                                            <td className="py-3 px-4 text-right">
-                                                <span className={`inline-flex px-2.5 py-1 rounded text-xs font-bold uppercase ${
-                                                    log.status === 'Present' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                                    log.status === 'Late' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                                    log.status === 'Absent' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
-                                                    'bg-slate-100 text-slate-600 border border-slate-200'
-                                                }`}>
-                                                    {log.status}
+                        <div className="p-3 px-5 flex-1 overflow-y-auto no-scrollbar bg-slate-50/30">
+                            <DataTable 
+                                columns={[
+                                    { label: 'DATE', className: 'w-[18%] pl-6' },
+                                    { label: 'CHECK IN', className: 'w-[16%] pl-3' },
+                                    { label: 'CHECK OUT', className: 'w-[16%] pl-3' },
+                                    { label: 'WORKING HOURS', className: 'w-[18%] pl-3' },
+                                    { label: 'LATE DEDUCTION', className: 'w-[18%] pl-3' },
+                                    { label: 'STATUS', className: 'w-[14%] pl-1 text-left' }
+                                ]}
+                                data={modalDailyLogs}
+                                loading={loadingLogs}
+                                emptyMessage="No records found for the selected period."
+                                renderRow={(log, index) => (
+                                    <tr key={index} className="hover:bg-slate-50 transition-colors text-xs">
+                                        <td className="py-3 pl-6 pr-3 font-bold text-slate-800 align-middle">
+                                            {log.date}
+                                        </td>
+                                        <td className={`py-3 px-3 font-bold align-middle ${log.status === 'Absent' ? 'text-slate-400' : 'text-emerald-600'}`}>
+                                            {log.checkIn}
+                                        </td>
+                                        <td className="py-3 px-3 font-bold text-slate-600 align-middle">
+                                            {log.checkOut}
+                                        </td>
+                                        <td className="py-3 px-3 font-black text-slate-800 align-middle">
+                                            {log.workingHours}
+                                        </td>
+                                        <td className="py-3 px-3 align-middle">
+                                            {log.lateMinutes > 0 ? (
+                                                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full shadow-2xs">
+                                                    <span>{log.lateMinutes}m Late</span>
+                                                    <span className="font-extrabold text-rose-600">(-₹{log.deductionAmount.toFixed(0)})</span>
                                                 </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            {loadingLogs && <div className="text-center py-6 text-slate-500 font-medium text-xs">Loading attendance records...</div>}
-                            {!loadingLogs && modalDailyLogs.length === 0 && <div className="text-center py-6 text-slate-500 font-medium text-xs">No records found for the selected period.</div>}
+                                            ) : (
+                                                <span className="text-slate-400 font-medium text-xs">None</span>
+                                            )}
+                                        </td>
+                                        <td className="py-3 pl-1 pr-3 align-middle text-left">
+                                            <span className={`inline-flex items-center gap-1.5 text-[12px] font-bold rounded-full px-3 py-1 border leading-none shadow-2xs ${
+                                                log.status === 'Present' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
+                                                log.status === 'Late' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                                log.status === 'Absent' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                                                'bg-slate-100 text-slate-600 border-slate-200'
+                                            }`}>
+                                                {log.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                )}
+                            />
                         </div>
 
                         {/* Modal Footer */}

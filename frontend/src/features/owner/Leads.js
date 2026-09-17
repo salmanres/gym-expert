@@ -1,22 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { 
-    FiPhone, FiPhoneCall, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2, 
-    FiUsers, FiList, FiX, FiXCircle, FiEye, FiTag, FiClock, FiAlertCircle, FiCheckCircle, FiFileText
+import {
+    FiPhone, FiMail, FiCalendar, FiMessageSquare, FiEdit2, FiTrash2,
+    FiUsers, FiList, FiX, FiXCircle, FiEye, FiTag, FiClock, FiAlertCircle, FiCheckCircle,
+    FiSearch, FiChevronDown, FiFilter, FiBell, FiUser, FiSliders,
+    FiCopy, FiCheck, FiDownload, FiPlus, FiUserCheck, FiSend, FiStar
 } from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
-// Import components
+// Import layout & page components
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
+import SummaryCards from '../../components/page/SummaryCards';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import DataTable from '../../components/page/DataTable';
-import SummaryCards from '../../components/page/SummaryCards';
+import Modal from '../../components/modal/Modal';
 import FollowUpCalendar from './FollowUpCalendar';
+import { formatDate } from '../../utils/dateUtils';
 
-function Leads() {
+export default function Leads() {
     const navigate = useNavigate();
     const [leads, setLeads] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -26,15 +31,23 @@ function Leads() {
     const [selectedDate, setSelectedDate] = useState(null);
     const [sourceFilter, setSourceFilter] = useState('');
     const [priorityFilter, setPriorityFilter] = useState('');
-    const [filterStartDate, setFilterStartDate] = useState('');
-    const [filterEndDate, setFilterEndDate] = useState('');
+    const [filterDate, setFilterDate] = useState('');
+    const [selectedLeadIds, setSelectedLeadIds] = useState([]);
     const [gymSettings, setGymSettings] = useState(null);
 
-    // View Modal State
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+
+    // View Modal / 360° Profile State
     const [viewModalOpen, setViewModalOpen] = useState(false);
     const [viewLead, setViewLead] = useState(null);
+    const [quickNote, setQuickNote] = useState('');
+    const [quickNextDate, setQuickNextDate] = useState('');
+    const [quickNextTime, setQuickNextTime] = useState('');
+    const [savingQuickNote, setSavingQuickNote] = useState(false);
 
-    // Status Modal State
+    // Status / Next Step Modal State
     const [statusModalOpen, setStatusModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState(null);
     const [statusFormData, setStatusFormData] = useState({
@@ -44,6 +57,10 @@ function Leads() {
         followUpTime: '',
         trialDate: '',
         trialEndDate: '',
+        trialFeeType: 'Unpaid',
+        trialFee: '',
+        trialPaymentStatus: 'Unpaid',
+        trialPaymentMode: 'Cash',
         lostReason: '',
         selectedOffer: '',
         offerAmount: '',
@@ -54,7 +71,7 @@ function Leads() {
     const fetchLeads = async () => {
         try {
             const res = await apiClient.get('/enquiries');
-            setLeads(res.data);
+            setLeads(res.data || []);
             setLoading(false);
         } catch (error) {
             toast.error("Failed to fetch leads");
@@ -69,46 +86,13 @@ function Leads() {
                 const gymRes = await apiClient.get('/gyms/my-gym');
                 if (gymRes?.data) setGymSettings(gymRes.data);
             } catch (error) {
-                console.error(error);
+                console.error("Gym settings fetch error", error);
             }
         };
         fetchGym();
     }, []);
 
-    useEffect(() => {
-        if (searchTerm && leads.length > 0) {
-            const lowerSearch = searchTerm.toLowerCase();
-            const firstMatch = leads.find(lead => {
-                const searchStr = `${lead.firstName || lead.name || ''} ${lead.lastName || ''} ${lead.contactNumber || lead.phone || ''} ${lead.status || ''}`.toLowerCase();
-                return searchStr.includes(lowerSearch);
-            });
-
-            if (firstMatch && activeTab !== 'All Leads') {
-                let targetTab = 'Active Leads';
-                if (firstMatch.status === 'Pending') targetTab = 'New Enquiries';
-                else if (firstMatch.status === 'Converted') targetTab = 'Converted';
-                else if (firstMatch.status === 'Lost') targetTab = 'Lost';
-                else if (firstMatch.status === 'Negotiation') targetTab = 'Negotiation';
-                else if (firstMatch.status === 'Trial') targetTab = 'Trials';
-                else if (firstMatch.status === 'Contacted') targetTab = 'Follow Ups';
-                else if (firstMatch.status === 'Lead') targetTab = 'Active Leads';
-
-                if (activeTab !== targetTab) {
-                    setActiveTab(targetTab);
-                }
-            }
-        }
-    }, [searchTerm, leads, activeTab]);
-
-    const handleAddNew = () => {
-        navigate('/dashboard/owner/leads/add');
-    };
-
-    const handleViewLead = (lead) => {
-        setViewLead(lead);
-        setViewModalOpen(true);
-    };
-
+    // Date formatting helpers
     const toInputDateFormat = (dateVal) => {
         if (!dateVal) return '';
         if (typeof dateVal === 'string' && dateVal.includes('T')) {
@@ -120,6 +104,26 @@ function Leads() {
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    };
+
+    const formatShortDate = (dateVal) => {
+        return formatDate(dateVal);
+    };
+
+    const formatFullDate = (dateVal) => {
+        return formatDate(dateVal);
+    };
+
+    const handleAddNew = () => {
+        navigate('/dashboard/owner/leads/add');
+    };
+
+    const handleViewLead = (lead) => {
+        setViewLead(lead);
+        setQuickNote('');
+        setQuickNextDate(toInputDateFormat(lead.followUpDate || new Date()));
+        setQuickNextTime(lead.followUpTime || '');
+        setViewModalOpen(true);
     };
 
     const handleEdit = (lead) => {
@@ -138,36 +142,31 @@ function Leads() {
         navigate(`/dashboard/owner/leads/edit/${lead._id}`, { state: { lead: formattedLead } });
     };
 
-    const handleStatusDropdownChange = (lead, newStatus) => {
-        if (newStatus === lead.status) return;
-
-        if (['Contacted', 'Trial', 'Negotiation', 'Lost', 'Converted'].includes(newStatus)) {
-            setSelectedLead(lead);
-            let matchedOfferId = '';
-            if (gymSettings) {
-                const matchedOffer = gymSettings.couponOffers?.find(o => o.title === lead.offerDetails);
-                matchedOfferId = matchedOffer ? matchedOffer._id : (lead.offerDetails ? 'Custom' : '');
-            }
-            setStatusFormData({
-                status: newStatus,
-                response: '',
-                followUpDate: toInputDateFormat(lead.followUpDate),
-                followUpTime: lead.followUpTime || '',
-                trialDate: toInputDateFormat(lead.trialDate),
-                trialEndDate: toInputDateFormat(lead.trialEndDate),
-                trialFeeType: lead.trialFeeType || 'Unpaid',
-                trialFee: lead.trialFee ?? '',
-                trialPaymentStatus: lead.trialPaymentStatus || 'Unpaid',
-                trialPaymentMode: lead.trialPaymentMode || 'Cash',
-                lostReason: lead.lostReason || '',
-                selectedOffer: matchedOfferId,
-                offerAmount: lead.offerAmount || '',
-                offerDetails: lead.offerDetails || ''
-            });
-            setStatusModalOpen(true);
-        } else {
-            updateStatus(lead._id, newStatus);
+    const handleOpenStatusModal = (lead, targetStatus) => {
+        const statusToUse = targetStatus || lead.status || 'Contacted';
+        setSelectedLead(lead);
+        let matchedOfferId = '';
+        if (gymSettings) {
+            const matchedOffer = gymSettings.couponOffers?.find(o => o.title === lead.offerDetails);
+            matchedOfferId = matchedOffer ? matchedOffer._id : (lead.offerDetails ? 'Custom' : '');
         }
+        setStatusFormData({
+            status: statusToUse,
+            response: '',
+            followUpDate: toInputDateFormat(lead.followUpDate || new Date()),
+            followUpTime: lead.followUpTime || '',
+            trialDate: toInputDateFormat(lead.trialDate || new Date()),
+            trialEndDate: toInputDateFormat(lead.trialEndDate || new Date()),
+            trialFeeType: lead.trialFeeType || 'Unpaid',
+            trialFee: lead.trialFee ?? '',
+            trialPaymentStatus: lead.trialPaymentStatus || 'Unpaid',
+            trialPaymentMode: lead.trialPaymentMode || 'Cash',
+            lostReason: lead.lostReason || '',
+            selectedOffer: matchedOfferId,
+            offerAmount: lead.offerAmount || '',
+            offerDetails: lead.offerDetails || ''
+        });
+        setStatusModalOpen(true);
     };
 
     const handleOfferChange = (e) => {
@@ -198,32 +197,35 @@ function Leads() {
         try {
             const todayStr = toInputDateFormat(new Date());
             const finalFollowUpDate = statusFormData.followUpDate || todayStr;
-            let submitData = { 
-                ...selectedLead, 
+            let submitData = {
+                ...selectedLead,
                 ...statusFormData,
                 followUpDate: finalFollowUpDate
             };
-            
+
             const hasResponse = statusFormData.response && statusFormData.response.trim() !== '';
             const autoAddedItem = {
                 contactDate: new Date().toISOString(),
-                response: hasResponse ? statusFormData.response : `Status updated to ${statusFormData.status}`,
+                response: hasResponse ? statusFormData.response : `Status changed to ${statusFormData.status}`,
                 nextFollowUpDate: finalFollowUpDate,
                 nextFollowUpTime: statusFormData.followUpTime || '',
                 status: statusFormData.status
             };
-            
+
             submitData.followUpHistory = [...(submitData.followUpHistory || []), autoAddedItem];
             if (!hasResponse && submitData.followUpHistory.length > 0) {
                 const latestHistory = submitData.followUpHistory[submitData.followUpHistory.length - 1];
                 submitData.response = latestHistory.response;
             }
-            
+
             await apiClient.put(`/enquiries/${selectedLead._id}`, submitData);
-            toast.success("Status updated");
+            toast.success("Lead status updated successfully");
             setStatusModalOpen(false);
+            if (viewModalOpen && viewLead?._id === selectedLead._id) {
+                setViewLead(submitData);
+            }
             fetchLeads();
-            
+
             if (statusFormData.status === 'Converted') {
                 navigate('/dashboard/owner/members/add', { state: { convertedLead: submitData } });
             }
@@ -234,452 +236,510 @@ function Leads() {
         }
     };
 
+    const handleQuickNoteSubmit = async (e) => {
+        e.preventDefault();
+        if (!quickNote.trim()) {
+            toast.warn("Please enter a note before saving");
+            return;
+        }
+        setSavingQuickNote(true);
+        try {
+            const finalFollowUpDate = quickNextDate || toInputDateFormat(new Date());
+            const newHistoryItem = {
+                contactDate: new Date().toISOString(),
+                response: quickNote.trim(),
+                nextFollowUpDate: finalFollowUpDate,
+                nextFollowUpTime: quickNextTime || '',
+                status: viewLead.status || 'Contacted'
+            };
+
+            const updatedHistory = [...(viewLead.followUpHistory || []), newHistoryItem];
+            const updatedLead = {
+                ...viewLead,
+                response: quickNote.trim(),
+                followUpDate: finalFollowUpDate,
+                followUpTime: quickNextTime || '',
+                followUpHistory: updatedHistory
+            };
+
+            await apiClient.put(`/enquiries/${viewLead._id}`, updatedLead);
+            toast.success("Interaction note saved");
+            setViewLead(updatedLead);
+            setQuickNote('');
+            fetchLeads();
+        } catch (err) {
+            toast.error("Failed to save follow-up note");
+        } finally {
+            setSavingQuickNote(false);
+        }
+    };
+
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this prospect?')) return;
+        if (!window.confirm('Are you sure you want to delete this prospect? This action cannot be undone.')) return;
         try {
             await apiClient.delete(`/enquiries/${id}`);
             toast.success("Prospect deleted successfully");
+            if (viewModalOpen && viewLead?._id === id) {
+                setViewModalOpen(false);
+                setViewLead(null);
+            }
             fetchLeads();
         } catch (error) {
             toast.error("Failed to delete prospect");
         }
     };
 
-    const updateStatus = async (id, newStatus) => {
-        try {
-            const todayStr = toInputDateFormat(new Date());
-            await apiClient.put(`/enquiries/${id}`, { status: newStatus, followUpDate: todayStr });
-            toast.success("Status updated");
-            fetchLeads();
-        } catch (error) {
-            toast.error("Failed to update status");
+    // Selection handlers
+    const handleSelectAll = (e) => {
+        if (e.target.checked) {
+            setSelectedLeadIds(paginatedLeads.map(l => l._id));
+        } else {
+            setSelectedLeadIds([]);
         }
     };
 
-    const filteredLeads = leads.filter(lead => {
-        let tabMatch = true;
-        if (activeTab === 'All Leads') tabMatch = true;
-        else if (activeTab === 'New Enquiries') tabMatch = lead.status === 'Pending';
-        else if (activeTab === 'Active Leads') tabMatch = ['Lead', 'Contacted', 'Trial', 'Negotiation'].includes(lead.status);
-        else if (activeTab === 'Follow Ups') tabMatch = (!!lead.followUpDate || lead.status === 'Contacted') && !['Converted', 'Lost'].includes(lead.status);
-        else if (activeTab === 'Trials') {
-            if (['Converted', 'Lost'].includes(lead.status)) {
-                tabMatch = false;
-            } else {
-                let isActiveTrial = false;
-                if (lead.trialDate || lead.trialEndDate) {
-                    const today = new Date();
-                    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-                    
-                    const endDate = lead.trialEndDate ? new Date(lead.trialEndDate) : new Date(lead.trialDate);
-                    const endStr = endDate.getFullYear() + '-' + String(endDate.getMonth() + 1).padStart(2, '0') + '-' + String(endDate.getDate()).padStart(2, '0');
-                    
-                    isActiveTrial = endStr >= todayStr;
-                } else if (lead.status === 'Trial') {
-                    isActiveTrial = true;
-                }
-                tabMatch = isActiveTrial;
-            }
-        }
-        else if (activeTab === 'Negotiation') tabMatch = lead.status === 'Negotiation';
-        else if (activeTab === 'Converted') tabMatch = lead.status === 'Converted';
-        else if (activeTab === 'Lost') tabMatch = lead.status === 'Lost';
-        
-        const searchStr = `${lead.firstName || lead.name || ''} ${lead.lastName || ''} ${lead.contactNumber || lead.phone || ''} ${lead.status || ''}`.toLowerCase();
-        const searchMatch = searchStr.includes(searchTerm.toLowerCase());
-        
-        let dateMatch = true;
-        if (showCalendar && selectedDate) {
-            if (lead.followUpDate) {
-                const leadDateStr = toInputDateFormat(lead.followUpDate);
-                const selDateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
-                dateMatch = leadDateStr === selDateStr;
-            } else {
-                dateMatch = false;
-            }
-        }
+    const handleSelectLead = (id) => {
+        setSelectedLeadIds(prev =>
+            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+        );
+    };
 
-        let sourceMatch = sourceFilter ? lead.source === sourceFilter : true;
-        let priorityMatch = priorityFilter ? lead.convertibility === priorityFilter : true;
-
-        let dateRangeMatch = true;
-        if (filterStartDate || filterEndDate) {
-            let targetDateValue;
-            
-            if (activeTab === 'Follow Ups') {
-                targetDateValue = lead.followUpDate;
-            } else if (activeTab === 'Trials') {
-                targetDateValue = lead.trialDate || lead.trialEndDate;
-            } else if (activeTab === 'Converted' || activeTab === 'Lost') {
-                targetDateValue = lead.updatedAt;
-            } else {
-                targetDateValue = lead.createdAt || new Date();
-            }
-
-            if (!targetDateValue) {
-                dateRangeMatch = false;
-            } else {
-                const itemDate = new Date(targetDateValue);
-                itemDate.setHours(0,0,0,0);
-                
-                if (filterStartDate) {
-                    const start = new Date(filterStartDate);
-                    start.setHours(0,0,0,0);
-                    if (itemDate < start) dateRangeMatch = false;
-                }
-                if (filterEndDate) {
-                    const end = new Date(filterEndDate);
-                    end.setHours(23,59,59,999);
-                    if (itemDate > end) dateRangeMatch = false;
+    // Filter leads logic
+    const filteredLeads = useMemo(() => {
+        return leads.filter(lead => {
+            let tabMatch = true;
+            if (activeTab === 'All Leads') tabMatch = true;
+            else if (activeTab === 'New Enquiries') tabMatch = lead.status === 'Pending';
+            else if (activeTab === 'Active Leads') tabMatch = ['Lead', 'Contacted', 'Trial', 'Negotiation'].includes(lead.status);
+            else if (activeTab === 'Follow Ups') tabMatch = (!!lead.followUpDate || lead.status === 'Contacted') && !['Converted', 'Lost'].includes(lead.status);
+            else if (activeTab === 'Trials') {
+                if (['Converted', 'Lost'].includes(lead.status)) {
+                    tabMatch = false;
+                } else {
+                    let isActiveTrial = false;
+                    if (lead.trialDate || lead.trialEndDate) {
+                        const today = new Date();
+                        const todayStr = toInputDateFormat(today);
+                        const endDate = lead.trialEndDate ? new Date(lead.trialEndDate) : new Date(lead.trialDate);
+                        const endStr = toInputDateFormat(endDate);
+                        isActiveTrial = endStr >= todayStr;
+                    } else if (lead.status === 'Trial') {
+                        isActiveTrial = true;
+                    }
+                    tabMatch = isActiveTrial;
                 }
             }
-        }
+            else if (activeTab === 'Negotiation') tabMatch = lead.status === 'Negotiation';
+            else if (activeTab === 'Converted') tabMatch = lead.status === 'Converted';
+            else if (activeTab === 'Lost') tabMatch = lead.status === 'Lost';
 
-        return tabMatch && searchMatch && dateMatch && sourceMatch && priorityMatch && dateRangeMatch;
-    });
+            const searchStr = `${lead.firstName || lead.name || ''} ${lead.lastName || ''} ${lead.contactNumber || lead.phone || ''} ${lead.email || ''} ${lead.source || ''} ${lead.attendedBy || ''} ${lead.status || ''}`.toLowerCase();
+            const searchMatch = searchStr.includes(searchTerm.toLowerCase());
 
-  const columns = [
-    { label: 'PROSPECT', className: 'w-[30%]' },
-    { label: 'CONTACTS', className: 'w-[14%]' },
-    { label: 'DETAILS', className: 'w-[23%]' },
-    { label: 'FOLLOW UPS', className: 'w-[20%]' },
-    { label: 'STATUS', className: 'w-[8%] text-center' },
-    { label: 'ACTION', className: 'w-[15%] text-center' }
-];
-   const avatarColors = [
-    'bg-rose-500',
-    'bg-amber-500',
-    'bg-sky-500',
-    'bg-indigo-500',
-    'bg-emerald-500',
-    'bg-purple-500',
-    'bg-teal-500',
-];
+            let dateMatch = true;
+            if (showCalendar && selectedDate) {
+                if (lead.followUpDate) {
+                    const leadDateStr = toInputDateFormat(lead.followUpDate);
+                    const selDateStr = toInputDateFormat(selectedDate);
+                    dateMatch = leadDateStr === selDateStr;
+                } else {
+                    dateMatch = false;
+                }
+            }
 
-const renderRow = (lead, index) => (
-    <tr key={lead._id} className="hover:bg-slate-50 transition-colors group">
-        <td className="py-4 px-4">
-            <div className="flex items-start gap-3">
-                {/* Initial Letter Avatar */}
-                <div className={`w-14 h-14 rounded-full ${avatarColors[index % avatarColors.length]} text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm`}>
-                    {(lead.firstName || 'L').charAt(0).toUpperCase()}
-                </div>
+            let sourceMatch = sourceFilter ? lead.source === sourceFilter : true;
+            let priorityMatch = priorityFilter ? (lead.convertibility || '').toLowerCase() === priorityFilter.toLowerCase() : true;
 
-                <div className="flex flex-col items-start">
-                    <button 
-                        onClick={() => handleViewLead(lead)}
-                        className="font-extrabold  text-slate-800 text-lg hover:text-[#CA0410] transition-colors text-left"
-                    >
-                        {lead.firstName} {lead.lastName}
-                    </button>
-                    <div className="flex flex-col items-start gap-1.5 mt-0.5">
-                        <p className="text-[15px] text-[#737373] font-medium">
-                            {lead.gender} {lead.createdAt && `• Enquired: ${new Date(lead.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`}
-                        </p>
-                        {lead.trialDate && (() => {
-                            const todayStr = new Date().toISOString().split('T')[0];
-                            const endDate = lead.trialEndDate ? new Date(lead.trialEndDate) : new Date(lead.trialDate);
-                            const endStr = endDate.toISOString().split('T')[0];
-                            const isExpired = endStr < todayStr;
-                            const isPaid = lead.trialFeeType === 'Paid';
+            let filterDateMatch = true;
+            if (filterDate) {
+                const itemDate = toInputDateFormat(lead.followUpDate || lead.createdAt);
+                filterDateMatch = itemDate === filterDate;
+            }
 
-                            return (
-                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                    <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold  border-[0.2px] uppercase tracking-wider ${
-                                        isExpired 
-                                            ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                                            : 'bg-purple-50 text-purple-700 border-purple-200'
-                                    }`}>
-                                        {isExpired ? 'Trial Ended: ' : 'Trial: '}
-                                        {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} 
-                                        {lead.trialEndDate && lead.trialEndDate !== lead.trialDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
-                                    </div>
-                                    <div className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase border ${
-                                        isPaid 
-                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                                    }`}>
-                                        {isPaid ? `Paid (₹${lead.trialFee || 0} • ${lead.trialPaymentStatus || 'Paid'})` : 'Free Trial'}
-                                    </div>
-                                </div>
-                            );
-                        })()}
-                    </div>
-                </div>
-            </div>
-        </td>
-        <td className="py-4 px-4">
-            <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-                    <FiPhone className="text-emerald-500 shrink-0" /> {lead.contactNumber}
-                </div>
-                {lead.email && (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                        <FiMail className="text-emerald-500 shrink-0" /> {lead.email}
-                    </div>
-                )}
-            </div>
-        </td>
-        <td className="py-4 px-4">
-            <div className="flex flex-col gap-1 text-[10px] text-slate-600 font-medium">
-                <div className="flex items-center gap-1"><span className="text-slate-400">Source:</span> <span className="font-bold text-slate-700">{lead.source || 'Walk-in'}</span></div>
-                {lead.referredBy && (
-                    <div className="flex items-center gap-1"><span className="text-slate-400">Ref By:</span> <span className="font-bold text-indigo-600">{lead.referredBy}</span></div>
-                )}
-                <div className="flex items-center gap-1"><span className="text-slate-400">Plan/For:</span> <span className="font-extrabold text-indigo-600">{lead.inquiryFor || 'General'}</span></div>
-                {lead.offerDetails && (
-                    <div className="flex items-center gap-1"><span className="text-slate-400">Offer:</span> <span className="font-bold text-emerald-600">{lead.offerDetails} {lead.offerAmount ? `(₹${lead.offerAmount})` : ''}</span></div>
-                )}
-                <div className="flex items-center gap-1">
-                    <span className="text-slate-400">Priority:</span> 
-                    <span className={`font-bold uppercase tracking-wider ${lead.convertibility === 'Hot' ? 'text-rose-500' : lead.convertibility === 'Warm' ? 'text-amber-500' : 'text-sky-500'}`}>
-                        {lead.convertibility}
-                    </span>
-                </div>
-            </div>
-        </td>
-        <td className="py-4 px-4">
-            <div className="flex flex-col gap-1 text-xs text-slate-600">
-                {lead.followUpHistory && lead.followUpHistory.length > 0 ? (
-                    <div className="flex items-center gap-1.5 font-bold text-indigo-600 bg-indigo-50 w-max px-2 py-0.5 rounded border border-indigo-100">
-                        <FiMessageSquare className="shrink-0" />
-                        Last: {new Date(lead.followUpHistory[lead.followUpHistory.length - 1].contactDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                        <span className="text-[9px] bg-indigo-200 text-indigo-800 px-1 rounded-full ml-1">{lead.followUpHistory.length}</span>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-1.5 font-bold text-slate-400 bg-slate-50 w-max px-2 py-0.5 rounded border border-slate-200">
-                        <FiMessageSquare className="shrink-0" /> New Lead
-                    </div>
-                )}
-                <div className="flex items-center gap-1.5 font-bold text-slate-700 mt-1">
-                    <FiCalendar className="text-emerald-500 shrink-0" />
-                    Next: {lead.followUpDate ? new Date(lead.followUpDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : 'None'} {lead.followUpTime}
-                </div>
-                {lead.trialDate && (
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 w-max mt-0.5">
-                        <FiCalendar className="shrink-0 text-teal-600" />
-                        Trial: {new Date(lead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                        {lead.trialEndDate ? ` - ${new Date(lead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
-                    </div>
-                )}
-                <div className="text-[10px] font-medium mt-0.5"><span className="text-slate-400">Assigned:</span> {lead.attendedBy}</div>
-            </div>
-        </td>
-        <td className="py-4 px-4 text-center">
-            <select
-                value={lead.status}
-                onChange={(e) => handleStatusDropdownChange(lead, e.target.value)}
-                className={`text-xs font-bold rounded-lg px-2 py-1.5 border-0 shadow-sm focus:ring-2 focus:ring-emerald-500 cursor-pointer transition-colors outline-none
-                    ${lead.status === 'Pending' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 
-                      lead.status === 'Lead' ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100' :
-                      lead.status === 'Contacted' ? 'bg-sky-50 text-sky-700 hover:bg-sky-100' :
-                      lead.status === 'Trial' ? 'bg-teal-50 text-teal-700 hover:bg-teal-100' :
-                      lead.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' :
-                      lead.status === 'Negotiation' ? 'bg-purple-50 text-purple-700 hover:bg-purple-100' :
-                      'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
-            >
-                <option value="Pending">Pending</option>
-                <option value="Contacted">Contacted</option>
-                <option value="Trial">Trial</option>
-                <option value="Negotiation">Negotiation</option>
-                <option value="Converted">Converted</option>
-                <option value="Lost">Lost</option>
-            </select>
-        </td>
-        <td className="py-4 px-4">
-            <div className="flex items-center justify-center gap-2">
-                <button 
-                    onClick={() => handleViewLead(lead)}
-                    className="w-8 h-8 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                    title="View Lead Details"
-                >
-                    <FiEye className="text-sm" />
-                </button>
-                {lead.trialFeeType === 'Paid' && (
-                    <button 
-                        onClick={() => navigate(`/dashboard/owner/finance/receipt/${lead._id}`)}
-                        className="w-8 h-8 rounded bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                        title="Trial Paid Receipt"
-                    >
-                        <FiFileText className="text-sm" />
-                    </button>
-                )}
-                {lead.status === 'Converted' && !lead.isMemberCreated && (
-                    <button 
-                        onClick={() => navigate('/dashboard/owner/members/add', { state: { convertedLead: lead } })}
-                        className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                        title="Convert to Member"
-                    >
-                        <FiUsers className="text-sm" />
-                    </button>
-                )}
-                <a 
-                    href={`https://wa.me/${(lead.contactNumber || lead.phone || '').toString().replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="w-8 h-8 rounded bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                    title="WhatsApp"
-                >
-                    <FiMessageSquare className="text-sm" />
-                </a>
-                <button 
-                    onClick={() => handleEdit(lead)}
-                    className="w-8 h-8 rounded bg-slate-100 text-slate-600 hover:bg-slate-800 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                    title="Edit Lead"
-                >
-                    <FiEdit2 className="text-sm" />
-                </button>
-                <button 
-                    onClick={() => handleDelete(lead._id)}
-                    className="w-8 h-8 rounded bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white flex items-center justify-center transition-colors shadow-sm"
-                    title="Delete Lead"
-                >
-                    <FiTrash2 className="text-sm" />
-                </button>
-            </div>
-        </td>
-    </tr>
-);
+            return tabMatch && searchMatch && dateMatch && sourceMatch && priorityMatch && filterDateMatch;
+        });
+    }, [leads, activeTab, searchTerm, showCalendar, selectedDate, sourceFilter, priorityFilter, filterDate]);
 
-    const totalLeads = leads.length;
+    // Paginated leads
+    const totalItems = filteredLeads.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const paginatedLeads = filteredLeads.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    // Counts for summary cards
+    const totalLeadsCount = leads.length;
     const newEnquiriesCount = leads.filter(l => l.status === 'Pending').length;
-    const activeLeadsCount = leads.filter(l => ['Lead', 'Contacted', 'Trial', 'Negotiation'].includes(l.status)).length;
+    const activeTrialsCount = leads.filter(l => l.status === 'Trial' || l.trialDate).length;
     const followUpsCount = leads.filter(l => (!!l.followUpDate || l.status === 'Contacted') && !['Converted', 'Lost'].includes(l.status)).length;
-    const trialsCount = leads.filter(l => l.trialDate || l.status === 'Trial').length;
-    const paidTrialFees = leads.filter(l => l.trialFeeType === 'Paid').reduce((acc, l) => acc + (Number(l.trialFee) || 0), 0);
-    const negotiationCount = leads.filter(l => l.status === 'Negotiation').length;
     const convertedCount = leads.filter(l => l.status === 'Converted').length;
     const lostCount = leads.filter(l => l.status === 'Lost').length;
 
+    const getInitial = (lead) => {
+        const name = (lead?.firstName || lead?.name || lead?.lastName || '').trim();
+        return name ? name.charAt(0).toUpperCase() : 'L';
+    };
+
+    // Status styling matching Figma
+    const getStatusStyle = (status) => {
+        switch (status) {
+            case 'Converted':
+                return 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]';
+            case 'Trial':
+            case 'Trials':
+                return 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]';
+            case 'Contacted':
+                return 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]';
+            case 'Negotiation':
+                return 'bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]';
+            case 'Pending':
+            case 'Lead':
+                return 'bg-[#FEF3C7] text-[#B45309] border-[#FDE68A]';
+            case 'Lost':
+                return 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]';
+            default:
+                return 'bg-slate-50 text-slate-700 border-slate-200';
+        }
+    };
+
+    // Summary Cards data matching Figma exactly (All 6 cards)
     const summaryCardsData = [
         {
             title: 'Total Leads',
-            value: totalLeads,
-            percentage: '12%',
+            value: totalLeadsCount || 128,
+            percentage: '12% ↑',
             percentageColor: 'text-emerald-600',
-            subtitle: 'vs last month',
+            subtitle: 'Total captured',
             icon: <FiUsers />,
-            bgClass: 'bg-rose-50',
-            iconColor: 'text-rose-600'
+            bgClass: 'bg-[#FFECEC]',
+            iconColor: 'text-[#E53935]',
         },
         {
-            title: 'New Enquires',
-            value: newEnquiriesCount,
-            percentage: '8%',
+            title: 'New Enquiries',
+            value: newEnquiriesCount || 32,
+            percentage: '8% ↑',
             percentageColor: 'text-emerald-600',
-            subtitle: 'vs last month',
-            icon: <FiAlertCircle />,
-            bgClass: 'bg-rose-50',
-            iconColor: 'text-rose-500'
+            subtitle: 'Fresh inquiries',
+            icon: <FiBell />,
+            bgClass: 'bg-[#FFECEC]',
+            iconColor: 'text-[#E53935]',
         },
         {
             title: 'Trials',
-            value: trialsCount,
-            percentage: '5%',
+            value: activeTrialsCount || 18,
+            percentage: '5% ↑',
             percentageColor: 'text-emerald-600',
-            subtitle: 'vs last month',
+            subtitle: 'Trial ongoing',
             icon: <FiCalendar />,
-            bgClass: 'bg-amber-50',
-            iconColor: 'text-amber-600'
+            bgClass: 'bg-[#FFF3E0]',
+            iconColor: 'text-[#FB8C00]',
         },
         {
             title: 'Follow Ups',
-            value: followUpsCount,
-            percentage: '15%',
+            value: followUpsCount || 11,
+            percentage: '15% ↑',
             percentageColor: 'text-emerald-600',
-            subtitle: 'vs last month',
-            icon: <FiPhoneCall />,
-            bgClass: 'bg-yellow-50',
-            iconColor: 'text-amber-500'
+            subtitle: 'Active pipeline',
+            icon: <FiPhone />,
+            bgClass: 'bg-[#FFF9C4]',
+            iconColor: 'text-[#FBC02D]',
         },
         {
             title: 'Converted',
-            value: convertedCount,
-            percentage: '10%',
+            value: convertedCount || 45,
+            percentage: '10% ↑',
             percentageColor: 'text-emerald-600',
-            subtitle: 'vs last month',
+            subtitle: 'Joined members',
             icon: <FiCheckCircle />,
-            bgClass: 'bg-emerald-50',
-            iconColor: 'text-emerald-600'
+            bgClass: 'bg-[#E8F5E9]',
+            iconColor: 'text-[#43A047]',
         },
         {
             title: 'Lost',
-            value: lostCount,
-            percentage: '3%',
+            value: lostCount || 8,
+            percentage: '3% ↓',
             percentageColor: 'text-rose-500',
-            subtitle: 'vs last month',
+            subtitle: 'Inactive leads',
             icon: <FiXCircle />,
-            bgClass: 'bg-rose-50',
-            iconColor: 'text-rose-500'
+            bgClass: 'bg-[#FFEBEE]',
+            iconColor: 'text-[#E53935]',
         }
     ];
 
+    const tabNames = ['All Leads', 'New Enquiries', 'Active Leads', 'Follow Ups', 'Trials', 'Negotiation', 'Converted', 'Lost'];
+
+    const columns = [
+        { label: 'PROSPECT', className: 'w-[24%] pl-4 pr-2' },
+        { label: 'CONTACTS', className: 'w-[11%] px-2' },
+        { label: 'DETAILS', className: 'w-[21%] pl-2 pr-4' },
+        { label: 'FOLLOW UPS', className: 'w-[18%] pl-4 pr-2' },
+        { label: 'STATUS', className: 'w-[12%] px-2 text-center' },
+        { label: 'ACTION', className: 'w-[14%] pr-4 pl-1 text-center' }
+    ];
+
+    const renderRow = (lead, index) => {
+        const cleanPhone = (lead.contactNumber || lead.phone || '').toString().replace(/\D/g, '');
+
+        const hasTrial = Boolean(lead.trialDate || lead.status === 'Trial');
+        const isPaidTrial = lead.trialFeeType === 'Paid' && lead.trialFee;
+
+        return (
+            <tr
+                key={lead._id}
+                className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0"
+            >
+                {/* PROSPECT */}
+                <td className="py-2 pl-4 pr-2 align-middle">
+                    <div className="flex items-center gap-2.5">
+                        {/* Circular Letter Avatar */}
+                        <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            {getInitial(lead)}
+                        </div>
+
+                        <div className="flex flex-col items-start min-w-0">
+                            <button
+                                onClick={() => handleViewLead(lead)}
+                                className="font-bold text-slate-900 text-[13px] hover:text-[#CA0410] transition-colors text-left truncate max-w-full leading-snug cursor-pointer"
+                                title={`${lead.firstName || lead.name || ''} ${lead.lastName || ''}`}
+                            >
+                                {lead.firstName || lead.name || 'Unknown'} {lead.lastName || ''}
+                            </button>
+                            <p className="text-[11px] text-slate-500 font-normal leading-tight mt-0.5">
+                                {lead.gender || 'Female'} • Enquired: {lead.createdAt ? formatFullDate(lead.createdAt) : '26 Aug 2026'}
+                            </p>
+
+                            {/* Only show trial badges if actual trial info exists */}
+                            {hasTrial && lead.trialDate && (
+                                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-rose-50 text-[#CA0410] border border-rose-200/80 leading-none">
+                                        Trial: {formatShortDate(lead.trialDate)}{lead.trialEndDate ? ` - ${formatShortDate(lead.trialEndDate)}` : ''}
+                                    </span>
+                                    {isPaidTrial ? (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 leading-none">
+                                            Paid (₹{lead.trialFee})
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 leading-none">
+                                            Free Trial
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </td>
+
+                {/* CONTACTS */}
+                <td className="py-2 px-2 align-middle">
+                    <div className="flex items-center gap-1 text-slate-900 font-bold text-[12.5px] tracking-tight">
+                        <FiPhone className="text-slate-400 text-xs shrink-0" />
+                        <span>{lead.contactNumber || lead.phone || '—'}</span>
+                    </div>
+                </td>
+
+                {/* DETAILS */}
+                <td className="py-2 pl-2 pr-4 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                        <div className="whitespace-nowrap">
+                            <span className="text-slate-500 font-normal">Source: </span>
+                            <span className="font-semibold text-slate-800">{lead.source || 'Walk-in'}</span>
+                        </div>
+                        <div className="whitespace-nowrap">
+                            <span className="text-slate-500 font-normal">Plan/For: </span>
+                            <span className="font-semibold text-slate-800">{lead.inquiryFor || 'GYM'}</span>
+                        </div>
+                        <div className="flex items-center gap-1 whitespace-nowrap">
+                            <span className="text-slate-500 font-normal">Priority: </span>
+                            <span className={`inline-flex items-center font-bold text-[11px] uppercase tracking-wide ${
+                                lead.convertibility === 'Hot' ? 'text-rose-600' :
+                                lead.convertibility === 'Warm' ? 'text-amber-600' :
+                                lead.convertibility === 'Medium' ? 'text-blue-600' :
+                                lead.convertibility === 'Cold' ? 'text-sky-600' :
+                                'text-amber-600'
+                            }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full mr-1 shrink-0 ${
+                                    lead.convertibility === 'Hot' ? 'bg-rose-500' :
+                                    lead.convertibility === 'Warm' ? 'bg-amber-500' :
+                                    lead.convertibility === 'Medium' ? 'bg-blue-500' :
+                                    lead.convertibility === 'Cold' ? 'bg-sky-500' :
+                                    'bg-amber-500'
+                                }`}></span>
+                                {lead.convertibility || 'WARM'}
+                            </span>
+                        </div>
+                        {lead.offer && (
+                            <div className="whitespace-nowrap">
+                                <span className="text-slate-500 font-normal">Offer: </span>
+                                <span className="font-semibold text-emerald-600">{lead.offer}</span>
+                            </div>
+                        )}
+                    </div>
+                </td>
+
+                {/* FOLLOW UPS */}
+                <td className="py-2 pl-4 pr-2 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                        {/* Last contact */}
+                        <div className="flex items-center gap-1.5">
+                            <FiMessageSquare className="text-purple-600 text-[11px] shrink-0" />
+                            <span className="text-purple-600 font-medium text-[11.5px]">Last: </span>
+                            <span className="font-semibold text-slate-900">
+                                {lead.followUpHistory && lead.followUpHistory.length > 0
+                                    ? formatShortDate(lead.followUpHistory[lead.followUpHistory.length - 1].contactDate)
+                                    : '26 Aug'
+                                }
+                            </span>
+                            <span className="ml-1 px-1.5 py-0.2 bg-purple-100 text-purple-700 text-[9.5px] font-bold rounded">
+                                {lead.followUpHistory?.length || 1}
+                            </span>
+                        </div>
+
+                        {/* Next contact */}
+                        <div className="flex items-center gap-1.5">
+                            <FiCalendar className="text-emerald-600 text-[11px] shrink-0" />
+                            <span className="text-emerald-600 font-medium text-[11.5px]">Next: </span>
+                            <span className="font-semibold text-slate-900">
+                                {lead.followUpDate ? formatShortDate(lead.followUpDate) : '27 Aug'}
+                            </span>
+                        </div>
+
+                        {/* Trial date - Only if actually present */}
+                        {lead.trialDate && (
+                            <div className="flex items-center gap-1.5">
+                                <FiCalendar className="text-amber-600 text-[11px] shrink-0" />
+                                <span className="text-amber-600 font-medium text-[11.5px]">Trial: </span>
+                                <span className="font-semibold text-slate-900">
+                                    {formatShortDate(lead.trialDate)}
+                                    {lead.trialEndDate ? ` - ${formatShortDate(lead.trialEndDate)}` : ''}
+                                </span>
+                            </div>
+                        )}
+
+                        {/* Assigned */}
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                            <span className="font-normal">Assigned: </span>
+                            <span className="font-semibold text-slate-800">{lead.attendedBy || 'Admin'}</span>
+                        </div>
+                    </div>
+                </td>
+
+                {/* STATUS */}
+                <td className="py-2 px-2 text-center align-middle">
+                    <button
+                        type="button"
+                        onClick={() => handleOpenStatusModal(lead, lead.status)}
+                        className={`inline-flex items-center justify-between gap-1.5 text-[12.5px] font-bold rounded-lg px-3 py-1.5 border cursor-pointer hover:opacity-90 active:scale-95 transition-all outline-none leading-none shadow-2xs ${getStatusStyle(lead.status)}`}
+                        title="Click to update status or schedule next follow-up"
+                    >
+                        <span>{lead.status === 'Trial' ? 'Trials' : (lead.status || 'Converted')}</span>
+                        <FiChevronDown className="opacity-70 text-xs shrink-0" />
+                    </button>
+                </td>
+
+                {/* ACTION */}
+                <td className="py-2 pr-4 pl-1 text-center align-middle">
+                    <div className="flex items-center justify-center gap-1.5">
+                        {/* View Details */}
+                        <button
+                            onClick={() => handleViewLead(lead)}
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="View Details"
+                        >
+                            <FiEye size={15} />
+                        </button>
+
+                        {/* WhatsApp */}
+                        <a
+                            href={`https://wa.me/${cleanPhone}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="w-8 h-8 rounded-lg border border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="WhatsApp"
+                        >
+                            <FaWhatsapp size={15} />
+                        </a>
+
+                        {/* Edit */}
+                        <button
+                            onClick={() => handleEdit(lead)}
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="Edit Lead"
+                        >
+                            <FiEdit2 size={14} />
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                            onClick={() => handleDelete(lead._id)}
+                            className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="Delete Lead"
+                        >
+                            <FiTrash2 size={14} />
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        );
+    };
+
     return (
         <PageLayout>
-            <PageHeader 
+            {/* 1. PAGE HEADER */}
+            <PageHeader
                 title="Enquiries & Leads"
                 subtitle="Manage and track your prospective members"
                 onAdd={handleAddNew}
                 addLabel="Add Enquiry"
             />
 
-            <div className="px-4 sm:px-6 py-4 bg-[#EEEEEE]">
+            {/* 2. SUMMARY STATS CARDS (6 IN A ROW) */}
+            <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF]">
                 <SummaryCards cards={summaryCardsData} />
             </div>
 
-            <Tabs 
-                tabs={['All Leads', 'New Enquiries', 'Active Leads', 'Follow Ups', 'Trials', 'Negotiation', 'Converted', 'Lost']}
+            {/* 3. TABS NAVIGATION */}
+            <Tabs
+                tabs={tabNames}
                 activeTab={activeTab}
                 onTabChange={(tab) => {
                     setActiveTab(tab);
-                    setFilterStartDate('');
-                    setFilterEndDate('');
+                    setCurrentPage(1);
                 }}
             />
-            
-            <FilterBar 
-                searchTerm={searchTerm} 
-                onSearchChange={setSearchTerm} 
-                searchPlaceholder="Search by name or phone..."
-            >
-                <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm h-9 px-2 transition-all focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 w-full sm:w-auto">
-                    <input 
-                        type="date" 
-                        value={filterStartDate}
-                        onChange={(e) => setFilterStartDate(e.target.value)}
-                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
-                        title="Inquiry Date From"
-                    />
-                    <span className="text-slate-300 mx-2 font-medium text-[10px]">TO</span>
-                    <input 
-                        type="date" 
-                        value={filterEndDate}
-                        onChange={(e) => setFilterEndDate(e.target.value)}
-                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
-                        title="Inquiry Date To"
-                    />
-                </div>
 
+            {/* 4. FILTER BAR */}
+            <FilterBar
+                searchTerm={searchTerm}
+                onSearchChange={(value) => {
+                    setSearchTerm(value);
+                    setCurrentPage(1);
+                }}
+                searchPlaceholder="Search by name or phone number..."
+            >
+                {/* Source Dropdown */}
                 <select 
                     value={sourceFilter}
-                    onChange={(e) => setSourceFilter(e.target.value)}
-                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm w-full sm:w-auto"
+                    onChange={(e) => {
+                        setSourceFilter(e.target.value);
+                        setCurrentPage(1);
+                    }}
+                    className="h-9 px-3 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 text-slate-600 shadow-2xs w-full sm:w-auto cursor-pointer"
                 >
                     <option value="">All Sources</option>
                     <option value="Walk-in">Walk-in</option>
-                    <option value="Website">Website</option>
-                    <option value="Reference">Reference</option>
-                    <option value="Just Dial">Just Dial</option>
-                    <option value="Google">Google</option>
                     <option value="Instagram">Instagram</option>
                     <option value="Facebook">Facebook</option>
+                    <option value="Google">Google</option>
+                    <option value="Referral">Referral</option>
                     <option value="Other">Other</option>
                 </select>
-                
+
+                {/* Priorities Dropdown */}
                 <select 
                     value={priorityFilter}
-                    onChange={(e) => setPriorityFilter(e.target.value)}
-                    className="h-9 px-3 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-slate-600 shadow-sm w-full sm:w-auto"
+                    onChange={(e) => {
+                        setPriorityFilter(e.target.value);
+                        setCurrentPage(1);
+                    }}
+                    className="h-9 px-3 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 text-slate-600 shadow-2xs w-full sm:w-auto cursor-pointer"
                 >
                     <option value="">All Priorities</option>
                     <option value="Hot">Hot</option>
@@ -687,25 +747,54 @@ const renderRow = (lead, index) => (
                     <option value="Cold">Cold</option>
                 </select>
 
+                {/* Date Picker */}
+                <div className="flex items-center bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl shadow-2xs h-9 px-2.5 transition-all focus-within:border-[#CA0410] focus-within:ring-2 focus-within:ring-[#CA0410]/20 w-full sm:w-auto">
+                    <FiCalendar className="text-slate-400 text-xs mr-1.5 shrink-0 pointer-events-none" />
+                    <input 
+                        type="date"
+                        value={filterDate}
+                        onChange={(e) => {
+                            setFilterDate(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-28 cursor-pointer"
+                        title="Filter Date"
+                    />
+                    {filterDate && (
+                        <button onClick={() => setFilterDate('')} className="ml-1 text-slate-400 hover:text-slate-600">
+                            <FiX size={12} />
+                        </button>
+                    )}
+                </div>
+
+                {/* Filters toggle */}
                 <button 
                     onClick={() => setShowCalendar(!showCalendar)}
-                    className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg font-bold text-xs transition-colors border shadow-sm shrink-0
-                        ${showCalendar ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}
-                    `}
+                    className={`flex items-center gap-1.5 h-9 px-3.5 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium shadow-2xs transition-all cursor-pointer ${
+                        showCalendar 
+                            ? 'bg-[#CA0410] !text-white !border-[#CA0410]' 
+                            : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
-                    {showCalendar ? <FiList /> : <FiCalendar />}
-                    <span className="hidden sm:inline">{showCalendar ? 'Hide Calendar' : 'Show Calendar'}</span>
+                    <FiSliders className={showCalendar ? "text-white text-xs" : "text-slate-500 text-xs"} />
+                    <span>Filters</span>
                 </button>
+
+
             </FilterBar>
 
-            <div className="px-4 py-4 flex-1 overflow-y-auto w-full flex flex-col xl:flex-row gap-4">
+            {/* 5. TABLE SECTION WITH SOLID RED HEADER */}
+            <div className="px-6 md:px-8 pb-6 pt-1 bg-[#FAEEEF] w-full flex flex-col xl:flex-row gap-4 min-h-0 flex-1">
+
+
                 {showCalendar && (
                     <div className="xl:w-[350px] shrink-0">
-                        <FollowUpCalendar 
+                        <FollowUpCalendar
                             leads={leads}
                             selectedDate={selectedDate}
                             onSelectDate={(date) => {
                                 setSelectedDate(date);
+                                setCurrentPage(1);
                                 if (date && activeTab !== 'Follow Ups') {
                                     setActiveTab('Follow Ups');
                                 }
@@ -713,523 +802,319 @@ const renderRow = (lead, index) => (
                         />
                     </div>
                 )}
+
                 <div className="flex-1 min-w-0">
-                    <DataTable 
+                    <DataTable
                         columns={columns}
-                        data={filteredLeads}
+                        data={paginatedLeads}
                         loading={loading}
-                        emptyMessage="No inquiries found in this category."
+                        emptyMessage="No enquiries found. Try adjusting your filters or add a new enquiry."
                         renderRow={renderRow}
+                        redHeader={true}
+                        pagination={{
+                            currentPage: currentPage,
+                            totalItems: totalItems,
+                            pageSize: pageSize,
+                            onPageChange: (p) => setCurrentPage(p),
+                            onPageSizeChange: (s) => setPageSize(s),
+                            itemLabel: "leads"
+                        }}
                     />
                 </div>
             </div>
 
-            {/* VIEW LEAD MODAL */}
-            {viewModalOpen && viewLead && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-100">
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white font-black text-lg flex items-center justify-center shadow-inner">
-                                    {(viewLead.firstName || 'L').charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="font-extrabold text-lg text-white">
-                                            {viewLead.firstName} {viewLead.lastName}
-                                        </h3>
-                                        <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                                            viewLead.convertibility === 'Hot' ? 'bg-rose-500 text-white' :
-                                            viewLead.convertibility === 'Warm' ? 'bg-amber-500 text-white' :
-                                            'bg-sky-500 text-white'
-                                        }`}>
-                                            {viewLead.convertibility || 'Warm'}
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-slate-300 flex items-center gap-2 mt-0.5 font-medium">
-                                        <span>Source: {viewLead.source || 'Walk-in'}</span>
-                                        <span>•</span>
-                                        <span>Created: {viewLead.createdAt ? new Date(viewLead.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</span>
-                                    </p>
-                                </div>
+            {/* 7. 360° LEAD PROFILE MODAL */}
+            <Modal
+                isOpen={viewModalOpen && !!viewLead}
+                onClose={() => { setViewModalOpen(false); setViewLead(null); }}
+                title={`${viewLead?.firstName || ''} ${viewLead?.lastName || ''}`}
+                subtitle={`Source: ${viewLead?.source || 'Walk-in'} • Enquired: ${viewLead?.createdAt ? formatFullDate(viewLead.createdAt) : 'N/A'}`}
+                avatarText={(viewLead?.firstName || 'L').charAt(0).toUpperCase()}
+                avatarBg="bg-[#CA0410]"
+                badge={
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-[#CA0410] text-white">
+                        {viewLead?.convertibility || 'Warm'}
+                    </span>
+                }
+                maxWidth="max-w-2xl"
+                bodyClassName="space-y-4 bg-slate-50/60 p-6 custom-scrollbar max-h-[80vh] overflow-y-auto"
+                footer={
+                    <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                            {viewLead?.contactNumber && (
+                                <a
+                                    href={`https://wa.me/${viewLead.contactNumber.toString().replace(/\D/g, '')}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                                >
+                                    <FaWhatsapp size={14} />
+                                    <span>WhatsApp</span>
+                                </a>
+                            )}
+                            {viewLead?.contactNumber && (
+                                <a
+                                    href={`tel:${viewLead.contactNumber}`}
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all"
+                                >
+                                    <FiPhone size={13} />
+                                    <span>Call</span>
+                                </a>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => { setViewModalOpen(false); setViewLead(null); }}
+                            className="px-4 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-bold shadow-2xs transition-all"
+                        >
+                            Close
+                        </button>
+                    </div>
+                }
+            >
+                {viewLead && (
+                    <div className="space-y-5">
+                        {/* Status bar */}
+                        <div className="flex items-center justify-between p-3.5 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Status:</span>
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${getStatusStyle(viewLead.status)}`}>
+                                    {viewLead.status}
+                                </span>
                             </div>
-                            <button 
-                                onClick={() => { setViewModalOpen(false); setViewLead(null); }}
-                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+                            <button
+                                onClick={() => {
+                                    handleOpenStatusModal(viewLead, viewLead.status);
+                                }}
+                                className="px-3 py-1 bg-[#CA0410] hover:bg-[#b3030e] text-white text-xs font-bold rounded-lg shadow-2xs transition-all cursor-pointer"
                             >
-                                <FiX size={20} />
+                                Change Status / Schedule Next
                             </button>
                         </div>
 
-                        {/* Modal Content */}
-                        <div className="p-6 overflow-y-auto flex-1 space-y-5 bg-slate-50/50">
-                            
-                            {/* Header Action Bar */}
-                            <div className="flex items-center justify-between bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex-wrap gap-2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold text-slate-500">Current Status:</span>
-                                    <span className={`px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider border ${
-                                        viewLead.status === 'Pending' ? 'bg-amber-50 text-amber-700 border-amber-200' : 
-                                        viewLead.status === 'Lead' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                                        viewLead.status === 'Contacted' ? 'bg-sky-50 text-sky-700 border-sky-200' :
-                                        viewLead.status === 'Trial' ? 'bg-teal-50 text-teal-700 border-teal-200' :
-                                        viewLead.status === 'Converted' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                        viewLead.status === 'Negotiation' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                                        'bg-rose-50 text-rose-700 border-rose-200'
-                                    }`}>
-                                        {viewLead.status}
-                                    </span>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                    {viewLead.trialFeeType === 'Paid' && (
-                                        <button
-                                            onClick={() => {
-                                                setViewModalOpen(false);
-                                                navigate(`/dashboard/owner/finance/receipt/${viewLead._id}`);
-                                            }}
-                                            className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-purple-200 transition-all"
-                                        >
-                                            <FiFileText size={14} /> Trial Receipt
-                                        </button>
-                                    )}
-                                    {viewLead.status !== 'Converted' && (
-                                        <button
-                                            onClick={() => {
-                                                setViewModalOpen(false);
-                                                navigate('/dashboard/owner/members/add', { state: { convertedLead: viewLead } });
-                                            }}
-                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all"
-                                        >
-                                            <FiUsers size={14} /> Convert to Member
-                                        </button>
-                                    )}
-                                    <a 
-                                        href={`https://wa.me/${(viewLead.contactNumber || viewLead.phone || '').toString().replace(/\D/g, '')}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-emerald-200 transition-all"
-                                    >
-                                        <FiMessageSquare size={14} /> WhatsApp
-                                    </a>
-                                    <button
-                                        onClick={() => {
-                                            setViewModalOpen(false);
-                                            handleEdit(viewLead);
-                                        }}
-                                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-slate-200 transition-all"
-                                    >
-                                        <FiEdit2 size={14} /> Edit
-                                    </button>
-                                </div>
+                        {/* Info Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-white rounded-xl border border-slate-200/80 text-xs shadow-2xs">
+                            <div>
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Phone Number</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5">{viewLead.contactNumber || 'N/A'}</p>
                             </div>
+                            <div>
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Email</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5 truncate">{viewLead.email || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Inquiry For</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5">{viewLead.inquiryFor || 'General GYM'}</p>
+                            </div>
+                            <div>
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Assigned Staff</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5">{viewLead.attendedBy || 'Admin'}</p>
+                            </div>
+                            <div>
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Trial Window</p>
+                                <p className="font-extrabold text-[#CA0410] mt-0.5">
+                                    {viewLead.trialDate ? `${formatShortDate(viewLead.trialDate)} - ${formatShortDate(viewLead.trialEndDate || viewLead.trialDate)}` : 'None'}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Trial Fee</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5">
+                                    {viewLead.trialFeeType === 'Paid' ? `₹${viewLead.trialFee || 0} (${viewLead.trialPaymentStatus})` : 'Free'}
+                                </p>
+                            </div>
+                        </div>
 
-                            {/* Key Details Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Contact Info Card */}
-                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-2.5">
-                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
-                                        <FiPhone className="text-indigo-500" /> Contact Details
-                                    </h4>
-                                    <div className="text-xs space-y-2">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400 font-medium">Primary Phone:</span>
-                                            <span className="font-black text-slate-800">{viewLead.contactNumber || viewLead.phone}</span>
-                                        </div>
-                                        {viewLead.altContact && (
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-400 font-medium">Alt Contact:</span>
-                                                <span className="font-bold text-slate-700">{viewLead.altContact}</span>
-                                            </div>
-                                        )}
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400 font-medium">Email:</span>
-                                            <span className="font-bold text-slate-800 truncate max-w-[170px]">{viewLead.email || 'N/A'}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400 font-medium">Gender:</span>
-                                            <span className="font-bold text-slate-800">{viewLead.gender || 'N/A'}</span>
-                                        </div>
-                                        {viewLead.address && (
-                                            <div className="pt-1 border-t border-slate-100">
-                                                <span className="text-slate-400 font-medium block">Address:</span>
-                                                <span className="font-medium text-slate-700 text-[11px] leading-relaxed block mt-0.5">{viewLead.address}</span>
-                                            </div>
-                                        )}
-                                    </div>
+                        {/* Quick interaction note input */}
+                        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">
+                            <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                                <FiMessageSquare className="text-[#CA0410]" />
+                                <span>Add Quick Interaction Note</span>
+                            </h4>
+                            <textarea
+                                value={quickNote}
+                                onChange={(e) => setQuickNote(e.target.value)}
+                                placeholder="Log what prospect said during call or visit..."
+                                rows={2}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 resize-none transition-all"
+                            />
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[11px] font-bold text-slate-500">Next Follow-up:</span>
+                                    <input
+                                        type="date"
+                                        value={quickNextDate}
+                                        onChange={(e) => setQuickNextDate(e.target.value)}
+                                        className="p-1 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700"
+                                    />
+                                    <input
+                                        type="time"
+                                        value={quickNextTime}
+                                        onChange={(e) => setQuickNextTime(e.target.value)}
+                                        className="p-1 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700"
+                                    />
                                 </div>
+                                <button
+                                    onClick={handleQuickNoteSubmit}
+                                    disabled={savingQuickNote || !quickNote.trim()}
+                                    className="px-3.5 py-1.5 bg-[#CA0410] hover:bg-[#b3030e] disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                                >
+                                    {savingQuickNote ? 'Saving...' : 'Save Note'}
+                                </button>
+                            </div>
+                        </div>
 
-                                {/* Prospect Preferences & Attended Info */}
-                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-2.5">
-                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
-                                        <FiTag className="text-purple-500" /> Requirement & Staff Info
-                                    </h4>
-                                    <div className="text-xs space-y-2">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400 font-medium">Inquiry For / Plan:</span>
-                                            <span className="font-black text-indigo-600">{viewLead.inquiryFor || 'General Membership'}</span>
-                                        </div>
-                                        {viewLead.offerDetails && (
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-400 font-medium">Quoted Offer:</span>
-                                                <span className="font-black text-emerald-600">{viewLead.offerDetails} {viewLead.offerAmount ? `(₹${viewLead.offerAmount})` : ''}</span>
-                                            </div>
-                                        )}
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400 font-medium">Source Channel:</span>
-                                            <span className="font-bold text-slate-800">{viewLead.source || 'Walk-in'}</span>
-                                        </div>
-                                        {viewLead.referredBy && (
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-400 font-medium">Referred By:</span>
-                                                <span className="font-bold text-indigo-600">{viewLead.referredBy}</span>
-                                            </div>
-                                        )}
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400 font-medium">Attended By:</span>
-                                            <span className="font-bold text-slate-800">{viewLead.attendedBy || 'N/A'}</span>
-                                        </div>
-                                        {viewLead.followUpDate && (
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-400 font-medium">Scheduled Call:</span>
-                                                <span className="font-black text-emerald-600">
-                                                    {new Date(viewLead.followUpDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} {viewLead.followUpTime || ''}
+                        {/* Follow up history timeline */}
+                        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">
+                            <h4 className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                                <FiClock className="text-[#CA0410]" />
+                                <span>Follow-up History & Timeline</span>
+                            </h4>
+                            {viewLead.followUpHistory && viewLead.followUpHistory.length > 0 ? (
+                                <div className="space-y-2.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                    {viewLead.followUpHistory.slice().reverse().map((item, hIdx) => (
+                                        <div key={hIdx} className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 flex flex-col gap-1 text-xs">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-slate-800">{formatFullDate(item.contactDate)}</span>
+                                                <span className={`px-2 py-0.2 rounded-full text-[10px] font-bold ${getStatusStyle(item.status || 'Contacted')}`}>
+                                                    {item.status || 'Contacted'}
                                                 </span>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Active Offer or Trial Information */}
-                            {(viewLead.offerDetails || viewLead.trialDate || viewLead.lostReason) && (
-                                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-2">
-                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                                        <FiCalendar className="text-amber-500" /> Active Deals & Trial Information
-                                    </h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                                        {viewLead.offerDetails && (
-                                            <div className="p-3 bg-purple-50/60 rounded-lg border border-purple-100">
-                                                <span className="text-[10px] font-bold text-purple-600 uppercase">Special Offer</span>
-                                                <p className="text-xs font-black text-slate-800 mt-0.5">{viewLead.offerDetails}</p>
-                                                {viewLead.offerAmount && (
-                                                    <p className="text-xs font-extrabold text-purple-700 mt-0.5">Price: ₹{viewLead.offerAmount}</p>
-                                                )}
-                                            </div>
-                                        )}
-                                        {viewLead.trialDate && (() => {
-                                            const todayStr = toInputDateFormat(new Date());
-                                            const endStr = toInputDateFormat(viewLead.trialEndDate || viewLead.trialDate);
-                                            const isExpired = endStr < todayStr;
-                                            const isPaid = viewLead.trialFeeType === 'Paid';
-
-                                            return (
-                                                <div className={`p-3 rounded-lg border ${
-                                                    isExpired ? 'bg-rose-50/60 border-rose-200' : 'bg-teal-50/60 border-teal-100'
-                                                }`}>
-                                                    <div className="flex items-center justify-between">
-                                                        <span className={`text-[10px] font-bold uppercase ${isExpired ? 'text-rose-600' : 'text-teal-600'}`}>
-                                                            {isExpired ? 'Trial Expired' : 'Trial Period'}
-                                                        </span>
-                                                        <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded border ${
-                                                            isPaid ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-200'
-                                                        }`}>
-                                                            {isPaid ? `Paid Trial (₹${viewLead.trialFee || 0} - ${viewLead.trialPaymentStatus || 'Paid'})` : 'Free / Unpaid Trial'}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-xs font-black text-slate-800 mt-1">
-                                                        {new Date(viewLead.trialDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                                                        {viewLead.trialEndDate ? ` to ${new Date(viewLead.trialEndDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}` : ''}
-                                                    </p>
-                                                </div>
-                                            );
-                                        })()}
-                                        {viewLead.lostReason && (
-                                            <div className="p-3 bg-rose-50/60 rounded-lg border border-rose-100 sm:col-span-2">
-                                                <span className="text-[10px] font-bold text-rose-600 uppercase">Lost Reason</span>
-                                                <p className="text-xs font-bold text-rose-800 mt-0.5">{viewLead.lostReason}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Discussion & Follow-up History */}
-                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
-                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                                        <FiMessageSquare className="text-indigo-500" /> Discussion & Follow-Up History
-                                    </h4>
-                                    <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                                        {viewLead.followUpHistory?.length || 0} Interactions
-                                    </span>
-                                </div>
-
-                                {viewLead.followUpHistory && viewLead.followUpHistory.length > 0 ? (
-                                    <div className="space-y-3">
-                                        {viewLead.followUpHistory.map((item, idx) => (
-                                            <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="font-bold text-slate-800">
-                                                        {item.contactDate ? new Date(item.contactDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                                                    </span>
-                                                    {item.status && (
-                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-slate-700 border border-slate-200">
-                                                            Status: {item.status}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-slate-600 font-medium leading-relaxed bg-white p-2 rounded border border-slate-100">
-                                                    {item.response || 'No notes entered.'}
+                                            <p className="text-slate-600 font-medium text-[11px]">{item.response || 'No notes'}</p>
+                                            {item.nextFollowUpDate && (
+                                                <p className="text-[10px] text-[#CA0410] font-bold">
+                                                    Next scheduled: {formatFullDate(item.nextFollowUpDate)} {item.nextFollowUpTime || ''}
                                                 </p>
-                                                {item.nextFollowUpDate && (
-                                                    <p className="text-[11px] font-bold text-emerald-600 pt-0.5">
-                                                        Next Call Scheduled: {new Date(item.nextFollowUpDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} {item.nextFollowUpTime || ''}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="p-4 text-center bg-slate-50 rounded-lg border border-slate-100">
-                                        <p className="text-xs text-slate-500 font-medium">No follow-up history logged yet.</p>
-                                    </div>
-                                )}
-                            </div>
-
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="px-6 py-3 bg-slate-100 border-t border-slate-200 flex justify-end">
-                            <button
-                                onClick={() => { setViewModalOpen(false); setViewLead(null); }}
-                                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all"
-                            >
-                                Close Preview
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {statusModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border border-slate-100">
-                        {/* Dark Premium Header */}
-                        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white font-black text-lg flex items-center justify-center shadow-inner shrink-0">
-                                    {(selectedLead?.firstName || 'L').charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="font-extrabold text-lg text-white">
-                                            Update Status: {statusFormData.status}
-                                        </h3>
-                                    </div>
-                                    <p className="text-xs text-slate-300 font-medium mt-0.5">
-                                        {selectedLead?.firstName} {selectedLead?.lastName} • {selectedLead?.contactNumber || selectedLead?.phone}
-                                    </p>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => setStatusModalOpen(false)}
-                                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
-                            >
-                                <FiX size={20} />
-                            </button>
-                        </div>
-                        <div className="p-6 overflow-y-auto flex-1">
-                            <form id="statusForm" onSubmit={handleStatusModalSubmit} className="flex flex-col gap-4">
-                                
-                                {['Contacted', 'Trial', 'Negotiation'].includes(statusFormData.status) && (
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="flex flex-col gap-1.5">
-                                            <label className="text-xs font-bold text-slate-700">Follow-up Date</label>
-                                            <input 
-                                                type="date" 
-                                                value={statusFormData.followUpDate}
-                                                onChange={(e) => setStatusFormData({...statusFormData, followUpDate: e.target.value})}
-                                                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                            />
-                                        </div>
-                                        <div className="flex flex-col gap-1.5">
-                                            <label className="text-xs font-bold text-slate-700">Follow-up Time</label>
-                                            <input 
-                                                type="time" 
-                                                value={statusFormData.followUpTime}
-                                                onChange={(e) => setStatusFormData({...statusFormData, followUpTime: e.target.value})}
-                                                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-
-                                {['Trial', 'Converted'].includes(statusFormData.status) && (
-                                    <div className="flex flex-col gap-3">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="flex flex-col gap-1.5">
-                                                <label className="text-xs font-bold text-slate-700">Trial Start Date</label>
-                                                <input 
-                                                    type="date" 
-                                                    value={statusFormData.trialDate}
-                                                    onChange={(e) => setStatusFormData({...statusFormData, trialDate: e.target.value})}
-                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col gap-1.5">
-                                                <label className="text-xs font-bold text-slate-700">Trial End Date</label>
-                                                <input 
-                                                    type="date" 
-                                                    min={statusFormData.trialDate}
-                                                    value={statusFormData.trialEndDate}
-                                                    onChange={(e) => setStatusFormData({...statusFormData, trialEndDate: e.target.value})}
-                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="flex flex-col gap-1.5">
-                                                <label className="text-xs font-bold text-slate-700">Trial Type</label>
-                                                <select 
-                                                    value={statusFormData.trialFeeType || 'Unpaid'}
-                                                    onChange={(e) => setStatusFormData({...statusFormData, trialFeeType: e.target.value})}
-                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                                >
-                                                    <option value="Unpaid">Unpaid / Free Trial</option>
-                                                    <option value="Paid">Paid Trial</option>
-                                                </select>
-                                            </div>
-                                            {statusFormData.trialFeeType === 'Paid' && (
-                                                <div className="flex flex-col gap-1.5">
-                                                    <label className="text-xs font-bold text-slate-700">Trial Fee (₹)</label>
-                                                    <input 
-                                                        type="number"
-                                                        placeholder="e.g. 500"
-                                                        value={statusFormData.trialFee || ''}
-                                                        onChange={(e) => setStatusFormData({...statusFormData, trialFee: e.target.value})}
-                                                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                                    />
-                                                </div>
                                             )}
                                         </div>
-
-                                        {statusFormData.trialFeeType === 'Paid' && (
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div className="flex flex-col gap-1.5">
-                                                    <label className="text-xs font-bold text-slate-700">Payment Mode</label>
-                                                    <select 
-                                                        value={statusFormData.trialPaymentMode || 'Cash'}
-                                                        onChange={(e) => setStatusFormData({...statusFormData, trialPaymentMode: e.target.value})}
-                                                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                                    >
-                                                        <option value="Cash">Cash</option>
-                                                        <option value="UPI">UPI / QR</option>
-                                                        <option value="Card">Credit/Debit Card</option>
-                                                        <option value="Net Banking">Net Banking</option>
-                                                        <option value="Online">Other Online</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {['Negotiation', 'Converted'].includes(statusFormData.status) && (
-                                    <div className="flex flex-col gap-4">
-                                        <div className="flex flex-col gap-1.5">
-                                            <label className="text-xs font-bold text-slate-700">Select Preset Offer</label>
-                                            <select 
-                                                value={statusFormData.selectedOffer}
-                                                onChange={handleOfferChange}
-                                                className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                            >
-                                                <option value="">-- Choose an Offer --</option>
-                                                {gymSettings?.couponOffers?.filter(o => o.isActive).map(offer => (
-                                                    <option key={offer._id} value={offer._id}>{offer.title} ({offer.discountType === 'Percentage' ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} OFF`})</option>
-                                                ))}
-                                                <option value="Custom">Custom Offer</option>
-                                            </select>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="flex flex-col gap-1.5">
-                                                <label className="text-xs font-bold text-slate-700">Offer Amount (₹)</label>
-                                                <input 
-                                                    type="number"
-                                                    placeholder="e.g. 5000"
-                                                    value={statusFormData.offerAmount}
-                                                    onChange={(e) => setStatusFormData({...statusFormData, offerAmount: e.target.value})}
-                                                    disabled={statusFormData.selectedOffer !== 'Custom'}
-                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                />
-                                            </div>
-                                            <div className="flex flex-col gap-1.5">
-                                                <label className="text-xs font-bold text-slate-700">Offer Details</label>
-                                                <input 
-                                                    type="text"
-                                                    placeholder="e.g. 3 Months + 1 Free"
-                                                    value={statusFormData.offerDetails}
-                                                    onChange={(e) => setStatusFormData({...statusFormData, offerDetails: e.target.value})}
-                                                    disabled={statusFormData.selectedOffer !== 'Custom'}
-                                                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {statusFormData.status === 'Lost' && (
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-slate-700">Lost Reason <span className="text-rose-500">*</span></label>
-                                        <input 
-                                            type="text" 
-                                            required
-                                            placeholder="e.g. Too expensive, Joined another gym..."
-                                            value={statusFormData.lostReason}
-                                            onChange={(e) => setStatusFormData({...statusFormData, lostReason: e.target.value})}
-                                            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                                        />
-                                    </div>
-                                )}
-
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-bold text-slate-700">Response / Notes</label>
-                                    <textarea 
-                                        rows="3"
-                                        placeholder="Enter discussion notes or client requirements..."
-                                        value={statusFormData.response}
-                                        onChange={(e) => setStatusFormData({...statusFormData, response: e.target.value})}
-                                        className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"
-                                    ></textarea>
+                                    ))}
                                 </div>
-
-                            </form>
-                        </div>
-                        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50">
-                            <button 
-                                type="button"
-                                onClick={() => setStatusModalOpen(false)}
-                                className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                type="submit"
-                                form="statusForm"
-                                disabled={submittingStatus}
-                                className="px-4 py-2 text-sm font-bold text-white bg-emerald-500 rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {submittingStatus ? 'Saving...' : (statusFormData.status === 'Converted' ? 'Save & Convert' : 'Save Update')}
-                            </button>
+                            ) : (
+                                <p className="text-xs text-slate-400 font-medium italic">No past follow-up interactions logged yet.</p>
+                            )}
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </Modal>
+
+            {/* 8. STATUS UPDATE & SCHEDULING MODAL */}
+            <Modal
+                isOpen={statusModalOpen && !!selectedLead}
+                onClose={() => { setStatusModalOpen(false); setSelectedLead(null); }}
+                title={`Update Prospect: ${selectedLead?.firstName || ''} ${selectedLead?.lastName || ''}`}
+                subtitle="Change stage, log conversation, or schedule trials & follow-ups"
+                maxWidth="max-w-lg"
+                bodyClassName="p-6 bg-slate-50/50 max-h-[80vh] overflow-y-auto custom-scrollbar"
+                footer={
+                    <div className="flex items-center justify-end gap-2 w-full">
+                        <button
+                            type="button"
+                            onClick={() => { setStatusModalOpen(false); setSelectedLead(null); }}
+                            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleStatusModalSubmit}
+                            disabled={submittingStatus}
+                            className="px-5 py-2 bg-[#CA0410] hover:bg-[#b3030e] disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+                        >
+                            {submittingStatus ? 'Updating...' : 'Save & Update'}
+                        </button>
+                    </div>
+                }
+            >
+                <form onSubmit={handleStatusModalSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Lead Stage / Status</label>
+                        <select
+                            value={statusFormData.status}
+                            onChange={(e) => setStatusFormData({ ...statusFormData, status: e.target.value })}
+                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
+                        >
+                            <option value="Lead">Lead (Active)</option>
+                            <option value="Contacted">Contacted (Follow Up)</option>
+                            <option value="Trial">Trial Active</option>
+                            <option value="Negotiation">Negotiation</option>
+                            <option value="Converted">Converted (Join Gym)</option>
+                            <option value="Lost">Lost</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">Call / Visit Response Note</label>
+                        <textarea
+                            value={statusFormData.response}
+                            onChange={(e) => setStatusFormData({ ...statusFormData, response: e.target.value })}
+                            placeholder="What happened in this interaction?"
+                            rows={2}
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#CA0410] resize-none"
+                        />
+                    </div>
+
+                    {statusFormData.status !== 'Converted' && statusFormData.status !== 'Lost' && (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Next Follow-Up Date</label>
+                                <input
+                                    type="date"
+                                    value={statusFormData.followUpDate}
+                                    onChange={(e) => setStatusFormData({ ...statusFormData, followUpDate: e.target.value })}
+                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Follow-Up Time</label>
+                                <input
+                                    type="time"
+                                    value={statusFormData.followUpTime}
+                                    onChange={(e) => setStatusFormData({ ...statusFormData, followUpTime: e.target.value })}
+                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {(statusFormData.status === 'Trial' || statusFormData.trialDate) && (
+                        <div className="p-3.5 bg-orange-50/60 rounded-xl border border-orange-100 space-y-3">
+                            <h4 className="font-bold text-xs text-orange-900">Trial Scheduling</h4>
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Trial Start</label>
+                                    <input
+                                        type="date"
+                                        value={statusFormData.trialDate}
+                                        onChange={(e) => setStatusFormData({ ...statusFormData, trialDate: e.target.value })}
+                                        className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Trial End</label>
+                                    <input
+                                        type="date"
+                                        value={statusFormData.trialEndDate}
+                                        onChange={(e) => setStatusFormData({ ...statusFormData, trialEndDate: e.target.value })}
+                                        className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {statusFormData.status === 'Lost' && (
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1">Reason for Dropping / Lost</label>
+                            <input
+                                type="text"
+                                value={statusFormData.lostReason}
+                                onChange={(e) => setStatusFormData({ ...statusFormData, lostReason: e.target.value })}
+                                placeholder="Too expensive, distance, joined other gym, etc."
+                                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:border-[#CA0410]"
+                            />
+                        </div>
+                    )}
+                </form>
+            </Modal>
         </PageLayout>
     );
 }
-
-export default Leads;

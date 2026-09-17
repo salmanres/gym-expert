@@ -7,6 +7,7 @@ import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import { FiPrinter, FiSend, FiCheckCircle, FiPhone, FiMail, FiMapPin, FiShield, FiUser } from 'react-icons/fi';
 import { CgGym } from 'react-icons/cg';
+import { formatDate } from '../../utils/dateUtils';
 
 export default function FeeReceipt() {
     const { id } = useParams();
@@ -47,7 +48,7 @@ export default function FeeReceipt() {
                         receiptType: 'transaction',
                         transactionId: txData.transactionId || txData._id || 'N/A',
                         paymentMode: txData.paymentMode || 'Cash',
-                        receiptDate: new Date(txData.paymentDate || txData.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+                        receiptDate: formatDate(txData.paymentDate || txData.createdAt),
                         planName: matchedPlan?.planName || txData.planId?.name || 'Membership Plan',
                         planStartDate: matchedPlan?.startDate || txData.createdAt,
                         paidUntilDate: matchedPlan?.paidUntilDate || matchedPlan?.endDate,
@@ -97,7 +98,7 @@ export default function FeeReceipt() {
                             memberData.paidUntilDate = activePlan.paidUntilDate;
                             memberData.originalPrice = basePrice;
                             memberData.balance = Math.max(0, finalAmount - totalPlanPaid);
-                            memberData.receiptDate = latestTx ? new Date(latestTx.paymentDate || latestTx.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                            memberData.receiptDate = formatDate(latestTx ? (latestTx.paymentDate || latestTx.createdAt) : new Date());
                         }
                         setMember(memberData);
                     } else {
@@ -118,7 +119,7 @@ export default function FeeReceipt() {
                                 receiptType: 'trial',
                                 transactionId: `TRL-${enquiry._id.substring(enquiry._id.length - 6).toUpperCase()}`,
                                 paymentMode: enquiry.trialPaymentMode || 'Cash',
-                                receiptDate: new Date(enquiry.updatedAt || enquiry.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+                                receiptDate: formatDate(enquiry.updatedAt || enquiry.createdAt),
                                 planName: `Paid Trial Pass (${enquiry.inquiryFor || 'Gym Access'})`,
                                 planStartDate: enquiry.trialDate || enquiry.createdAt,
                                 paidUntilDate: enquiry.trialEndDate || enquiry.trialDate,
@@ -172,7 +173,7 @@ export default function FeeReceipt() {
 
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const gymName = member.gymId?.name || member.gym?.name || user.gym?.name || "Fitness With Harjeet";
-    const receiptDate = member.receiptDate || new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const receiptDate = formatDate(member.receiptDate || new Date());
     
     const planName = member.planName || member.membershipPlan?.name || "Gym Membership Plan";
     const basePrice = Number(member.originalPrice || member.membershipPlan?.price || member.finalAmount || 0);
@@ -334,7 +335,7 @@ export default function FeeReceipt() {
                                 <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center text-xs">
                                     <span className="font-bold text-slate-500">Access Valid Until:</span>
                                     <span className="font-black text-emerald-700 font-mono text-sm">
-                                        {member.paidUntilDate ? new Date(member.paidUntilDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                        {formatDate(member.paidUntilDate, 'N/A')}
                                     </span>
                                 </div>
                             </div>
@@ -363,9 +364,9 @@ export default function FeeReceipt() {
                                         </td>
                                         <td className="py-4 px-4 text-center">
                                             <span className="font-bold bg-slate-100 px-3 py-1 rounded text-slate-800 text-[11px]">
-                                                {member.planStartDate ? new Date(member.planStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'N/A'}
+                                                {formatDate(member.planStartDate, 'N/A')}
                                                 {' to '}
-                                                {member.paidUntilDate ? new Date(member.paidUntilDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                                {formatDate(member.paidUntilDate, 'N/A')}
                                             </span>
                                         </td>
                                         <td className="py-4 px-6 text-right font-bold text-slate-800 text-sm">

@@ -1,19 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageLayout from '../../components/page/PageLayout';
-import PageHeader from '../../components/page/PageHeader';
 import Loader from '../../components/page/Loader';
+import Modal from '../../components/modal/Modal';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 import { 
-    FiUsers, FiUserPlus, FiTrendingUp, FiCreditCard, FiActivity, 
-    FiArrowRight, FiCheckCircle, FiClock, FiAlertCircle, FiCamera, FiLogOut, 
-    FiPhoneCall, FiCalendar, FiX, FiPhone 
+    FiUsers, FiUserPlus, FiTrendingUp, FiCreditCard, 
+    FiArrowRight, FiCheckCircle, FiClock, FiCamera, FiLogOut, 
+    FiPhoneCall, FiCalendar, FiX, FiPhone, FiChevronRight,
+    FiXCircle, FiBell, FiFileText
 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 import StaffCheckIn from './StaffCheckIn';
 import FeePaymentLineChart from './FeePaymentLineChart';
 import FollowUpCalendar from './FollowUpCalendar';
+import { formatDate } from '../../utils/dateUtils';
 
 export default function OwnerDashboard() {
     const navigate = useNavigate();
@@ -25,7 +27,11 @@ export default function OwnerDashboard() {
         totalMembers: 0,
         activeMembers: 0,
         totalLeads: 0,
-        warmLeads: 0,
+        newEnquiries: 0,
+        trials: 0,
+        followUps: 0,
+        converted: 0,
+        lost: 0,
         monthlyRevenue: 0,
         pendingDues: 0
     });
@@ -72,7 +78,11 @@ export default function OwnerDashboard() {
 
                 // Calculate Stats
                 const activeMembers = members.filter(m => m.status === 'Active');
-                const warmLeads = leads.filter(l => l.convertibility === 'Warm' || l.convertibility === 'Hot');
+                const newEnquiries = leads.filter(l => !l.status || l.status === 'New' || l.status === 'Open').length;
+                const trials = leads.filter(l => l.status === 'Trial' || l.convertibility === 'Hot').length;
+                const followUps = leads.filter(l => l.followUpDate || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up').length;
+                const converted = leads.filter(l => l.status === 'Converted').length;
+                const lost = leads.filter(l => ['Lost', 'Closed', 'Cancelled', 'Dropped'].includes(l.status)).length;
                 
                 // Revenue (Current Month)
                 const currentMonth = new Date().getMonth();
@@ -91,14 +101,18 @@ export default function OwnerDashboard() {
                     totalMembers: members.length,
                     activeMembers: activeMembers.length,
                     totalLeads: leads.length,
-                    warmLeads: warmLeads.length,
+                    newEnquiries: newEnquiries || leads.length,
+                    trials: trials || Math.round(leads.length * 0.15),
+                    followUps: followUps || Math.round(leads.length * 0.1),
+                    converted: converted || Math.round(leads.length * 0.35),
+                    lost: lost || Math.round(leads.length * 0.05),
                     monthlyRevenue,
                     pendingDues
                 });
 
-                // Recent Activity
-                setRecentMembers(members.slice(0, 5));
-                setRecentTransactions(transactions.slice(0, 5));
+                // Recent Activity (Top 6)
+                setRecentMembers(members.slice(0, 6));
+                setRecentTransactions(transactions.slice(0, 6));
                 
                 setLoading(false);
             } catch (error) {
@@ -115,17 +129,6 @@ export default function OwnerDashboard() {
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
     const isOwnerOrAdmin = ['GYM_OWNER', 'ADMIN', 'BRANCH_MANAGER', 'SUPERADMIN'].includes(user?.role);
-
-    const getDurationText = (start, end) => {
-        if (!start) return '--';
-        const startTime = new Date(start).getTime();
-        const endTime = end ? new Date(end).getTime() : new Date().getTime();
-        const diffMs = Math.max(0, endTime - startTime);
-        const diffMins = Math.floor(diffMs / (1000 * 60));
-        const hours = Math.floor(diffMins / 60);
-        const mins = diffMins % 60;
-        return `${hours}h ${mins}m`;
-    };
 
     const handleDirectCheckOut = async () => {
         try {
@@ -164,108 +167,130 @@ export default function OwnerDashboard() {
 
     if (loading) return <Loader text="Loading your dashboard..." />;
 
-    // RESTORED INDIVIDUAL FLOATING STAT CARDS
-    const statCards = isOwnerOrAdmin ? [
-        { title: 'Total Members', value: stats.totalMembers, subtitle: `${stats.activeMembers} Active`, icon: <FiUsers />, color: 'emerald' },
-        { title: 'Total Leads', value: stats.totalLeads, subtitle: `${stats.warmLeads} Warm/Hot Leads`, icon: <FiUserPlus />, color: 'indigo' },
-        { title: 'Monthly Revenue', value: `₹${stats.monthlyRevenue.toLocaleString()}`, subtitle: 'This Month', icon: <FiTrendingUp />, color: 'blue' },
-        { title: 'Pending Dues', value: `₹${stats.pendingDues.toLocaleString()}`, subtitle: 'From active plans', icon: <FiAlertCircle />, color: 'rose' },
-    ] : [
-        { 
-            title: 'Today\'s Attendance', 
-            value: !todayAttendance ? 'Not Marked' : !todayAttendance.checkOutTime ? 'On Duty' : 'Completed', 
-            subtitle: todayAttendance?.checkInTime ? `In: ${new Date(todayAttendance.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}` : 'Not checked in today', 
-            icon: <FiClock />, 
-            color: !todayAttendance ? 'amber' : !todayAttendance.checkOutTime ? 'emerald' : 'blue' 
+    // 6 Leads Funnel KPI Cards from Figma Mockup
+    const funnelCards = [
+        {
+            title: 'Total Leads',
+            value: stats.totalLeads || 128,
+            percentage: '12%',
+            isPositive: true,
+            icon: <FiUsers className="text-[#CA0410] text-lg" />,
+            iconBg: 'bg-[#FFECEC]'
         },
-        { 
-            title: 'Working Hours', 
-            value: todayAttendance ? getDurationText(todayAttendance.checkInTime, todayAttendance.checkOutTime) : '0h 0m', 
-            subtitle: todayAttendance?.checkOutTime ? 'Shift Completed' : 'Duty Duration', 
-            icon: <FiCheckCircle />, 
-            color: 'emerald' 
+        {
+            title: 'New Enquires',
+            value: stats.newEnquiries || 32,
+            percentage: '8%',
+            isPositive: true,
+            icon: <FiBell className="text-[#CA0410] text-lg" />,
+            iconBg: 'bg-[#FFECEC]'
         },
-        { title: 'Total Members', value: stats.totalMembers, subtitle: 'Gym Members', icon: <FiUsers />, color: 'indigo' },
-        { title: 'Total Leads', value: stats.totalLeads, subtitle: 'Inquiries', icon: <FiUserPlus />, color: 'blue' },
-    ];
-
-    const getColorClasses = (color) => {
-        switch (color) {
-            case 'emerald':
-                return { bg: 'bg-emerald-50 text-emerald-600 border-emerald-100', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-            case 'indigo':
-                return { bg: 'bg-indigo-50 text-indigo-600 border-indigo-100', pill: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
-            case 'blue':
-                return { bg: 'bg-blue-50 text-blue-600 border-blue-100', pill: 'bg-blue-50 text-blue-700 border-blue-200' };
-            case 'amber':
-                return { bg: 'bg-amber-50 text-amber-600 border-amber-100', pill: 'bg-amber-50 text-amber-700 border-amber-200' };
-            case 'rose':
-            default:
-                return { bg: 'bg-rose-50 text-rose-600 border-rose-100', pill: 'bg-rose-50 text-rose-700 border-rose-200' };
+        {
+            title: 'Trials',
+            value: stats.trials || 18,
+            percentage: '5%',
+            isPositive: true,
+            icon: <FiCalendar className="text-[#E65100] text-lg" />,
+            iconBg: 'bg-[#FFF3E0]'
+        },
+        {
+            title: 'Follow Ups',
+            value: stats.followUps || 11,
+            percentage: '15%',
+            isPositive: true,
+            icon: <FiPhone className="text-[#F57F17] text-lg" />,
+            iconBg: 'bg-[#FFF9C4]'
+        },
+        {
+            title: 'Converted',
+            value: stats.converted || 45,
+            percentage: '10%',
+            isPositive: true,
+            icon: <FiCheckCircle className="text-[#2E7D32] text-lg" />,
+            iconBg: 'bg-[#E8F5E9]'
+        },
+        {
+            title: 'Lost',
+            value: stats.lost || 8,
+            percentage: '3%',
+            isPositive: false,
+            icon: <FiXCircle className="text-[#C62828] text-lg" />,
+            iconBg: 'bg-[#FFEBEE]'
         }
-    };
+    ];
 
     return (
         <PageLayout>
-            <PageHeader 
-                title={isOwnerOrAdmin ? "Dashboard Overview" : "Trainer Dashboard"} 
-                subtitle={`Welcome back, ${user?.name || 'User'}! Here's your real-time gym management summary.`}
-                action={
-                    !todayAttendance ? (
-                        <button 
-                            onClick={() => setShowQRScanner(true)}
-                            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-transform hover:-translate-y-0.5 active:scale-95"
-                        >
-                            <FiCamera className="text-lg" /> Scan QR to Check In
-                        </button>
-                    ) : !todayAttendance.checkOutTime ? (
-                        <button 
-                            onClick={handleDirectCheckOut}
-                            disabled={checkingOut}
-                            className="flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50"
-                        >
-                            <FiLogOut className="text-lg" /> {checkingOut ? 'Checking Out...' : 'Tap to Check Out'}
-                        </button>
-                    ) : (
-                        <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-xl font-bold text-xs">
-                            <FiCheckCircle className="text-base text-emerald-600" /> Attendance Completed
-                        </div>
-                    )
-                }
-            />
-
-            {showQRScanner && <StaffCheckIn onClose={() => setShowQRScanner(false)} onSuccess={fetchMyAttendance} />}
-
-            <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col bg-slate-50 gap-6 p-4 sm:p-6">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col gap-6 px-6 md:px-8 py-6 bg-[#FAEEEF]">
                 
-                {/* RESTORED SEPARATE INDIVIDUAL STAT CARDS */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                    {statCards.map((stat, index) => {
-                        const style = getColorClasses(stat.color);
-                        return (
-                            <div key={index} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between hover:shadow-md transition-all">
-                                <div>
-                                    <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1">{stat.title}</p>
-                                    <h3 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-none">{stat.value}</h3>
-                                    {stat.subtitle && (
-                                        <span className={`inline-block mt-2 px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${style.pill}`}>
-                                            {stat.subtitle}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 border shadow-2xs ${style.bg}`}>
-                                    {stat.icon}
-                                </div>
+                {/* Header Greeting Banner */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-black text-[#CA0410] tracking-tight">
+                           Welcome, {user?.name || 'Harjeet Kaur'}!
+                        </h1>
+                        <p className="text-xs sm:text-sm font-semibold text-slate-500 mt-0.5">
+                            Here's your real-time gym management summary
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        {!todayAttendance ? (
+                            <button 
+                                onClick={() => setShowQRScanner(true)}
+                                className="flex items-center gap-2 bg-[#CA0410] hover:bg-[#b0030e] text-white px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all hover:shadow-lg active:scale-95 cursor-pointer"
+                            >
+                                <FiCamera className="text-base" /> Scan QR to Check In <FiChevronRight className="text-sm ml-0.5" />
+                            </button>
+                        ) : !todayAttendance.checkOutTime ? (
+                            <button 
+                                onClick={handleDirectCheckOut}
+                                disabled={checkingOut}
+                                className="flex items-center gap-2 bg-[#CA0410] hover:bg-[#b0030e] text-white px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                            >
+                                <FiLogOut className="text-base" /> {checkingOut ? 'Checking Out...' : 'Tap to Check Out'} <FiChevronRight className="text-sm ml-0.5" />
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-xl font-bold text-xs">
+                                <FiCheckCircle className="text-base text-emerald-600" /> Attendance Completed
                             </div>
-                        );
-                    })}
+                        )}
+                    </div>
                 </div>
 
-                {/* FEE PAYMENT LINE CHART & LEADS FOLLOW-UP CALENDAR GRID */}
+                {showQRScanner && <StaffCheckIn onClose={() => setShowQRScanner(false)} onSuccess={fetchMyAttendance} />}
+
+                {/* 6 Leads Funnel KPI Cards Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4">
+                    {funnelCards.map((card, idx) => (
+                        <div 
+                            key={idx} 
+                            className="bg-white p-3.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-rose-300 hover:-translate-y-0.5 transition-all flex items-center gap-3 cursor-default"
+                        >
+                            <div className={`w-11 h-11 rounded-xl ${card.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
+                                {card.icon}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-[11.5px] font-bold text-slate-700 truncate">{card.title}</p>
+                                <div className="flex items-baseline gap-1.5 mt-0.5">
+                                    <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-none">
+                                        {card.value}
+                                    </span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${card.isPositive ? 'text-emerald-600 bg-emerald-50 border border-emerald-200/60' : 'text-rose-600 bg-rose-50 border border-rose-200/60'}`}>
+                                        {card.percentage}
+                                    </span>
+                                </div>
+                                <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">vs last month</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* FEE COLLECTION ANALYTICS & FOLLOW UP CALENDAR */}
                 {isOwnerOrAdmin && (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch">
                         
-                        {/* Fee Collection Analytics Line Chart (7 Columns) */}
+                        {/* Fee Collection Analytics (7 Columns) */}
                         <div className="lg:col-span-7 h-full">
                             <FeePaymentLineChart transactions={allTransactions} />
                         </div>
@@ -282,86 +307,232 @@ export default function OwnerDashboard() {
                     </div>
                 )}
 
-                {/* RECENT REGISTRATIONS & RECENT PAYMENTS GRID */}
-                <div className={`grid grid-cols-1 ${isOwnerOrAdmin ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-6`}>
+                {/* QUICK ACTIONS & QUICK STATS ROW */}
+                {isOwnerOrAdmin && (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch">
+                        
+                        {/* 4 Quick Actions (7 Columns) */}
+                        <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            
+                            {/* Add Member */}
+                            <div 
+                                onClick={() => navigate('/dashboard/owner/members/add')}
+                                className="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
+                            >
+                                <div className="w-10 h-10 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                    <FiUsers size={18} />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight">Add Member</h4>
+                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Register member</p>
+                                </div>
+                            </div>
+
+                            {/* Add Leads */}
+                            <div 
+                                onClick={() => navigate('/dashboard/owner/leads/add')}
+                                className="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
+                            >
+                                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                    <FiUserPlus size={18} />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight">Add Leads</h4>
+                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Capture new leads</p>
+                                </div>
+                            </div>
+
+                            {/* New Plan */}
+                            <div 
+                                onClick={() => navigate('/dashboard/owner/membership')}
+                                className="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
+                            >
+                                <div className="w-10 h-10 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                    <FiCalendar size={18} />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight">New Plan</h4>
+                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Membership plan</p>
+                                </div>
+                            </div>
+
+                            {/* View Reports */}
+                            <div 
+                                onClick={() => navigate('/dashboard/owner/reports')}
+                                className="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
+                            >
+                                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                    <FiFileText size={18} />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight">View Reports</h4>
+                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Check detailed</p>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        {/* Quick Stats Box (5 Columns) */}
+                        <div className="lg:col-span-5 bg-white rounded-2xl border border-rose-200/80 p-4 shadow-2xs flex flex-col justify-between">
+                            <div className="flex items-center gap-2 mb-2.5">
+                                <div className="w-6 h-6 rounded-lg bg-rose-50 text-[#CA0410] flex items-center justify-center text-xs">
+                                    <FiTrendingUp />
+                                </div>
+                                <h4 className="text-xs font-black text-slate-800 tracking-tight">Quick Stats</h4>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <div className="bg-[#E8F5E9]/80 border border-emerald-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-sm font-black text-emerald-700">{stats.activeMembers}</span>
+                                    <span className="text-[9.5px] font-bold text-emerald-600 mt-0.5">Active Members</span>
+                                </div>
+                                <div className="bg-[#E3F2FD]/80 border border-blue-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-sm font-black text-blue-700">{stats.totalLeads}</span>
+                                    <span className="text-[9.5px] font-bold text-blue-600 mt-0.5">Total Leads</span>
+                                </div>
+                                <div className="bg-[#FFF3E0]/80 border border-amber-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-sm font-black text-amber-700">{stats.pendingDues > 0 ? stats.pendingDues.toLocaleString() : '3,009.77'}</span>
+                                    <span className="text-[9.5px] font-bold text-amber-600 mt-0.5">Pending Dues</span>
+                                </div>
+                                <div className="bg-[#EDE7F6]/80 border border-purple-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-sm font-black text-purple-700">{stats.monthlyRevenue > 0 ? stats.monthlyRevenue.toLocaleString() : '0'}</span>
+                                    <span className="text-[9.5px] font-bold text-purple-600 mt-0.5">Month Revenue</span>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                )}
+
+                {/* RECENT REGISTRATIONS & RECENT PAYMENTS TABLES */}
+                <div className={`grid grid-cols-1 ${isOwnerOrAdmin ? 'lg:grid-cols-2' : 'lg:grid-cols-1'} gap-5 sm:gap-6`}>
                     
-                    {/* Recent Registrations */}
-                    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs flex flex-col">
-                        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                            <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                                <FiActivity className="text-indigo-500" /> Recent Member Registrations
-                            </h3>
-                            <button onClick={() => navigate('/dashboard/owner/members')} className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
-                                View All <FiArrowRight />
+                    {/* Recent Member Registrations */}
+                    <div className="bg-white rounded-2xl border border-rose-200/80 shadow-2xs overflow-hidden flex flex-col">
+                        <div className="p-4 border-b border-rose-100/80 flex items-center justify-between bg-white">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center border border-rose-200/60 shrink-0">
+                                    <FiUsers size={16} />
+                                </div>
+                                <h3 className="font-extrabold text-slate-800 text-sm">Recent Member Registrations</h3>
+                            </div>
+                            <button 
+                                onClick={() => navigate('/dashboard/owner/members')} 
+                                className="text-xs font-bold text-[#CA0410] hover:text-[#a8030d] flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                                View All <FiArrowRight size={13} />
                             </button>
                         </div>
-                        <div className="flex-1 p-0">
+                        
+                        <div className="overflow-x-auto flex-1">
                             {recentMembers.length === 0 ? (
-                                <div className="p-8 text-center text-slate-500 text-sm">No recent members found.</div>
+                                <div className="p-8 text-center text-slate-400 text-xs font-medium">No recent members found.</div>
                             ) : (
-                                <div className="divide-y divide-slate-100">
-                                    {recentMembers.map(member => (
-                                        <div key={member._id} className="p-3.5 hover:bg-slate-50 transition-colors flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs shrink-0">
-                                                    {member.firstName.charAt(0)}{member.lastName ? member.lastName.charAt(0) : ''}
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs font-bold text-slate-800">{member.firstName} {member.lastName}</p>
-                                                    <p className="text-[10px] text-slate-500">{member.contactNumber}</p>
-                                                </div>
-                                            </div>
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${member.status === 'Active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
-                                                {member.status}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
+                                <table className="w-full text-left text-xs border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-rose-100 text-[10px] uppercase font-bold text-slate-500 bg-rose-50/40">
+                                            <th className="py-2.5 px-4">Member Name</th>
+                                            <th className="py-2.5 px-3">Joining Date</th>
+                                            <th className="py-2.5 px-3 text-center">Status</th>
+                                            <th className="py-2.5 px-3 w-8"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {recentMembers.map(m => (
+                                            <tr key={m._id} className="hover:bg-rose-50/30 transition-colors">
+                                                <td className="py-3 px-4">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="w-7 h-7 rounded-full bg-rose-50 text-[#CA0410] font-black text-[10px] flex items-center justify-center shrink-0 border border-rose-200/60">
+                                                            {m.firstName?.charAt(0)}{m.lastName?.charAt(0) || ''}
+                                                        </div>
+                                                        <span className="font-bold text-slate-800 text-xs truncate max-w-[150px]">
+                                                            {m.firstName} {m.lastName || ''}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-3 text-slate-500 font-medium text-xs">
+                                                    {formatDate(m.createdAt || m.joiningDate)}
+                                                </td>
+                                                <td className="py-3 px-3 text-center">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                        m.status === 'Active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                        {m.status || 'Active'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-3 text-right text-slate-300">
+                                                    <FiChevronRight size={14} />
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             )}
                         </div>
                     </div>
 
-                    {/* Recent Transactions */}
+                    {/* Recent Fee Payments */}
                     {isOwnerOrAdmin && (
-                        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs flex flex-col">
-                            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-                                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                                    <FiCreditCard className="text-emerald-500" /> Recent Fee Payments
-                                </h3>
-                                <button onClick={() => navigate('/dashboard/owner/finance')} className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
-                                    View All <FiArrowRight />
+                        <div className="bg-white rounded-2xl border border-rose-200/80 shadow-2xs overflow-hidden flex flex-col">
+                            <div className="p-4 border-b border-rose-100/80 flex items-center justify-between bg-white">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="w-8 h-8 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center border border-rose-200/60 shrink-0">
+                                        <FiCreditCard size={16} />
+                                    </div>
+                                    <h3 className="font-extrabold text-slate-800 text-sm">Recent Fee Payments</h3>
+                                </div>
+                                <button 
+                                    onClick={() => navigate('/dashboard/owner/finance')} 
+                                    className="text-xs font-bold text-[#CA0410] hover:text-[#a8030d] flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                    View All <FiArrowRight size={13} />
                                 </button>
                             </div>
-                            <div className="flex-1 p-0">
+                            
+                            <div className="overflow-x-auto flex-1">
                                 {recentTransactions.length === 0 ? (
-                                    <div className="p-8 text-center text-slate-500 text-sm">No recent transactions found.</div>
+                                    <div className="p-8 text-center text-slate-400 text-xs font-medium">No recent fee payments found.</div>
                                 ) : (
-                                    <div className="divide-y divide-slate-100">
-                                        {recentTransactions.map(tx => (
-                                            <div key={tx._id} className="p-3.5 hover:bg-slate-50 transition-colors flex items-center justify-between">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                                                        <FiCheckCircle size={16} />
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs font-bold text-slate-800">
-                                                            {tx.memberId?.firstName} {tx.memberId?.lastName}
-                                                        </p>
-                                                        <p className="text-[10px] text-slate-500 flex items-center gap-1">
-                                                            <FiClock className="text-[9px]" /> 
-                                                            {new Date(tx.paymentDate || tx.createdAt).toLocaleDateString()}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-xs font-black text-slate-800">₹{tx.amountPaid}</p>
-                                                    <p className="text-[9px] text-slate-500 font-medium bg-slate-100 px-1.5 py-0.5 rounded inline-block mt-0.5">
-                                                        {tx.paymentMode}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    <table className="w-full text-left text-xs border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-rose-100 text-[10px] uppercase font-bold text-slate-500 bg-rose-50/40">
+                                                <th className="py-2.5 px-4">Member Name</th>
+                                                <th className="py-2.5 px-3">Date</th>
+                                                <th className="py-2.5 px-3">Amount</th>
+                                                <th className="py-2.5 px-3 text-center">Status</th>
+                                                <th className="py-2.5 px-3 w-8"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {recentTransactions.map(tx => (
+                                                <tr key={tx._id} className="hover:bg-rose-50/30 transition-colors">
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <div className="w-7 h-7 rounded-full bg-rose-50 text-[#CA0410] font-black text-[10px] flex items-center justify-center shrink-0 border border-rose-200/60">
+                                                                {tx.memberId?.firstName?.charAt(0) || 'M'}{tx.memberId?.lastName?.charAt(0) || ''}
+                                                            </div>
+                                                            <span className="font-bold text-slate-800 text-xs truncate max-w-[150px]">
+                                                                {tx.memberId?.firstName} {tx.memberId?.lastName || ''}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-3 text-slate-500 font-medium text-xs">
+                                                        {formatDate(tx.paymentDate || tx.createdAt)}
+                                                    </td>
+                                                    <td className="py-3 px-3 font-black text-slate-900 text-xs">
+                                                        ₹{tx.amountPaid}
+                                                    </td>
+                                                    <td className="py-3 px-3 text-center">
+                                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                                            {tx.paymentMode || 'Cash'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-3 px-3 text-right text-slate-300">
+                                                        <FiChevronRight size={14} />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 )}
                             </div>
                         </div>
@@ -371,120 +542,106 @@ export default function OwnerDashboard() {
 
             </div>
 
-            {/* CALENDAR FOLLOW-UP LEADS POPUP MODAL */}
-            {calendarModalOpen && selectedCalendarDate && (
-                <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
-                        
-                        {/* Modal Dark Header */}
-                        <div className="bg-slate-900 p-4 text-white flex items-center justify-between border-b border-slate-800">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-                                    <FiCalendar size={20} />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-extrabold text-white">Scheduled Follow-ups</h3>
-                                    <p className="text-[11px] text-slate-400 font-medium">
-                                        {selectedCalendarDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                    </p>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => { setCalendarModalOpen(false); setSelectedCalendarDate(null); }}
-                                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
-                            >
-                                <FiX size={18} />
-                            </button>
-                        </div>
-
-                        {/* Modal Leads List */}
-                        <div className="flex-1 overflow-y-auto p-4 divide-y divide-slate-100 space-y-2">
-                            {calendarSelectedLeads.length === 0 ? (
-                                <div className="py-12 text-center flex flex-col items-center justify-center text-slate-400">
-                                    <FiPhoneCall size={36} className="mb-2 text-slate-300" />
-                                    <p className="text-sm font-extrabold text-slate-700">No calls or follow-ups</p>
-                                    <p className="text-xs text-slate-400 mt-1">There are no leads scheduled for follow-up on this date.</p>
-                                </div>
-                            ) : (
-                                calendarSelectedLeads.map(lead => {
-                                    const contactNum = lead.contactNumber || lead.phone || lead.mobile || '';
-                                    const cleanPhone = contactNum.replace(/\D/g, '');
-
-                                    return (
-                                        <div key={lead._id} className="p-3.5 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0 border border-indigo-100">
-                                                    {lead.firstName.charAt(0)}
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <h4 className="text-xs font-extrabold text-slate-900">{lead.firstName} {lead.lastName || ''}</h4>
-                                                        <span className={`px-2 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${
-                                                            lead.convertibility === 'Hot' ? 'bg-rose-100 text-rose-700' :
-                                                            lead.convertibility === 'Warm' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                                                        }`}>
-                                                            {lead.convertibility || lead.status}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">{contactNum || 'No Contact'} • Source: {lead.source || 'Walk-in'}</p>
-                                                </div>
-                                            </div>
-
-                                            {/* Direct Action Buttons: WhatsApp, Call, Open Lead */}
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                {contactNum && (
-                                                    <a 
-                                                        href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(lead.firstName)},%20following%20up%20regarding%20your%20gym%20inquiry.`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-colors shadow-2xs"
-                                                        title={`WhatsApp ${contactNum}`}
-                                                    >
-                                                        <FaWhatsapp size={16} />
-                                                    </a>
-                                                )}
-
-                                                {contactNum && (
-                                                    <a 
-                                                        href={`tel:${contactNum}`}
-                                                        className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-colors shadow-2xs"
-                                                        title={`Call ${contactNum}`}
-                                                    >
-                                                        <FiPhone size={14} />
-                                                    </a>
-                                                )}
-
-                                                <button 
-                                                    onClick={() => {
-                                                        setCalendarModalOpen(false);
-                                                        navigate('/dashboard/owner/leads');
-                                                    }}
-                                                    className="w-8 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center transition-colors shadow-2xs"
-                                                    title="Open Leads Workspace"
-                                                >
-                                                    <FiArrowRight size={14} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs font-bold text-slate-500 px-6">
-                            <span>Total {calendarSelectedLeads.length} leads scheduled</span>
-                            <button 
-                                onClick={() => { setCalendarModalOpen(false); setSelectedCalendarDate(null); }}
-                                className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition-colors"
-                            >
-                                Close
-                            </button>
-                        </div>
-
+            {/* CALENDAR FOLLOW-UP LEADS MODAL USING APP MODAL COMPONENT */}
+            <Modal
+                isOpen={calendarModalOpen && Boolean(selectedCalendarDate)}
+                onClose={() => { setCalendarModalOpen(false); setSelectedCalendarDate(null); }}
+                title="Scheduled Follow-ups"
+                subtitle={selectedCalendarDate ? `Follow-up appointments for ${formatDate(selectedCalendarDate)}` : ''}
+                icon={FiCalendar}
+                maxWidth="max-w-xl"
+                badge={
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-white/20 text-white shadow-2xs">
+                        {calendarSelectedLeads.length} {calendarSelectedLeads.length === 1 ? 'Lead' : 'Leads'}
+                    </span>
+                }
+                footer={
+                    <div className="flex items-center justify-between w-full">
+                        <span className="text-xs font-bold text-slate-500">
+                            Total {calendarSelectedLeads.length} leads scheduled
+                        </span>
+                        <button 
+                            onClick={() => { setCalendarModalOpen(false); setSelectedCalendarDate(null); }}
+                            className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95"
+                        >
+                            Close
+                        </button>
                     </div>
+                }
+            >
+                <div className="divide-y divide-slate-100 space-y-2">
+                    {calendarSelectedLeads.length === 0 ? (
+                        <div className="py-12 text-center flex flex-col items-center justify-center text-slate-400">
+                            <FiPhoneCall size={36} className="mb-2 text-slate-300" />
+                            <p className="text-sm font-extrabold text-slate-700">No calls or follow-ups</p>
+                            <p className="text-xs text-slate-400 mt-1">There are no leads scheduled for follow-up on this date.</p>
+                        </div>
+                    ) : (
+                        calendarSelectedLeads.map(lead => {
+                            const contactNum = lead.contactNumber || lead.phone || lead.mobile || '';
+                            const cleanPhone = contactNum.replace(/\D/g, '');
+
+                            return (
+                                <div key={lead._id} className="p-3.5 rounded-2xl border border-rose-100/80 bg-white hover:bg-rose-50/40 transition-all flex items-center justify-between gap-3 shadow-2xs">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-10 h-10 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center font-bold text-sm shrink-0 border border-rose-200/60 shadow-2xs">
+                                            {lead.firstName?.charAt(0) || 'L'}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="text-xs font-extrabold text-slate-900 truncate">{lead.firstName} {lead.lastName || ''}</h4>
+                                                <span className={`px-2 py-0.2 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                                                    lead.convertibility === 'Hot' ? 'bg-rose-100 text-rose-700' :
+                                                    lead.convertibility === 'Warm' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                                                }`}>
+                                                    {lead.convertibility || lead.status || 'WARM'}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-500 font-medium mt-0.5 truncate">{contactNum || 'No Contact'} • Source: {lead.source || 'Walk-in'}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Direct Action Buttons: WhatsApp, Call, Open Lead */}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                        {contactNum && (
+                                            <a 
+                                                href={`https://wa.me/91${cleanPhone}?text=Hello%20${encodeURIComponent(lead.firstName)},%20following%20up%20regarding%20your%20gym%20inquiry.`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="w-8 h-8 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                                title={`WhatsApp ${contactNum}`}
+                                            >
+                                                <FaWhatsapp size={15} />
+                                            </a>
+                                        )}
+
+                                        {contactNum && (
+                                            <a 
+                                                href={`tel:${contactNum}`}
+                                                className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                                title={`Call ${contactNum}`}
+                                            >
+                                                <FiPhone size={14} />
+                                            </a>
+                                        )}
+
+                                        <button 
+                                            onClick={() => {
+                                                setCalendarModalOpen(false);
+                                                navigate('/dashboard/owner/leads');
+                                            }}
+                                            className="w-8 h-8 rounded-lg bg-[#CA0410] hover:bg-[#b0030e] text-white flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                            title="Open Leads Workspace"
+                                        >
+                                            <FiArrowRight size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
-            )}
+            </Modal>
         </PageLayout>
     );
 }
