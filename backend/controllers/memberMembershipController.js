@@ -204,6 +204,15 @@ exports.assignMembership = async (req, res) => {
             });
         }
 
+        // Broadcast real-time Socket notification
+        notifyGym(gymId, {
+            title: 'Membership Assigned',
+            description: `${member.firstName} ${member.lastName || ''} assigned to ${plan.name} (${paymentStatus} - ₹${totalPaid})`,
+            type: 'MEMBERSHIP',
+            targetId: member._id,
+            link: `/dashboard/owner/members/view/${member._id}`
+        });
+
         res.status(201).json({
             message: "Membership assigned successfully.",
             membership,
@@ -574,6 +583,15 @@ exports.toggleFreezeMembership = async (req, res) => {
 
             await membership.save();
 
+            // Broadcast real-time Socket notification
+            notifyGym(gymId, {
+                title: 'Membership Unfrozen',
+                description: `Membership for ${membership.planName} unfrozen. Extended by ${daysFrozen} days.`,
+                type: 'MEMBERSHIP',
+                targetId: membership.memberId,
+                link: `/dashboard/owner/members/view/${membership.memberId}`
+            });
+
             return res.status(200).json({
                 message: `Membership Unfrozen! End date extended by ${daysFrozen} days to ${new Date(membership.endDate).toLocaleDateString()}`,
                 membership
@@ -589,6 +607,15 @@ exports.toggleFreezeMembership = async (req, res) => {
             });
 
             await membership.save();
+
+            // Broadcast real-time Socket notification
+            notifyGym(gymId, {
+                title: 'Membership Frozen',
+                description: `Membership for ${membership.planName} frozen (${reason || 'Leave'}).`,
+                type: 'MEMBERSHIP',
+                targetId: membership.memberId,
+                link: `/dashboard/owner/members/view/${membership.memberId}`
+            });
 
             return res.status(200).json({
                 message: "Membership frozen successfully. End date will automatically extend upon unfreezing.",

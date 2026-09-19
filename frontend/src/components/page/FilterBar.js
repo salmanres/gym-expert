@@ -3,7 +3,7 @@ import { FiSearch } from 'react-icons/fi';
 
 export default function FilterBar({ children, searchTerm, onSearchChange, searchPlaceholder = "Search by name, phone or keyword..." }) {
     return (
-        <div className="flex flex-col lg:flex-row gap-3 bg-[#FAEEEF] px-6 md:px-8 py-2.5 items-stretch lg:items-center justify-between overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden w-full m-0 shrink-0">
+        <div className="flex flex-col lg:flex-row gap-3 bg-[#FAEEEF] px-6 md:px-8 py-3 items-stretch lg:items-center justify-between overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden w-full m-0 shrink-0">
             {/* Search Input - Increased Width & Fixed Icon */}
             {onSearchChange && (
                 <div className="relative w-full sm:w-80 md:w-96 lg:w-[420px] shrink-0">

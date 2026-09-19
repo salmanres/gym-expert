@@ -400,69 +400,145 @@ export default function Leads() {
         }
     };
 
-    // Summary Cards data matching Figma exactly (All 6 cards)
-    const summaryCardsData = [
-        {
-            title: 'Total Leads',
-            value: totalLeadsCount || 128,
-            percentage: '12% ↑',
-            percentageColor: 'text-emerald-600',
-            subtitle: 'Total captured',
-            icon: <FiUsers />,
-            bgClass: 'bg-[#FFECEC]',
-            iconColor: 'text-[#E53935]',
-        },
-        {
-            title: 'New Enquiries',
-            value: newEnquiriesCount || 32,
-            percentage: '8% ↑',
-            percentageColor: 'text-emerald-600',
-            subtitle: 'Fresh inquiries',
-            icon: <FiBell />,
-            bgClass: 'bg-[#FFECEC]',
-            iconColor: 'text-[#E53935]',
-        },
-        {
-            title: 'Trials',
-            value: activeTrialsCount || 18,
-            percentage: '5% ↑',
-            percentageColor: 'text-emerald-600',
-            subtitle: 'Trial ongoing',
-            icon: <FiCalendar />,
-            bgClass: 'bg-[#FFF3E0]',
-            iconColor: 'text-[#FB8C00]',
-        },
-        {
-            title: 'Follow Ups',
-            value: followUpsCount || 11,
-            percentage: '15% ↑',
-            percentageColor: 'text-emerald-600',
-            subtitle: 'Active pipeline',
-            icon: <FiPhone />,
-            bgClass: 'bg-[#FFF9C4]',
-            iconColor: 'text-[#FBC02D]',
-        },
-        {
-            title: 'Converted',
-            value: convertedCount || 45,
-            percentage: '10% ↑',
-            percentageColor: 'text-emerald-600',
-            subtitle: 'Joined members',
-            icon: <FiCheckCircle />,
-            bgClass: 'bg-[#E8F5E9]',
-            iconColor: 'text-[#43A047]',
-        },
-        {
-            title: 'Lost',
-            value: lostCount || 8,
-            percentage: '3% ↓',
-            percentageColor: 'text-rose-500',
-            subtitle: 'Inactive leads',
-            icon: <FiXCircle />,
-            bgClass: 'bg-[#FFEBEE]',
-            iconColor: 'text-[#E53935]',
-        }
-    ];
+    // Dynamic MoM Growth Calculations from Real Backend Data
+    const summaryCardsData = useMemo(() => {
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+        const isCurrentMonth = (dateVal) => {
+            if (!dateVal) return false;
+            const d = new Date(dateVal);
+            return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        };
+
+        const isPreviousMonth = (dateVal) => {
+            if (!dateVal) return false;
+            const d = new Date(dateVal);
+            return !isNaN(d.getTime()) && d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
+        };
+
+        const getGrowthStats = (currentMonthCount, lastMonthCount) => {
+            if (lastMonthCount === 0) {
+                if (currentMonthCount > 0) {
+                    return { percentage: '+100%', isPositive: true };
+                }
+                return { percentage: '0%', isPositive: true };
+            }
+            const diff = currentMonthCount - lastMonthCount;
+            const pct = Math.round((diff / lastMonthCount) * 100);
+            return {
+                percentage: `${pct >= 0 ? '+' : ''}${pct}%`,
+                isPositive: pct >= 0
+            };
+        };
+
+        // 1. Total Leads
+        const totalLeadsCount = leads.length;
+        const curTotalLeads = leads.filter(l => isCurrentMonth(l.createdAt || l.date || l.enquiryDate)).length;
+        const prevTotalLeads = leads.filter(l => isPreviousMonth(l.createdAt || l.date || l.enquiryDate)).length;
+        const totalLeadsGrowth = getGrowthStats(curTotalLeads, prevTotalLeads);
+
+        // 2. New Enquiries
+        const isNew = (l) => !l.status || ['Pending', 'New', 'Open', 'Lead'].includes(l.status);
+        const newEnquiriesCount = leads.filter(isNew).length;
+        const curNew = leads.filter(l => isNew(l) && isCurrentMonth(l.createdAt || l.date)).length;
+        const prevNew = leads.filter(l => isNew(l) && isPreviousMonth(l.createdAt || l.date)).length;
+        const newGrowth = getGrowthStats(curNew, prevNew);
+
+        // 3. Trials
+        const isTrial = (l) => l.status === 'Trial' || Boolean(l.trialDate) || l.convertibility === 'Hot';
+        const trialsCount = leads.filter(isTrial).length;
+        const curTrials = leads.filter(l => isTrial(l) && isCurrentMonth(l.trialDate || l.createdAt)).length;
+        const prevTrials = leads.filter(l => isTrial(l) && isPreviousMonth(l.trialDate || l.createdAt)).length;
+        const trialsGrowth = getGrowthStats(curTrials, prevTrials);
+
+        // 4. Follow Ups
+        const isFollowUp = (l) => (Boolean(l.followUpDate) || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up') && !['Converted', 'Lost'].includes(l.status);
+        const followUpsCount = leads.filter(isFollowUp).length;
+        const curFollowUps = leads.filter(l => isFollowUp(l) && isCurrentMonth(l.followUpDate || l.createdAt)).length;
+        const prevFollowUps = leads.filter(l => isFollowUp(l) && isPreviousMonth(l.followUpDate || l.createdAt)).length;
+        const followUpsGrowth = getGrowthStats(curFollowUps, prevFollowUps);
+
+        // 5. Converted
+        const isConverted = (l) => l.status === 'Converted';
+        const convertedCount = leads.filter(isConverted).length;
+        const curConverted = leads.filter(l => isConverted(l) && isCurrentMonth(l.updatedAt || l.createdAt)).length;
+        const prevConverted = leads.filter(l => isConverted(l) && isPreviousMonth(l.updatedAt || l.createdAt)).length;
+        const convertedGrowth = getGrowthStats(curConverted, prevConverted);
+
+        // 6. Lost
+        const isLost = (l) => ['Lost', 'Closed', 'Cancelled', 'Dropped'].includes(l.status);
+        const lostCount = leads.filter(isLost).length;
+        const curLost = leads.filter(l => isLost(l) && isCurrentMonth(l.updatedAt || l.createdAt)).length;
+        const prevLost = leads.filter(l => isLost(l) && isPreviousMonth(l.updatedAt || l.createdAt)).length;
+        const lostGrowth = getGrowthStats(curLost, prevLost);
+
+        return [
+            {
+                title: 'Total Leads',
+                value: totalLeadsCount,
+                percentage: totalLeadsGrowth.percentage,
+                percentageColor: totalLeadsGrowth.isPositive ? 'text-emerald-600' : 'text-rose-600',
+                subtitle: 'Total captured',
+                icon: <FiUsers />,
+                bgClass: 'bg-[#FFECEC]',
+                iconColor: 'text-[#E53935]',
+            },
+            {
+                title: 'New Enquiries',
+                value: newEnquiriesCount,
+                percentage: newGrowth.percentage,
+                percentageColor: newGrowth.isPositive ? 'text-emerald-600' : 'text-rose-600',
+                subtitle: 'Fresh inquiries',
+                icon: <FiBell />,
+                bgClass: 'bg-[#FFECEC]',
+                iconColor: 'text-[#E53935]',
+            },
+            {
+                title: 'Trials',
+                value: trialsCount,
+                percentage: trialsGrowth.percentage,
+                percentageColor: trialsGrowth.isPositive ? 'text-emerald-600' : 'text-rose-600',
+                subtitle: 'Trial ongoing',
+                icon: <FiCalendar />,
+                bgClass: 'bg-[#FFF3E0]',
+                iconColor: 'text-[#FB8C00]',
+            },
+            {
+                title: 'Follow Ups',
+                value: followUpsCount,
+                percentage: followUpsGrowth.percentage,
+                percentageColor: followUpsGrowth.isPositive ? 'text-emerald-600' : 'text-rose-600',
+                subtitle: 'Active pipeline',
+                icon: <FiPhone />,
+                bgClass: 'bg-[#FFF9C4]',
+                iconColor: 'text-[#FBC02D]',
+            },
+            {
+                title: 'Converted',
+                value: convertedCount,
+                percentage: convertedGrowth.percentage,
+                percentageColor: convertedGrowth.isPositive ? 'text-emerald-600' : 'text-rose-600',
+                subtitle: 'Joined members',
+                icon: <FiCheckCircle />,
+                bgClass: 'bg-[#E8F5E9]',
+                iconColor: 'text-[#43A047]',
+            },
+            {
+                title: 'Lost',
+                value: lostCount,
+                percentage: lostGrowth.percentage,
+                percentageColor: lostGrowth.isPositive ? 'text-emerald-600' : 'text-rose-600',
+                subtitle: 'Inactive leads',
+                icon: <FiXCircle />,
+                bgClass: 'bg-[#FFEBEE]',
+                iconColor: 'text-[#E53935]',
+            }
+        ];
+    }, [leads]);
 
     const tabNames = ['All Leads', 'New Enquiries', 'Active Leads', 'Follow Ups', 'Trials', 'Negotiation', 'Converted', 'Lost'];
 
@@ -691,7 +767,7 @@ export default function Leads() {
             />
 
             {/* 2. SUMMARY STATS CARDS (6 IN A ROW) */}
-            <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF]">
+            <div className="px-6 md:px-8 pt-1 pb-3 bg-[#FAEEEF] shrink-0">
                 <SummaryCards cards={summaryCardsData} />
             </div>
 

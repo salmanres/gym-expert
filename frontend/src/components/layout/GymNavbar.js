@@ -76,9 +76,10 @@ function GymNavbar({
                             </div>
 
                             {/* Grid Filter Tabs */}
-                            <div className="grid grid-cols-4 gap-1 px-2 py-1.5 bg-slate-50 border-b border-slate-100">
+                            <div className="grid grid-cols-5 gap-1 px-2 py-1.5 bg-slate-50 border-b border-slate-100">
                                 {[
                                     { id: 'ALL', label: 'All', count: unreadCategoryCounts.ALL },
+                                    { id: 'MEMBER', label: 'Members', count: unreadCategoryCounts.MEMBER },
                                     { id: 'LEAD', label: 'Leads', count: unreadCategoryCounts.LEAD },
                                     { id: 'ATTENDANCE', label: 'Attendance', count: unreadCategoryCounts.ATTENDANCE },
                                     { id: 'MEMBERSHIP', label: 'Plans', count: unreadCategoryCounts.MEMBERSHIP }

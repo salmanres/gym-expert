@@ -97,6 +97,7 @@ export default function AttendanceDashboard() {
     };
 
     const isStaffTab = activeTab === 'Staff';
+    const isTrialTab = activeTab === 'Trial';
     
     // Filter Sheet by Search Term
     const filteredSheet = sheet.filter(item => {
@@ -104,8 +105,10 @@ export default function AttendanceDashboard() {
         const name = (item.user?.name || item.user?.firstName || '').toLowerCase();
         const phone = (item.user?.phone || item.user?.contactNumber || '').toLowerCase();
         const id = (item.user?.memberId || item.user?.staffId || item.user?._id || '').toLowerCase();
+        const plan = (item.user?.planName || '').toLowerCase();
+        const memStatus = (item.user?.membershipStatus || item.user?.status || '').toLowerCase();
         const term = searchTerm.toLowerCase();
-        return name.includes(term) || phone.includes(term) || id.includes(term);
+        return name.includes(term) || phone.includes(term) || id.includes(term) || plan.includes(term) || memStatus.includes(term);
     });
 
     const totalItems = filteredSheet.length;
@@ -113,27 +116,38 @@ export default function AttendanceDashboard() {
 
     const columns = isStaffTab ? [
         { label: 'STAFF MEMBER', className: 'w-[22%] pl-4 pr-3' },
-        { label: 'CONTACT', className: 'w-[14%] px-3' },
-        { label: 'SHIFT', className: 'w-[12%] px-3' },
-        { label: 'STATUS', className: 'w-[12%] px-2 text-center' },
+        { label: 'CONTACT', className: 'w-[13%] px-3' },
+        { label: 'SHIFT', className: 'w-[11%] px-3' },
+        { label: 'ATTENDANCE', className: 'w-[12%] px-2 text-center' },
         { label: 'CHECK IN', className: 'w-[10%] px-3' },
         { label: 'CHECK OUT', className: 'w-[10%] px-3' },
         { label: 'WORK HOURS', className: 'w-[10%] px-3' },
-        { label: 'ACTIONS', className: 'w-[10%] pr-4 pl-1 text-center' }
+        { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
+    ] : isTrialTab ? [
+        { label: 'TRIAL LEAD', className: 'w-[22%] pl-4 pr-3' },
+        { label: 'CONTACT', className: 'w-[13%] px-3' },
+        { label: 'LEAD STATUS', className: 'w-[12%] px-2 text-center' },
+        { label: 'ATTENDANCE', className: 'w-[12%] px-2 text-center' },
+        { label: 'CHECK IN', className: 'w-[10%] px-3' },
+        { label: 'CHECK OUT', className: 'w-[10%] px-3' },
+        { label: 'WORKOUT HOURS', className: 'w-[10%] px-3' },
+        { label: 'ACTIONS', className: 'w-[11%] pr-4 pl-1 text-center' }
     ] : [
-        { label: 'MEMBER', className: 'w-[24%] pl-4 pr-3' },
-        { label: 'CONTACT', className: 'w-[14%] px-3' },
-        { label: 'STATUS', className: 'w-[12%] px-2 text-center' },
-        { label: 'CHECK IN', className: 'w-[11%] px-3' },
-        { label: 'CHECK OUT', className: 'w-[11%] px-3' },
-        { label: 'WORKOUT HOURS', className: 'w-[14%] px-3' },
-        { label: 'ACTIONS', className: 'w-[14%] pr-4 pl-1 text-center' }
+        { label: 'MEMBER', className: 'w-[20%] pl-4 pr-3' },
+        { label: 'CONTACT', className: 'w-[12%] px-3' },
+        { label: 'MEMBERSHIP STATUS', className: 'w-[14%] px-2 text-center' },
+        { label: 'ATTENDANCE', className: 'w-[12%] px-2 text-center' },
+        { label: 'CHECK IN', className: 'w-[10%] px-3' },
+        { label: 'CHECK OUT', className: 'w-[10%] px-3' },
+        { label: 'WORKOUT HOURS', className: 'w-[11%] px-3' },
+        { label: 'ACTIONS', className: 'w-[11%] pr-4 pl-1 text-center' }
     ];
 
     const renderRow = (item, index) => {
         const { user, attendance } = item;
         let currentStatus = attendance?.status || 'Unmarked';
         const displayName = (user.name || `${user.firstName || ''} ${user.lastName || ''}`).trim() || `Member (${(user.memberId || user._id.slice(-5)).toUpperCase()})`;
+        const memStatus = user.membershipStatus || user.status || 'No Plan';
         
         const todayStr = new Date().toISOString().split('T')[0];
         const isPastDate = selectedDate < todayStr;
@@ -159,7 +173,7 @@ export default function AttendanceDashboard() {
                             </div>
                         )}
                         <div className="flex flex-col items-start min-w-0">
-                            <p className="font-bold text-slate-900 text-[13.5px] leading-tight truncate max-w-[180px]">
+                            <p className="font-bold text-slate-900 text-[13.5px] leading-tight truncate max-w-[170px]">
                                 {displayName}
                             </p>
                             <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
@@ -194,9 +208,38 @@ export default function AttendanceDashboard() {
                     </td>
                 )}
 
-                {/* STATUS */}
+                {/* LEAD STATUS (for Trial) */}
+                {isTrialTab && (
+                    <td className="py-2.5 px-2 text-center align-middle">
+                        <span className="inline-flex items-center justify-center text-[11.5px] font-bold rounded-lg px-2.5 py-0.5 border leading-none shadow-2xs bg-purple-50 text-purple-700 border-purple-200">
+                            {user.status || 'Trial'}
+                        </span>
+                    </td>
+                )}
+
+                {/* MEMBERSHIP STATUS (for Members) */}
+                {!isStaffTab && !isTrialTab && (
+                    <td className="py-2.5 px-2 text-center align-middle">
+                        <div className="flex flex-col items-center justify-center gap-0.5">
+                            <span className={`inline-flex items-center justify-center text-[11.5px] font-bold rounded-lg px-2.5 py-0.5 border leading-none shadow-2xs ${
+                                memStatus === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
+                                memStatus === 'Frozen' ? 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]' :
+                                'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]'
+                            }`}>
+                                {memStatus}
+                            </span>
+                            {user.planName && (
+                                <span className="text-[10px] text-slate-500 font-medium truncate max-w-[125px]" title={user.planName}>
+                                    {user.planName}
+                                </span>
+                            )}
+                        </div>
+                    </td>
+                )}
+
+                {/* ATTENDANCE STATUS */}
                 <td className="py-2.5 px-2 text-center align-middle">
-                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
+                    <span className={`inline-flex items-center justify-center text-[12px] font-bold rounded-lg px-3 py-1 border leading-none shadow-2xs ${
                         currentStatus === 'Present' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
                         currentStatus === 'Absent' ? 'bg-rose-50 text-rose-700 border-rose-200' :
                         currentStatus === 'Late' ? 'bg-amber-50 text-amber-700 border-amber-200' :

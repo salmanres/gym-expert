@@ -55,6 +55,7 @@ function ActivityLogModal({
                 <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto no-scrollbar">
                     {[
                         { id: 'ALL', label: 'All Activity' },
+                        { id: 'MEMBER', label: 'Members' },
                         { id: 'LEAD', label: 'Leads' },
                         { id: 'ATTENDANCE', label: 'Attendance' },
                         { id: 'MEMBERSHIP', label: 'Memberships' }

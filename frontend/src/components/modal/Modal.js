@@ -45,7 +45,7 @@ export default function Modal({
     if (!isOpen || !mounted) return null;
 
     const defaultGradient = {
-        background: 'linear-gradient(135deg, #07101A 0%, #1c0b11 50%, #A5151B 100%)'
+        background: 'linear-gradient(135deg, #2D090E 0%, #6E0A12 22%, #A2040E 52%, #CA0410 80%, #DB0E1B 100%)'
     };
 
     const modalContent = (

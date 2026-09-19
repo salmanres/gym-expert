@@ -72,13 +72,34 @@ export default function AssignMembershipForm() {
                 setActiveMemberships(activeMems);
                 setStaffList(staffRes.data || []);
 
-                // Pre-fill if navigated from Member details
+                // Pre-fill if navigated from Member details or Finance
                 if (location.state?.member) {
                     const mem = location.state.member;
                     const activeMem = activeMems.find(m => (m.memberId?._id || m.memberId) === mem._id) || mem.activeMembership;
                     const isFullyPaid = activeMem && (activeMem.paymentStatus === 'Paid' || (activeMem.balanceAmount || 0) <= 0);
 
-                    if (activeMem && (location.state.isEdit || !isFullyPaid)) {
+                    if (location.state.isRenew) {
+                        let renewalStartDate = new Date().toISOString().split('T')[0];
+                        if (activeMem?.endDate) {
+                            const activeEnd = new Date(activeMem.endDate);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            if (activeEnd >= today) {
+                                const nextDay = new Date(activeEnd);
+                                nextDay.setDate(nextDay.getDate() + 1);
+                                renewalStartDate = nextDay.toISOString().split('T')[0];
+                            }
+                        }
+                        const prevPlan = activeMem?.membershipPlanId?._id || activeMem?.membershipPlanId || (mem.membershipPlan?._id || mem.membershipPlan);
+                        setEditMode(false);
+                        setMembershipId(null);
+                        setFormData(prev => ({
+                            ...prev,
+                            memberId: mem._id,
+                            membershipPlanId: prevPlan || '',
+                            planStartDate: renewalStartDate
+                        }));
+                    } else if (activeMem && (location.state.isEdit || !isFullyPaid)) {
                         setEditMode(true);
                         setMembershipId(activeMem._id);
                         setFormData(prev => ({

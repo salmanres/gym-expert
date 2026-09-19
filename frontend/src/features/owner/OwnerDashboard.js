@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageLayout from '../../components/page/PageLayout';
 import Loader from '../../components/page/Loader';
@@ -36,8 +36,11 @@ export default function OwnerDashboard() {
         pendingDues: 0
     });
     
+    const [allMembers, setAllMembers] = useState([]);
     const [allLeads, setAllLeads] = useState([]);
     const [allTransactions, setAllTransactions] = useState([]);
+    const [allActivePlans, setAllActivePlans] = useState([]);
+    const [allAttendance, setAllAttendance] = useState([]);
     const [recentMembers, setRecentMembers] = useState([]);
     const [recentTransactions, setRecentTransactions] = useState([]);
     const [todayAttendance, setTodayAttendance] = useState(null);
@@ -61,26 +64,31 @@ export default function OwnerDashboard() {
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
-                const [membersRes, leadsRes, txRes, activePlansRes] = await Promise.all([
+                const [membersRes, leadsRes, txRes, activePlansRes, attendanceRes] = await Promise.all([
                     apiClient.get('/members').catch(() => ({ data: [] })),
                     apiClient.get('/enquiries').catch(() => ({ data: [] })),
                     apiClient.get('/members/transactions/all').catch(() => ({ data: [] })),
-                    apiClient.get('/member-memberships/active').catch(() => ({ data: [] }))
+                    apiClient.get('/member-memberships/active').catch(() => ({ data: [] })),
+                    apiClient.get('/attendance').catch(() => ({ data: [] }))
                 ]);
 
                 const members = membersRes.data || [];
                 const leads = leadsRes.data || [];
                 const transactions = txRes.data || [];
                 const activePlans = activePlansRes.data || [];
+                const attendance = attendanceRes.data || [];
 
+                setAllMembers(members);
                 setAllLeads(leads);
                 setAllTransactions(transactions);
+                setAllActivePlans(activePlans);
+                setAllAttendance(attendance);
 
                 // Calculate Stats
                 const activeMembers = members.filter(m => m.status === 'Active');
-                const newEnquiries = leads.filter(l => !l.status || l.status === 'New' || l.status === 'Open').length;
-                const trials = leads.filter(l => l.status === 'Trial' || l.convertibility === 'Hot').length;
-                const followUps = leads.filter(l => l.followUpDate || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up').length;
+                const newEnquiries = leads.filter(l => !l.status || ['Pending', 'New', 'Open', 'Lead'].includes(l.status)).length;
+                const trials = leads.filter(l => l.status === 'Trial' || Boolean(l.trialDate) || l.convertibility === 'Hot').length;
+                const followUps = leads.filter(l => (Boolean(l.followUpDate) || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up') && !['Converted', 'Lost'].includes(l.status)).length;
                 const converted = leads.filter(l => l.status === 'Converted').length;
                 const lost = leads.filter(l => ['Lost', 'Closed', 'Cancelled', 'Dropped'].includes(l.status)).length;
                 
@@ -90,7 +98,7 @@ export default function OwnerDashboard() {
                 const monthlyRevenue = transactions
                     .filter(t => {
                         const d = new Date(t.paymentDate || t.createdAt);
-                        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                        return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
                     })
                     .reduce((sum, t) => sum + (t.amountPaid || 0), 0);
 
@@ -101,11 +109,11 @@ export default function OwnerDashboard() {
                     totalMembers: members.length,
                     activeMembers: activeMembers.length,
                     totalLeads: leads.length,
-                    newEnquiries: newEnquiries || leads.length,
-                    trials: trials || Math.round(leads.length * 0.15),
-                    followUps: followUps || Math.round(leads.length * 0.1),
-                    converted: converted || Math.round(leads.length * 0.35),
-                    lost: lost || Math.round(leads.length * 0.05),
+                    newEnquiries,
+                    trials,
+                    followUps,
+                    converted,
+                    lost,
                     monthlyRevenue,
                     pendingDues
                 });
@@ -165,59 +173,156 @@ export default function OwnerDashboard() {
         return leadDateStr === selStr;
     }) : [];
 
-    if (loading) return <Loader text="Loading your dashboard..." />;
+    // Dynamically calculate Main Gym KPI Cards from Real Backend Data
+    const mainStatsCards = useMemo(() => {
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
 
-    // 6 Leads Funnel KPI Cards from Figma Mockup
-    const funnelCards = [
-        {
-            title: 'Total Leads',
-            value: stats.totalLeads || 128,
-            percentage: '12%',
-            isPositive: true,
-            icon: <FiUsers className="text-[#CA0410] text-lg" />,
-            iconBg: 'bg-[#FFECEC]'
-        },
-        {
-            title: 'New Enquires',
-            value: stats.newEnquiries || 32,
-            percentage: '8%',
-            isPositive: true,
-            icon: <FiBell className="text-[#CA0410] text-lg" />,
-            iconBg: 'bg-[#FFECEC]'
-        },
-        {
-            title: 'Trials',
-            value: stats.trials || 18,
-            percentage: '5%',
-            isPositive: true,
-            icon: <FiCalendar className="text-[#E65100] text-lg" />,
-            iconBg: 'bg-[#FFF3E0]'
-        },
-        {
-            title: 'Follow Ups',
-            value: stats.followUps || 11,
-            percentage: '15%',
-            isPositive: true,
-            icon: <FiPhone className="text-[#F57F17] text-lg" />,
-            iconBg: 'bg-[#FFF9C4]'
-        },
-        {
-            title: 'Converted',
-            value: stats.converted || 45,
-            percentage: '10%',
-            isPositive: true,
-            icon: <FiCheckCircle className="text-[#2E7D32] text-lg" />,
-            iconBg: 'bg-[#E8F5E9]'
-        },
-        {
-            title: 'Lost',
-            value: stats.lost || 8,
-            percentage: '3%',
-            isPositive: false,
-            icon: <FiXCircle className="text-[#C62828] text-lg" />,
-            iconBg: 'bg-[#FFEBEE]'
-        }
-    ];
+        const isCurrentMonth = (dateVal) => {
+            if (!dateVal) return false;
+            const d = new Date(dateVal);
+            return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        };
+
+        const isPreviousMonth = (dateVal) => {
+            if (!dateVal) return false;
+            const d = new Date(dateVal);
+            return !isNaN(d.getTime()) && d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
+        };
+
+        const getGrowthStats = (currentCount, lastCount) => {
+            if (lastCount === 0) {
+                if (currentCount > 0) {
+                    return { percentage: '+100%', isPositive: true };
+                }
+                return { percentage: '0%', isPositive: true };
+            }
+            const diff = currentCount - lastCount;
+            const pct = Math.round((diff / lastCount) * 100);
+            return {
+                percentage: `${pct >= 0 ? '+' : ''}${pct}%`,
+                isPositive: pct >= 0
+            };
+        };
+
+        // 1. Members Growth (New registrations this month vs last month)
+        const activeMembersCount = allMembers.filter(m => m.status === 'Active').length;
+        const curMonthMembers = allMembers.filter(m => isCurrentMonth(m.createdAt || m.joiningDate)).length;
+        const prevMonthMembers = allMembers.filter(m => isPreviousMonth(m.createdAt || m.joiningDate)).length;
+        const memberGrowth = getGrowthStats(curMonthMembers, prevMonthMembers);
+
+        // 2. Monthly Revenue Growth
+        const curMonthRevenue = allTransactions
+            .filter(t => isCurrentMonth(t.paymentDate || t.createdAt))
+            .reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+        const prevMonthRevenue = allTransactions
+            .filter(t => isPreviousMonth(t.paymentDate || t.createdAt))
+            .reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+        const totalRevenue = allTransactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+        const revenueGrowth = getGrowthStats(curMonthRevenue, prevMonthRevenue);
+
+        // 3. Outstanding Pending Dues
+        const pendingDuesTotal = allActivePlans.reduce((sum, p) => sum + (p.balanceAmount || 0), 0);
+        const dueMembersCount = allActivePlans.filter(p => (p.balanceAmount || 0) > 0).length;
+
+        // 4. Today's Attendance Check-ins
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayAttendanceLogs = (allAttendance || []).filter(a => {
+            if (!a.date && !a.checkInTime) return false;
+            const aDate = new Date(a.date || a.checkInTime);
+            return !isNaN(aDate.getTime()) && aDate.toISOString().split('T')[0] === todayStr;
+        });
+        const todayUniqueCheckins = new Set(
+            todayAttendanceLogs.map(a => (a.memberId?._id || a.memberId || a._id).toString())
+        ).size;
+        const attendanceRate = activeMembersCount > 0 ? Math.round((todayUniqueCheckins / activeMembersCount) * 100) : 0;
+
+        // 5. Total Leads Growth
+        const curMonthLeads = allLeads.filter(l => isCurrentMonth(l.createdAt || l.date || l.enquiryDate)).length;
+        const prevMonthLeads = allLeads.filter(l => isPreviousMonth(l.createdAt || l.date || l.enquiryDate)).length;
+        const leadsGrowth = getGrowthStats(curMonthLeads, prevMonthLeads);
+        const newEnquiriesCount = allLeads.filter(l => !l.status || ['Pending', 'New', 'Open', 'Lead'].includes(l.status)).length;
+
+        // 6. Expiring Memberships (Within next 15 days or today)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const in15Days = new Date(today);
+        in15Days.setDate(in15Days.getDate() + 15);
+        in15Days.setHours(23, 59, 59, 999);
+
+        const expiringSoonCount = allActivePlans.filter(p => {
+            const end = new Date(p.paidUntilDate || p.endDate);
+            return !isNaN(end.getTime()) && end >= today && end <= in15Days;
+        }).length;
+
+        return [
+            {
+                title: 'Active Members',
+                value: activeMembersCount,
+                percentage: memberGrowth.percentage,
+                isPositive: memberGrowth.isPositive,
+                subtitle: `${allMembers.length} Total Members`,
+                icon: <FiUsers className="text-[#CA0410] text-lg" />,
+                iconBg: 'bg-[#FFECEC]',
+                link: '/dashboard/owner/members'
+            },
+            {
+                title: 'Monthly Revenue',
+                value: `₹${Math.round(curMonthRevenue).toLocaleString()}`,
+                percentage: revenueGrowth.percentage,
+                isPositive: revenueGrowth.isPositive,
+                subtitle: `₹${Math.round(totalRevenue).toLocaleString()} Lifetime`,
+                icon: <FiTrendingUp className="text-[#2E7D32] text-lg" />,
+                iconBg: 'bg-[#E8F5E9]',
+                link: '/dashboard/owner/finance'
+            },
+            {
+                title: 'Pending Dues',
+                value: `₹${Math.round(pendingDuesTotal).toLocaleString()}`,
+                percentage: `${dueMembersCount} Due`,
+                isPositive: dueMembersCount === 0,
+                subtitle: `${dueMembersCount} members pending`,
+                icon: <FiCreditCard className="text-[#EA580C] text-lg" />,
+                iconBg: 'bg-[#FFF3E0]',
+                link: '/dashboard/owner/finance'
+            },
+            {
+                title: "Today's Attendance",
+                value: todayUniqueCheckins,
+                percentage: `${attendanceRate}%`,
+                isPositive: todayUniqueCheckins > 0,
+                subtitle: `Active check-ins today`,
+                icon: <FiCheckCircle className="text-[#1976D2] text-lg" />,
+                iconBg: 'bg-[#E3F2FD]',
+                link: '/dashboard/owner/attendance/daily'
+            },
+            {
+                title: 'Total Leads',
+                value: allLeads.length,
+                percentage: leadsGrowth.percentage,
+                isPositive: leadsGrowth.isPositive,
+                subtitle: `${newEnquiriesCount} fresh inquiries`,
+                icon: <FiUserPlus className="text-[#7E22CE] text-lg" />,
+                iconBg: 'bg-[#F3E8FF]',
+                link: '/dashboard/owner/leads'
+            },
+            {
+                title: 'Expiring Soon',
+                value: expiringSoonCount,
+                percentage: `${expiringSoonCount} Due`,
+                isPositive: expiringSoonCount === 0,
+                subtitle: 'Next 15 days renewals',
+                icon: <FiClock className="text-[#D97706] text-lg" />,
+                iconBg: 'bg-[#FFF9C4]',
+                link: '/dashboard/owner/membership'
+            }
+        ];
+    }, [allMembers, allTransactions, allActivePlans, allAttendance, allLeads]);
+
+    if (loading) return <Loader text="Loading your dashboard..." />;
 
     return (
         <PageLayout>
@@ -260,27 +365,32 @@ export default function OwnerDashboard() {
 
                 {showQRScanner && <StaffCheckIn onClose={() => setShowQRScanner(false)} onSuccess={fetchMyAttendance} />}
 
-                {/* 6 Leads Funnel KPI Cards Grid */}
+                {/* 6 Main Gym Overview KPI Cards Grid with Real Backend Data */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4">
-                    {funnelCards.map((card, idx) => (
+                    {mainStatsCards.map((card, idx) => (
                         <div 
                             key={idx} 
-                            className="bg-white p-3.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-rose-300 hover:-translate-y-0.5 transition-all flex items-center gap-3 cursor-default"
+                            onClick={() => card.link && navigate(card.link)}
+                            className="bg-white p-3.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-rose-300 hover:-translate-y-0.5 transition-all flex items-center gap-3 cursor-pointer group"
                         >
-                            <div className={`w-11 h-11 rounded-xl ${card.iconBg} flex items-center justify-center shrink-0 shadow-2xs`}>
+                            <div className={`w-11 h-11 rounded-xl ${card.iconBg} flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform`}>
                                 {card.icon}
                             </div>
                             <div className="min-w-0 flex-1">
-                                <p className="text-[11.5px] font-bold text-slate-700 truncate">{card.title}</p>
+                                <p className="text-[11.5px] font-bold text-slate-700 truncate group-hover:text-slate-900 transition-colors">{card.title}</p>
                                 <div className="flex items-baseline gap-1.5 mt-0.5">
-                                    <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-none">
+                                    <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-none truncate">
                                         {card.value}
                                     </span>
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${card.isPositive ? 'text-emerald-600 bg-emerald-50 border border-emerald-200/60' : 'text-rose-600 bg-rose-50 border border-rose-200/60'}`}>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${
+                                        card.isPositive 
+                                            ? 'text-emerald-700 bg-emerald-50 border-emerald-200' 
+                                            : 'text-rose-700 bg-rose-50 border-rose-200'
+                                    }`}>
                                         {card.percentage}
                                     </span>
                                 </div>
-                                <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5">vs last month</span>
+                                <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5 truncate">{card.subtitle}</span>
                             </div>
                         </div>
                     ))}
@@ -372,30 +482,30 @@ export default function OwnerDashboard() {
 
                         </div>
 
-                        {/* Quick Stats Box (5 Columns) */}
+                        {/* Lead Pipeline Quick Stats Box (5 Columns) */}
                         <div className="lg:col-span-5 bg-white rounded-2xl border border-rose-200/80 p-4 shadow-2xs flex flex-col justify-between">
                             <div className="flex items-center gap-2 mb-2.5">
                                 <div className="w-6 h-6 rounded-lg bg-rose-50 text-[#CA0410] flex items-center justify-center text-xs">
                                     <FiTrendingUp />
                                 </div>
-                                <h4 className="text-xs font-black text-slate-800 tracking-tight">Quick Stats</h4>
+                                <h4 className="text-xs font-black text-slate-800 tracking-tight">Pipeline Highlights</h4>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                <div className="bg-[#E8F5E9]/80 border border-emerald-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
-                                    <span className="text-sm font-black text-emerald-700">{stats.activeMembers}</span>
-                                    <span className="text-[9.5px] font-bold text-emerald-600 mt-0.5">Active Members</span>
-                                </div>
-                                <div className="bg-[#E3F2FD]/80 border border-blue-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
-                                    <span className="text-sm font-black text-blue-700">{stats.totalLeads}</span>
-                                    <span className="text-[9.5px] font-bold text-blue-600 mt-0.5">Total Leads</span>
+                                <div className="bg-[#FFECEC]/80 border border-rose-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-sm font-black text-[#CA0410]">{stats.newEnquiries}</span>
+                                    <span className="text-[9.5px] font-bold text-rose-600 mt-0.5">New Enquiries</span>
                                 </div>
                                 <div className="bg-[#FFF3E0]/80 border border-amber-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
-                                    <span className="text-sm font-black text-amber-700">{stats.pendingDues > 0 ? stats.pendingDues.toLocaleString() : '3,009.77'}</span>
-                                    <span className="text-[9.5px] font-bold text-amber-600 mt-0.5">Pending Dues</span>
+                                    <span className="text-sm font-black text-amber-700">{stats.trials}</span>
+                                    <span className="text-[9.5px] font-bold text-amber-600 mt-0.5">Active Trials</span>
                                 </div>
-                                <div className="bg-[#EDE7F6]/80 border border-purple-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
-                                    <span className="text-sm font-black text-purple-700">{stats.monthlyRevenue > 0 ? stats.monthlyRevenue.toLocaleString() : '0'}</span>
-                                    <span className="text-[9.5px] font-bold text-purple-600 mt-0.5">Month Revenue</span>
+                                <div className="bg-[#FFF9C4]/80 border border-yellow-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-sm font-black text-amber-800">{stats.followUps}</span>
+                                    <span className="text-[9.5px] font-bold text-yellow-700 mt-0.5">Follow-ups Due</span>
+                                </div>
+                                <div className="bg-[#E8F5E9]/80 border border-emerald-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-sm font-black text-emerald-700">{stats.converted}</span>
+                                    <span className="text-[9.5px] font-bold text-emerald-600 mt-0.5">Converted</span>
                                 </div>
                             </div>
                         </div>

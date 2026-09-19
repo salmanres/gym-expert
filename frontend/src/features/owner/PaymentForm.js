@@ -400,12 +400,12 @@ export default function PaymentForm() {
                         </FormSection>
 
                         {/* Layout for Payment Section (Right) & Summary (Left) */}
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                             
                             {/* LEFT: Payment Summary Receipt */}
-                            <div className="lg:col-span-5 w-full">
-                                <FormSection title="Payment Summary" icon={<FiDollarSign />} className="flex flex-col h-full">
-                                    <div className="w-full bg-slate-900 text-slate-300 rounded-2xl p-6 md:p-8 shadow-2xl relative overflow-hidden h-full flex flex-col justify-between">
+                            <div className="lg:col-span-5 w-full flex flex-col">
+                                <FormSection title="Payment Summary" icon={<FiDollarSign />} containerClassName="flex-1 flex flex-col mb-0" className="flex-1 flex flex-col">
+                                    <div className="w-full bg-slate-900 text-slate-300 rounded-2xl p-6 md:p-8 shadow-2xl relative overflow-hidden flex-1 flex flex-col justify-between">
                                         
                                         {/* Premium subtle background glow */}
                                         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-32 h-32 bg-rose-500 rounded-full blur-3xl opacity-20"></div>
@@ -460,9 +460,9 @@ export default function PaymentForm() {
                             </div>
 
                             {/* RIGHT: Collect Payment */}
-                            <div className="lg:col-span-7 w-full">
-                                <FormSection title="Collect Payment" icon={<FiDollarSign />} className="grid grid-cols-1 sm:grid-cols-2 gap-4 h-full">
-                                    <div className="col-span-1 sm:col-span-2">
+                            <div className="lg:col-span-7 w-full flex flex-col">
+                                <FormSection title="Collect Payment" icon={<FiDollarSign />} containerClassName="flex-1 flex flex-col mb-0" className="flex-1 flex flex-col justify-between gap-4">
+                                    <div className="space-y-4">
                                         <Input 
                                             type="number" 
                                             label="Amount to Pay (₹)" 
@@ -473,30 +473,26 @@ export default function PaymentForm() {
                                             placeholder="Enter amount..." 
                                             className="text-xl py-3 border-rose-300 focus:border-[#CA0410] font-bold bg-rose-50/30 text-slate-900 placeholder:text-rose-300" 
                                         />
-                                    </div>
-                                    
-                                    <div className="col-span-1 sm:col-span-1">
-                                        <Select 
-                                            label="Payment Method" 
-                                            name="paymentMode" 
-                                            value={formData.paymentMode} 
-                                            onChange={handleChange} 
-                                            options={['Cash', 'UPI', 'Card', 'Bank Transfer', 'Other']} 
-                                        />
-                                    </div>
+                                        
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <Select 
+                                                label="Payment Method" 
+                                                name="paymentMode" 
+                                                value={formData.paymentMode} 
+                                                onChange={handleChange} 
+                                                options={['Cash', 'UPI', 'Card', 'Bank Transfer', 'Other']} 
+                                            />
 
-                                    <div className="col-span-1 sm:col-span-1">
-                                        <Input 
-                                            type="number" 
-                                            label="Additional Discount (₹)" 
-                                            name="additionalDiscount" 
-                                            value={formData.additionalDiscount} 
-                                            onChange={handleChange} 
-                                            placeholder="e.g. 500" 
-                                        />
-                                    </div>
-                                    
-                                    <div className="col-span-1 sm:col-span-2 mt-2">
+                                            <Input 
+                                                type="number" 
+                                                label="Additional Discount (₹)" 
+                                                name="additionalDiscount" 
+                                                value={formData.additionalDiscount} 
+                                                onChange={handleChange} 
+                                                placeholder="e.g. 500" 
+                                            />
+                                        </div>
+                                        
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                                             <div className="flex-1">
                                                 <label className="flex items-center gap-3 cursor-pointer">
@@ -527,8 +523,8 @@ export default function PaymentForm() {
                                                         value={formData.walletUsed}
                                                         onChange={(e) => {
                                                              const val = Number(e.target.value);
-                                                            const maxWallet = members.find(m => m._id === formData.memberId)?.walletBalance || 0;
-                                                            if (val <= maxWallet) handleChange(e);
+                                                             const maxWallet = members.find(m => m._id === formData.memberId)?.walletBalance || 0;
+                                                             if (val <= maxWallet) handleChange(e);
                                                         }}
                                                         placeholder="Amount to deduct"
                                                     />
@@ -537,7 +533,7 @@ export default function PaymentForm() {
                                         </div>
                                     </div>
                                     
-                                    <div className="col-span-1 sm:col-span-2 mt-2">
+                                    <div>
                                         <Input type="text" label="Transaction ID (Optional)" name="transactionId" value={formData.transactionId} onChange={handleChange} placeholder="e.g. UPI-123456789" />
                                     </div>
                                 </FormSection>

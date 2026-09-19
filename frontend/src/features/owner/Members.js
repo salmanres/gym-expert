@@ -20,7 +20,7 @@ export default function Members() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('All Members');
-    
+
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
@@ -39,7 +39,7 @@ export default function Members() {
                 apiClient.get('/members'),
                 apiClient.get('/member-memberships/latest')
             ]);
-            
+
             const latestMemberships = latestMembershipsRes.data || [];
             const membersWithPlans = membersRes.data.map(member => {
                 const memberActiveList = latestMemberships.filter(m => (m.memberId?._id || m.memberId) === member._id && (m.membershipStatus === 'Active' || m.membershipStatus === 'Frozen'));
@@ -53,11 +53,11 @@ export default function Members() {
                         computedStatus = 'Inactive';
                     } else {
                         const today = new Date();
-                        today.setHours(0,0,0,0);
-                        
+                        today.setHours(0, 0, 0, 0);
+
                         const validityDate = membership.paidUntilDate ? new Date(membership.paidUntilDate) : new Date(membership.endDate);
-                        validityDate.setHours(23,59,59,999);
-                        
+                        validityDate.setHours(23, 59, 59, 999);
+
                         const hasPaid = membership.paidAmount > 0;
                         const isExpired = validityDate < today;
 
@@ -76,7 +76,7 @@ export default function Members() {
                     member.paymentStatus = membership.paymentStatus;
                     member.amountPaid = membership.paidAmount;
                 }
-                
+
                 member.status = computedStatus;
                 return member;
             });
@@ -140,7 +140,7 @@ export default function Members() {
 
     const handleFreezeStatus = async (member, newStatus) => {
         const actionText = newStatus === 'Frozen' ? 'freeze' : 'unfreeze';
-        
+
         setConfirmModal({
             isOpen: true,
             title: `${newStatus === 'Frozen' ? 'Freeze' : 'Unfreeze'} Membership`,
@@ -162,23 +162,23 @@ export default function Members() {
         if (activeTab === 'Active' && member.status !== 'Active') return false;
         if (activeTab === 'Inactive' && member.status !== 'Inactive') return false;
         if (activeTab === 'Frozen' && member.status !== 'Frozen') return false;
-        
+
         // Gender Filter
         if (filterGender !== 'All' && member.gender !== filterGender) return false;
 
         // Joining Date Filter
         if (filterStartDate || filterEndDate) {
             const itemDate = new Date(member.joiningDate);
-            itemDate.setHours(0,0,0,0);
-            
+            itemDate.setHours(0, 0, 0, 0);
+
             if (filterStartDate) {
                 const start = new Date(filterStartDate);
-                start.setHours(0,0,0,0);
+                start.setHours(0, 0, 0, 0);
                 if (itemDate < start) return false;
             }
             if (filterEndDate) {
                 const end = new Date(filterEndDate);
-                end.setHours(23,59,59,999);
+                end.setHours(23, 59, 59, 999);
                 if (itemDate > end) return false;
             }
         }
@@ -237,10 +237,10 @@ export default function Members() {
                 <td className="py-2.5 pl-4 pr-3 align-middle">
                     <div className="flex items-center gap-2.5">
                         {member.profilePhoto ? (
-                            <img 
-                                src={member.profilePhoto} 
-                                alt={member.firstName} 
-                                className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" 
+                            <img
+                                src={member.profilePhoto}
+                                alt={member.firstName}
+                                className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0"
                             />
                         ) : (
                             <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
@@ -249,7 +249,7 @@ export default function Members() {
                         )}
 
                         <div className="flex flex-col items-start min-w-0">
-                            <button 
+                            <button
                                 onClick={() => navigate(`/dashboard/owner/members/view/${member._id}`, { state: { member } })}
                                 className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
                             >
@@ -272,13 +272,12 @@ export default function Members() {
                                         const sessInfo = isPT && m.totalSessions > 0 ? `[${m.usedSessions || 0}/${m.totalSessions}]` : '';
 
                                         return (
-                                            <span key={m._id || i} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border shrink-0 ${
-                                                m.membershipStatus === 'Frozen' 
-                                                    ? 'bg-cyan-50 text-cyan-700 border-cyan-200' 
-                                                    : isPT 
-                                                        ? 'bg-amber-50 text-amber-800 border-amber-300' 
+                                            <span key={m._id || i} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border shrink-0 ${m.membershipStatus === 'Frozen'
+                                                    ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
+                                                    : isPT
+                                                        ? 'bg-amber-50 text-amber-800 border-amber-300'
                                                         : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                            }`}>
+                                                }`}>
                                                 {isPT ? '🟡 PT' : '🟢 Gym'}: {pName} {sessInfo} {trName}
                                             </span>
                                         );
@@ -286,7 +285,7 @@ export default function Members() {
                                 ) : (
                                     member.membershipPlan && (
                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border border-slate-200 text-slate-700 bg-slate-50 shrink-0">
-                                             {member.membershipPlan.name}
+                                            {member.membershipPlan.name}
                                         </span>
                                     )
                                 )}
@@ -356,56 +355,54 @@ export default function Members() {
                 <td className="py-2.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
                         {/* View Profile */}
-                        <button 
-                            onClick={() => navigate(`/dashboard/owner/members/view/${member._id}`, { state: { member } })} 
-                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                        <button
+                            onClick={() => navigate(`/dashboard/owner/members/view/${member._id}`, { state: { member } })}
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title="View Member Profile"
                         >
                             <FiEye size={15} />
                         </button>
 
                         {/* Collect Payment / Dues */}
-                        <button 
-                            onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: member } })} 
-                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-2xs active:scale-95 ${
-                                !member.membershipPlan 
-                                    ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed' 
+                        <button
+                            onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: member } })}
+                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-2xs active:scale-95 ${!member.membershipPlan
+                                    ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
                                     : member.paymentStatus === 'Paid'
                                         ? 'border-emerald-200 bg-emerald-50/50 text-emerald-300 cursor-not-allowed'
                                         : 'border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 cursor-pointer'
-                            }`}
+                                }`}
                             title={!member.membershipPlan ? 'No Active Plan' : member.paymentStatus === 'Paid' ? 'Fee Fully Paid' : 'Collect Fee'}
                             disabled={!member.membershipPlan || member.paymentStatus === 'Paid'}
                         >
                             <FiCreditCard size={14} />
                         </button>
-                        
+
                         {/* Assign / Renew Plan */}
-                        <button 
-                            onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })} 
+                        <button
+                            onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })}
                             className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-white hover:border-indigo-400 hover:bg-indigo-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title={member.membershipPlan ? "Renew or Upgrade Plan" : "Assign Plan"}
                         >
                             <FiPlus size={15} />
                         </button>
-                        
+
                         {/* Freeze / Unfreeze */}
                         {member.status === 'Frozen' ? (
-                            <button 
-                                onClick={() => handleFreezeStatus(member, 'Active')} 
+                            <button
+                                onClick={() => handleFreezeStatus(member, 'Active')}
                                 className="w-8 h-8 rounded-lg border border-cyan-300 text-cyan-600 bg-cyan-50/90 hover:border-cyan-500 hover:bg-cyan-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                                 title="Unfreeze Membership"
                             >
                                 <FiPlayCircle size={14} />
                             </button>
                         ) : (
-                            <button 
-                                onClick={() => handleFreezeStatus(member, 'Frozen')} 
-                                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-2xs active:scale-95 ${
-                                    !member.membershipPlan 
-                                        ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed' 
+                            <button
+                                onClick={() => handleFreezeStatus(member, 'Frozen')}
+                                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-2xs active:scale-95 ${!member.membershipPlan
+                                        ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
                                         : 'border-cyan-200 text-cyan-600 bg-white hover:border-cyan-400 hover:bg-cyan-50 cursor-pointer'
-                                }`}
+                                    }`}
                                 title={!member.membershipPlan ? "No Active Plan" : "Freeze Membership"}
                                 disabled={!member.membershipPlan}
                             >
@@ -414,18 +411,18 @@ export default function Members() {
                         )}
 
                         {/* Edit */}
-                        <button 
-                            onClick={() => handleEdit(member)} 
-                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                        <button
+                            onClick={() => handleEdit(member)}
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title="Edit Record"
                         >
                             <FiEdit2 size={14} />
                         </button>
 
                         {/* Delete */}
-                        <button 
-                            onClick={() => handleDelete(member._id)} 
-                            className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                        <button
+                            onClick={() => handleDelete(member._id)}
+                            className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title="Delete Record"
                         >
                             <FiTrash2 size={14} />
@@ -504,18 +501,18 @@ export default function Members() {
 
     return (
         <PageLayout>
-            <PageHeader 
-                title="Members" 
+            <PageHeader
+                title="Members"
                 subtitle="Manage active and inactive members"
                 onAdd={() => navigate('/dashboard/owner/members/add')}
                 addLabel="Add Member"
             />
-            
+
             <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
                 <SummaryCards cards={summaryCardsData} />
             </div>
 
-            <Tabs 
+            <Tabs
                 tabs={['All Members', 'Active', 'Inactive', 'Frozen']}
                 activeTab={activeTab}
                 onTabChange={(tab) => {
@@ -528,17 +525,17 @@ export default function Members() {
                 }}
             />
 
-            <FilterBar 
-                searchTerm={searchTerm} 
+            <FilterBar
+                searchTerm={searchTerm}
                 onSearchChange={(val) => {
                     setSearchTerm(val);
                     setCurrentPage(1);
-                }} 
+                }}
                 searchPlaceholder="Search by name, phone or ID..."
             >
                 <div className="flex items-center bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl shadow-2xs h-9 px-2.5 transition-all focus-within:border-[#CA0410] focus-within:ring-2 focus-within:ring-[#CA0410]/20 w-full sm:w-auto">
-                    <input 
-                        type="date" 
+                    <input
+                        type="date"
                         value={filterStartDate}
                         onChange={(e) => {
                             setFilterStartDate(e.target.value);
@@ -548,8 +545,8 @@ export default function Members() {
                         title="Joining Date From"
                     />
                     <span className="text-slate-300 mx-2 font-medium text-[10px]">TO</span>
-                    <input 
-                        type="date" 
+                    <input
+                        type="date"
                         value={filterEndDate}
                         onChange={(e) => {
                             setFilterEndDate(e.target.value);
@@ -559,9 +556,9 @@ export default function Members() {
                         title="Joining Date To"
                     />
                 </div>
-                
-                <select 
-                    value={filterGender} 
+
+                <select
+                    value={filterGender}
                     onChange={(e) => {
                         setFilterGender(e.target.value);
                         setCurrentPage(1);
@@ -576,12 +573,12 @@ export default function Members() {
             </FilterBar>
 
             <div className="px-6 md:px-8 pb-6 pt-1 bg-[#FAEEEF] w-full flex flex-col gap-4 min-h-0 flex-1">
-                <DataTable 
-                    columns={columns} 
-                    data={paginatedMembers} 
+                <DataTable
+                    columns={columns}
+                    data={paginatedMembers}
                     loading={loading}
                     emptyMessage={searchTerm ? `No members match "${searchTerm}"` : "No members found."}
-                    renderRow={renderRow} 
+                    renderRow={renderRow}
                     pagination={{
                         currentPage: currentPage,
                         totalItems: totalItems,
@@ -593,7 +590,7 @@ export default function Members() {
                 />
             </div>
 
-            <ConfirmModal 
+            <ConfirmModal
                 isOpen={confirmModal.isOpen}
                 onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
                 onConfirm={confirmModal.onConfirm}

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
-import { FiPrinter, FiMapPin, FiSettings } from 'react-icons/fi';
+import { FiPrinter, FiMapPin, FiSettings, FiCamera, FiSmartphone, FiCheckCircle, FiShield, FiArrowRight } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
 import Loader from '../../components/page/Loader';
@@ -17,7 +17,7 @@ export default function GymQRCode() {
                 const res = await apiClient.get('/gyms/my-gym');
                 setGym(res.data);
             } catch (error) {
-                console.error(error);
+                console.error("Failed to fetch gym data:", error);
             } finally {
                 setLoading(false);
             }
@@ -25,81 +25,145 @@ export default function GymQRCode() {
         fetchGym();
     }, []);
 
-    const checkInUrl = `${window.location.origin}/checkin/${gym?._id}`;
+    const checkInUrl = gym?._id ? `${window.location.origin}/checkin/${gym._id}` : `${window.location.origin}`;
 
     const handlePrint = () => {
         window.print();
     };
 
-    if (loading) return <Loader />;
+    if (loading) return <Loader text="Loading QR Code..." />;
 
     return (
         <PageLayout>
             <PageHeader 
-                title="Gym QR Code" 
-                subtitle="Print and display this QR Code at your reception for self check-in."
+                title="Gym Check-In QR" 
+                subtitle="Print and display this QR Code at your reception desk for instant member & staff self check-in."
                 action={
                     <button 
                         onClick={handlePrint} 
-                        className="print:hidden flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-transform hover:-translate-y-0.5 active:scale-95"
+                        className="print:hidden flex items-center gap-2 bg-[#CA0410] hover:bg-[#b0030e] text-white px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all hover:shadow-lg active:scale-95 cursor-pointer"
                     >
-                        <FiPrinter className="text-lg" /> Print QR Code
+                        <FiPrinter className="text-base" /> Print QR Standee
                     </button>
                 }
             />
 
-            <div className="relative flex-1 overflow-y-auto print:p-0 print:bg-white print:overflow-visible bg-slate-50 flex flex-col items-center justify-start print:justify-center print:h-screen p-4 sm:p-8">
+            <div className="relative flex-1 overflow-y-auto print:p-0 print:bg-white print:overflow-visible bg-[#FAEEEF] flex flex-col items-center justify-start print:justify-center p-4 sm:p-8">
                 
+                {/* Geofence Disabled Warning Alert */}
                 {!gym?.qrAttendanceEnabled && (
-                    <div className="print:hidden w-full max-w-xl mb-6 bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-lg flex items-start gap-3 shadow-sm">
-                        <FiSettings className="shrink-0 mt-0.5 text-lg" />
-                        <div>
-                            <p className="font-bold text-sm">QR Attendance is Disabled!</p>
-                            <p className="text-xs mt-1">Members cannot check in right now. Please enable it in your Gym Settings.</p>
-                            <Link to="/dashboard/owner/settings" className="mt-2 inline-block text-xs font-bold bg-white text-rose-700 border border-rose-200 px-3 py-1.5 rounded hover:bg-rose-100 transition-colors">Go to Settings</Link>
+                    <div className="print:hidden w-full max-w-lg mb-6 bg-white border border-rose-200 text-slate-800 p-4 rounded-2xl flex items-start gap-3.5 shadow-2xs">
+                        <div className="w-10 h-10 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center shrink-0 border border-rose-200/60 shadow-2xs">
+                            <FiSettings size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="font-extrabold text-sm text-[#CA0410]">QR Attendance is Currently Disabled</p>
+                            <p className="text-xs text-slate-500 font-medium mt-0.5">Members and staff cannot check in via QR code until geofencing is enabled.</p>
+                            <Link 
+                                to="/dashboard/owner/settings" 
+                                className="mt-2.5 inline-flex items-center gap-1 text-xs font-bold bg-[#CA0410] text-white px-3.5 py-1.5 rounded-lg shadow-2xs hover:bg-[#b0030e] transition-all cursor-pointer"
+                            >
+                                Enable in Gym Settings <FiArrowRight size={12} />
+                            </Link>
                         </div>
                     </div>
                 )}
 
-                <div className="w-full max-w-md bg-white border border-slate-200 p-10 rounded-2xl shadow-lg flex flex-col items-center text-center print:border-none print:shadow-none print:w-full print:max-w-none print:p-0">
-                    <div className="w-24 h-24 bg-slate-900 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg">
-                        <span className="font-black text-3xl tracking-tighter">GYM</span>
-                    </div>
+                {/* THEMED QR STANDEE POSTER CARD */}
+                <div className="w-full max-w-md bg-white border border-rose-200/90 rounded-[28px] shadow-xl overflow-hidden flex flex-col items-center text-center print:border-none print:shadow-none print:w-full print:max-w-none print:p-0">
                     
-                    <h2 className="text-3xl font-black text-slate-800 mb-2 uppercase tracking-tight">{gym?.name}</h2>
-                    <p className="text-slate-500 font-bold mb-8 uppercase tracking-widest text-sm">Self Check-In Station</p>
+                    {/* Standee Header with Gradient Theme */}
+                    <div 
+                        className="w-full px-6 py-6 text-white flex flex-col items-center justify-center relative overflow-hidden select-none"
+                        style={{ background: 'linear-gradient(135deg, #07101A 0%, #1c0b11 50%, #A5151B 100%)' }}
+                    >
+                        {/* Gym Logo / Avatar */}
+                        {gym?.logo ? (
+                            <img 
+                                src={gym.logo} 
+                                alt={gym.name} 
+                                className="w-16 h-16 rounded-2xl object-cover border-2 border-white/40 shadow-lg mb-3" 
+                            />
+                        ) : (
+                            <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white flex items-center justify-center font-black text-2xl shadow-lg mb-3">
+                                {gym?.name?.charAt(0) || 'G'}
+                            </div>
+                        )}
 
-                    <div className="p-4 bg-white border-4 border-slate-900 rounded-xl shadow-lg relative">
-                        <QRCodeSVG 
-                            value={checkInUrl} 
-                            size={256} 
-                            bgColor={"#ffffff"}
-                            fgColor={"#0f172a"}
-                            level={"H"}
-                        />
+                        <h2 className="text-2xl font-black text-white tracking-tight uppercase leading-tight">
+                            {gym?.name || 'Gym Center'}
+                        </h2>
+                        
+                        <div className="mt-2 inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-md border border-white/25 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider text-rose-100">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            Self Check-In Station
+                        </div>
                     </div>
 
-                    <div className="mt-8 mb-4 max-w-xs mx-auto">
-                        <p className="font-bold text-slate-800 text-xl mb-2">How to check in?</p>
-                        <ol className="text-sm font-medium text-slate-600 text-left space-y-2 list-decimal list-inside">
-                            <li>Open your phone's Camera</li>
-                            <li>Scan this QR Code</li>
-                            <li>Allow Location access</li>
-                            <li>Tap "Check In"</li>
-                        </ol>
+                    {/* QR Code Container */}
+                    <div className="p-6 sm:p-8 w-full flex flex-col items-center bg-white">
+                        
+                        <div className="p-4 bg-white border-2 border-rose-200/80 rounded-2xl shadow-md relative group">
+                            <QRCodeSVG 
+                                value={checkInUrl} 
+                                size={220} 
+                                bgColor={"#ffffff"}
+                                fgColor={"#0f172a"}
+                                level={"H"}
+                                className="rounded-lg"
+                            />
+                        </div>
+
+                        <p className="text-xs font-bold text-slate-500 mt-4 tracking-wide uppercase">
+                            Scan with camera to mark attendance
+                        </p>
+
+                        {/* Step-by-Step Instructions */}
+                        <div className="mt-6 w-full bg-[#FAEEEF]/60 border border-rose-200/60 p-4 rounded-2xl text-left">
+                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                                <FiSmartphone className="text-[#CA0410]" /> How to check in:
+                            </h4>
+                            <ol className="space-y-2 text-xs text-slate-600 font-medium">
+                                <li className="flex items-center gap-2.5">
+                                    <span className="w-5 h-5 rounded-full bg-[#CA0410] text-white font-bold text-[10px] flex items-center justify-center shrink-0">1</span>
+                                    <span>Open your phone's <b>Camera</b> or QR Scanner</span>
+                                </li>
+                                <li className="flex items-center gap-2.5">
+                                    <span className="w-5 h-5 rounded-full bg-[#CA0410] text-white font-bold text-[10px] flex items-center justify-center shrink-0">2</span>
+                                    <span>Point camera at this <b>QR Code</b></span>
+                                </li>
+                                <li className="flex items-center gap-2.5">
+                                    <span className="w-5 h-5 rounded-full bg-[#CA0410] text-white font-bold text-[10px] flex items-center justify-center shrink-0">3</span>
+                                    <span>Allow <b>Location Permission</b> when prompted</span>
+                                </li>
+                                <li className="flex items-center gap-2.5">
+                                    <span className="w-5 h-5 rounded-full bg-[#CA0410] text-white font-bold text-[10px] flex items-center justify-center shrink-0">4</span>
+                                    <span>Tap <b>"Check In"</b> to complete attendance</span>
+                                </li>
+                            </ol>
+                        </div>
+
+                        {/* GPS Geofence Security Badge */}
+                        <div className="mt-5 flex items-center justify-center gap-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-200/80 w-full shadow-2xs">
+                            <FiShield className="text-sm shrink-0 text-emerald-600" />
+                            <span>GPS Geofenced • Safe & Secure Check-In</span>
+                        </div>
+
                     </div>
 
-                    <div className="mt-6 flex items-center justify-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
-                        <FiMapPin className="text-sm" />
-                        <span>GPS Verification Active</span>
+                    {/* Standee Footer Branding */}
+                    <div className="w-full bg-slate-50 border-t border-rose-100 py-3 px-4 text-[11px] font-semibold text-slate-400 text-center">
+                        Powered by Gym Chalak Smart Reception
                     </div>
+
                 </div>
+
             </div>
 
             <style>{`
                 @media print {
                     @page { size: A4 portrait; margin: 0; }
-                    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: white !important; }
                     nav, header, .print\\:hidden { display: none !important; }
                 }
             `}</style>

@@ -20,7 +20,7 @@ function Memberships() {
     const [activeTab, setActiveTab] = useState('Plans'); // 'Plans', 'Assign', 'Active', 'Scheduled', 'Expired', 'Renewals'
     const [bonusModal, setBonusModal] = useState({ open: false, membership: null, days: '', reason: '' });
     const [gymSettings, setGymSettings] = useState(null);
-    
+
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
@@ -38,7 +38,7 @@ function Memberships() {
                 apiClient.get('/member-memberships/active').catch(() => ({ data: [] })),
                 apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
             ]);
-            
+
             if (gymRes?.data) setGymSettings(gymRes.data);
 
             const latestMemberships = latestMembershipsRes.data || [];
@@ -59,15 +59,15 @@ function Memberships() {
                     member.activeMembership = activeMem || mainMem;
                     member.scheduledMembership = scheduledMem;
                     member.planStartDate = mainMem.startDate;
-                    
+
                     member.planEndDate = mainMem.endDate;
                     member.paidUntilDate = mainMem.paidUntilDate;
-                    
+
                     member.paymentStatus = mainMem.paymentStatus;
                 }
                 return member;
             });
-            
+
             setMemberships(memRes.data);
             setMembers(membersWithPlans);
             setLoading(false);
@@ -201,7 +201,7 @@ function Memberships() {
                             {(m.name || 'P').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex flex-col items-start min-w-0">
-                            <button 
+                            <button
                                 onClick={() => handleEdit(m)}
                                 className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
                             >
@@ -238,26 +238,25 @@ function Memberships() {
                     </div>
                 </td>
                 <td className="py-2.5 px-2 text-center align-middle">
-                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
-                        m.isActive 
-                            ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${m.isActive
+                            ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
                             : 'bg-rose-50 text-rose-700 border-rose-200'
-                    }`}>
+                        }`}>
                         {m.isActive ? 'Active' : 'Inactive'}
                     </span>
                 </td>
                 <td className="py-2.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
-                        <button 
-                            onClick={() => handleEdit(m)} 
-                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                        <button
+                            onClick={() => handleEdit(m)}
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title="Edit Plan"
                         >
                             <FiEdit2 size={14} />
                         </button>
-                        <button 
-                            onClick={() => handleDelete(m._id)} 
-                            className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                        <button
+                            onClick={() => handleDelete(m._id)}
+                            className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title="Delete Plan"
                         >
                             <FiTrash2 size={14} />
@@ -294,7 +293,7 @@ function Memberships() {
                             </div>
                         )}
                         <div className="flex flex-col items-start min-w-0">
-                            <button 
+                            <button
                                 onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
                                 className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
                             >
@@ -342,60 +341,58 @@ function Memberships() {
                             Scheduled
                         </span>
                     ) : endDate ? (
-                        <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
-                            isExpired 
-                                ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                                : isRenewingSoon 
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                        <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${isExpired
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : isRenewingSoon
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
                                     : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        }`}>
+                            }`}>
                             {isExpired ? 'Expired' : isRenewingSoon ? 'Expiring Soon' : 'Active'}
                         </span>
                     ) : '-'}
                 </td>
                 <td className="py-2.5 px-2 text-center align-middle">
-                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
-                        paymentStat === 'Paid' 
-                            ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
-                            : paymentStat === 'Partial' 
-                                ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${paymentStat === 'Paid'
+                            ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
+                            : paymentStat === 'Partial'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
                                 : 'bg-rose-50 text-rose-700 border-rose-200'
-                    }`}>
+                        }`}>
                         {paymentStat || 'Pending'}
                     </span>
                 </td>
                 <td className="py-2.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
                         {(m.paymentStatus === 'Pending' || m.paymentStatus === 'Partial') && m.membershipPlan && activeTab !== 'Assign' && (
-                            <button 
-                                onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: m } })} 
-                                className="w-8 h-8 rounded-lg border border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            <button
+                                onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: m } })}
+                                className="w-8 h-8 rounded-lg border border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                                 title="Collect Fee"
                             >
                                 <FiCreditCard size={14} />
                             </button>
                         )}
                         {activeTab === 'Active' && m.activeMembership && (
-                            <button 
-                                onClick={() => setBonusModal({ open: true, membership: m.activeMembership, days: '', reason: '' })} 
-                                className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-white hover:border-indigo-400 hover:bg-indigo-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            <button
+                                onClick={() => setBonusModal({ open: true, membership: m.activeMembership, days: '', reason: '' })}
+                                className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-white hover:border-indigo-400 hover:bg-indigo-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                                 title="Add Bonus Days / Offer"
                             >
                                 <FiGift size={14} />
                             </button>
                         )}
                         {(activeTab === 'Expired' || activeTab === 'Renewals') && (
-                            <button 
-                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, isRenew: true } })} 
-                                className="w-8 h-8 rounded-lg border border-blue-200 text-blue-600 bg-white hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                            <button
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, isRenew: true } })}
+                                className="w-8 h-8 rounded-lg border border-blue-200 text-blue-600 bg-white hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                                 title="Renew Plan"
                             >
                                 <FiRefreshCw size={14} />
                             </button>
                         )}
-                        <button 
-                            onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })} 
-                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                        <button
+                            onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title="View Profile"
                         >
                             <FiEye size={15} />
@@ -471,39 +468,39 @@ function Memberships() {
 
     return (
         <PageLayout>
-            <PageHeader 
-                title="Membership Management" 
-                subtitle="Manage subscription packages and member assignments" 
-                onAdd={activeTab === 'Plans' ? handleAddNew : null} 
-                addLabel={activeTab === 'Plans' ? "Add Plan" : ""} 
+            <PageHeader
+                title="Membership Management"
+                subtitle="Manage subscription packages and member assignments"
+                onAdd={activeTab === 'Plans' ? handleAddNew : null}
+                addLabel={activeTab === 'Plans' ? "Add Plan" : ""}
             />
-            
+
             <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
                 <SummaryCards cards={summaryCardsData} />
             </div>
 
-            <Tabs 
-                tabs={tabs} 
-                activeTab={activeTab} 
-                onTabChange={(tab) => { 
-                    setActiveTab(tab); 
-                    setSearchTerm(''); 
+            <Tabs
+                tabs={tabs}
+                activeTab={activeTab}
+                onTabChange={(tab) => {
+                    setActiveTab(tab);
+                    setSearchTerm('');
                     setFilterPaymentStatus('All');
                     setCurrentPage(1);
-                }} 
+                }}
             />
 
-            <FilterBar 
-                searchTerm={searchTerm} 
+            <FilterBar
+                searchTerm={searchTerm}
                 onSearchChange={(val) => {
                     setSearchTerm(val);
                     setCurrentPage(1);
-                }} 
+                }}
                 searchPlaceholder={activeTab === 'Plans' ? "Search plans..." : "Search members..."}
             >
                 {activeTab !== 'Plans' && (
-                    <select 
-                        value={filterPaymentStatus} 
+                    <select
+                        value={filterPaymentStatus}
                         onChange={(e) => {
                             setFilterPaymentStatus(e.target.value);
                             setCurrentPage(1);
@@ -520,12 +517,12 @@ function Memberships() {
 
             <div className="px-6 md:px-8 pb-6 pt-1 bg-[#FAEEEF] w-full flex flex-col gap-4 min-h-0 flex-1">
                 {activeTab === 'Plans' ? (
-                    <DataTable 
-                        columns={planColumns} 
-                        data={paginatedPlans} 
-                        loading={loading} 
-                        emptyMessage="No membership plans found." 
-                        renderRow={renderPlanRow} 
+                    <DataTable
+                        columns={planColumns}
+                        data={paginatedPlans}
+                        loading={loading}
+                        emptyMessage="No membership plans found."
+                        renderRow={renderPlanRow}
                         pagination={{
                             currentPage: currentPage,
                             totalItems: totalPlans,
@@ -536,12 +533,12 @@ function Memberships() {
                         }}
                     />
                 ) : (
-                    <DataTable 
-                        columns={memberColumns} 
-                        data={paginatedMembers} 
-                        loading={loading} 
-                        emptyMessage={`No ${activeTab.toLowerCase()} members found.`} 
-                        renderRow={renderMemberRow} 
+                    <DataTable
+                        columns={memberColumns}
+                        data={paginatedMembers}
+                        loading={loading}
+                        emptyMessage={`No ${activeTab.toLowerCase()} members found.`}
+                        renderRow={renderMemberRow}
                         pagination={{
                             currentPage: currentPage,
                             totalItems: totalMembersInTab,
@@ -568,9 +565,9 @@ function Memberships() {
                         <form onSubmit={handleAddBonus} className="p-5 space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 mb-1">Number of Days <span className="text-rose-500">*</span></label>
-                                <input 
-                                    type="number" 
-                                    required 
+                                <input
+                                    type="number"
+                                    required
                                     className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-sm font-bold"
                                     value={bonusModal.days}
                                     onChange={e => setBonusModal({ ...bonusModal, days: e.target.value })}
@@ -585,8 +582,8 @@ function Memberships() {
                                         onChange={(e) => {
                                             const selected = gymSettings.couponOffers.find(c => c.code === e.target.value);
                                             if (selected) {
-                                                setBonusModal(prev => ({ 
-                                                    ...prev, 
+                                                setBonusModal(prev => ({
+                                                    ...prev,
                                                     reason: `${selected.title} (${selected.code})`,
                                                     days: selected.bonusDays
                                                 }));
@@ -600,9 +597,9 @@ function Memberships() {
                                         ))}
                                     </select>
                                 )}
-                                <input 
-                                    type="text" 
-                                    required 
+                                <input
+                                    type="text"
+                                    required
                                     className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-sm font-medium"
                                     value={bonusModal.reason}
                                     onChange={e => setBonusModal({ ...bonusModal, reason: e.target.value })}

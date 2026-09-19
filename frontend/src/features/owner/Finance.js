@@ -8,7 +8,7 @@ import DataTable from '../../components/page/DataTable';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import SummaryCards from '../../components/page/SummaryCards';
-import { FiCreditCard, FiEye, FiTrash2, FiPhone, FiDollarSign, FiTrendingUp, FiAlertCircle, FiCheckCircle, FiClock } from 'react-icons/fi';
+import { FiCreditCard, FiEye, FiTrash2, FiPhone, FiDollarSign, FiTrendingUp, FiAlertCircle, FiCheckCircle, FiClock, FiRefreshCw, FiPlus } from 'react-icons/fi';
 import { formatDate } from '../../utils/dateUtils';
 
 export default function Finance() {
@@ -160,26 +160,34 @@ export default function Finance() {
     });
 
     // Pagination Slices
-    const totalItems = activeTab === 'Transactions' ? filteredTransactions.length : filteredMembers.length;
-    const paginatedData = (activeTab === 'Transactions' ? filteredTransactions : filteredMembers).slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const totalMembersItems = filteredMembers.length;
+    const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-    const columns = activeTab === 'Transactions' 
-        ? [
-            { label: 'MEMBER', className: 'w-[28%] pl-4 pr-3' },
-            { label: 'RECEIPT NO', className: 'w-[16%] px-3' },
-            { label: 'DATE & TIME', className: 'w-[16%] px-3' },
-            { label: 'AMOUNT PAID', className: 'w-[14%] px-3' },
-            { label: 'PAYMENT MODE', className: 'w-[14%] px-2 text-center' },
-            { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
-        ]
-        : [
-            { label: 'MEMBER', className: 'w-[26%] pl-4 pr-3' },
-            { label: 'PLAN & TOTAL', className: 'w-[20%] px-3' },
-            { label: 'AMOUNT PAID', className: 'w-[16%] px-3' },
-            { label: 'BALANCE / DUES', className: 'w-[14%] px-3' },
-            { label: 'PAYMENT STATUS', className: 'w-[12%] px-2 text-center' },
-            { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
-        ];
+    const totalTxItems = filteredTransactions.length;
+    const paginatedTransactions = filteredTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+    const totalItems = activeTab === 'Transactions' ? totalTxItems : totalMembersItems;
+    const paginatedData = activeTab === 'Transactions' ? paginatedTransactions : paginatedMembers;
+
+    const paymentColumns = [
+        { label: 'MEMBER', className: 'w-[24%] pl-4 pr-3' },
+        { label: 'PLAN & TOTAL', className: 'w-[18%] px-3' },
+        { label: 'PAID AMOUNT', className: 'w-[15%] px-3' },
+        { label: 'DUE AMOUNT', className: 'w-[15%] px-3' },
+        { label: 'STATUS', className: 'w-[12%] px-2 text-center' },
+        { label: 'ACTIONS', className: 'w-[16%] pr-4 pl-1 text-center' }
+    ];
+
+    const transactionColumns = [
+        { label: 'MEMBER', className: 'w-[28%] pl-4 pr-3' },
+        { label: 'RECEIPT NO', className: 'w-[16%] px-3' },
+        { label: 'DATE & TIME', className: 'w-[16%] px-3' },
+        { label: 'AMOUNT PAID', className: 'w-[14%] px-3' },
+        { label: 'PAYMENT MODE', className: 'w-[14%] px-2 text-center' },
+        { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
+    ];
+
+    const columns = activeTab === 'Transactions' ? transactionColumns : paymentColumns;
 
     const renderTransactionRow = (t, index) => {
         const member = t.memberId || {};
@@ -265,12 +273,13 @@ export default function Finance() {
         );
     };
 
-    const renderRow = (m, index) => {
-        const isPaid = m.paymentStatus === 'Paid';
-        const isPartial = m.paymentStatus === 'Partial';
+    const renderPaymentRow = (m, index) => {
         const planPrice = Number(m.membershipPlan?.price || 0);
         const paidAmount = Number(m.amountPaid || 0);
         const dueAmount = Math.max(0, planPrice - paidAmount);
+        const isPaid = m.paymentStatus === 'Paid' || dueAmount === 0;
+        const isPartial = m.paymentStatus === 'Partial';
+        const displayName = `${m.firstName} ${m.lastName || ''}`.trim() || 'Gym Member';
 
         return (
             <tr key={m._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
@@ -280,19 +289,19 @@ export default function Finance() {
                             <img src={m.profilePhoto} alt={m.firstName} className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
                         ) : (
                             <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
-                                {(m.firstName || 'M').charAt(0).toUpperCase()}
+                                {(displayName || 'M').charAt(0).toUpperCase()}
                             </div>
                         )}
                         <div className="flex flex-col items-start min-w-0">
                             <button 
                                 onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
-                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer max-w-[170px]"
                             >
-                                {m.firstName} {m.lastName}
+                                {displayName}
                             </button>
                             <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 <FiPhone className="text-slate-400 text-xs shrink-0" />
-                                <span>{m.contactNumber || '-'}</span>
+                                <span>{m.contactNumber || 'N/A'}</span>
                             </div>
                         </div>
                     </div>
@@ -333,15 +342,22 @@ export default function Finance() {
                     <div className="flex items-center justify-center gap-1.5">
                         <button 
                             onClick={() => openPaymentModal(m)} 
-                            className="w-8 h-8 rounded-lg border border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
-                            title={isPaid ? 'Update Fee' : 'Collect Fee'}
+                            className="w-8 h-8 rounded-lg border border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0" 
+                            title={isPaid ? 'Update / Record Payment' : 'Collect Fee'}
                         >
                             <FiCreditCard size={14} />
+                        </button>
+                        <button 
+                            onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member: m, isRenew: true } })} 
+                            className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-white hover:border-indigo-400 hover:bg-indigo-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0" 
+                            title="Renew Plan / Extend Membership"
+                        >
+                            <FiRefreshCw size={13} />
                         </button>
                         {(paidAmount > 0 || isPaid || isPartial) && (
                             <button 
                                 onClick={() => navigate(`/dashboard/owner/finance/receipt/${m._id}`)} 
-                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95 shrink-0" 
                                 title="View Receipt"
                             >
                                 <FiEye size={15} />
@@ -412,9 +428,25 @@ export default function Finance() {
             <PageHeader 
                 title="Fee Management" 
                 subtitle="Track and collect membership fees" 
+                actionButton={
+                    <div className="flex items-center gap-2.5">
+                        <button 
+                            onClick={() => navigate('/dashboard/owner/membership/assign')}
+                            className="h-9 px-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer shrink-0"
+                        >
+                            <FiRefreshCw size={13} className="text-emerald-400" /> Renew / Assign Plan
+                        </button>
+                        <button 
+                            onClick={() => navigate('/dashboard/owner/finance/collect')}
+                            className="h-9 px-3.5 rounded-xl bg-[#CA0410] hover:bg-[#B0030E] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer shrink-0"
+                        >
+                            <FiCreditCard size={13} /> Collect Fee
+                        </button>
+                    </div>
+                }
             />
             
-            <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
+            <div className="px-6 md:px-8 pt-1 pb-3 bg-[#FAEEEF] shrink-0">
                 <SummaryCards cards={summaryCardsData} />
             </div>
 
@@ -506,7 +538,7 @@ export default function Finance() {
                     data={paginatedData} 
                     loading={loading} 
                     emptyMessage="No records found for the selected filter." 
-                    renderRow={activeTab === 'Transactions' ? renderTransactionRow : renderRow} 
+                    renderRow={activeTab === 'Transactions' ? renderTransactionRow : renderPaymentRow} 
                     pagination={{
                         currentPage: currentPage,
                         totalItems: totalItems,

@@ -6,6 +6,7 @@ import Loader from '../../components/page/Loader';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import { FiPrinter, FiSend, FiCheckCircle, FiPhone, FiMail, FiMapPin, FiShield, FiUser } from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
 import { CgGym } from 'react-icons/cg';
 import { formatDate } from '../../utils/dateUtils';
 
@@ -148,26 +149,6 @@ export default function FeeReceipt() {
         window.print();
     };
 
-    const handleSendWhatsApp = () => {
-        if (!member?.contactNumber) {
-            toast.error("Contact number not available");
-            return;
-        }
-        const cleanPhone = member.contactNumber.replace(/\D/g, '');
-        const gymNameStr = member.gymId?.name || member.gym?.name || "Gym Studio";
-        const text = encodeURIComponent(
-            `🧾 *FEE RECEIPT - ${gymNameStr.toUpperCase()}*\n\n` +
-            `*Member:* ${member.firstName} ${member.lastName || ''} (ID: ${member.memberId || 'N/A'})\n` +
-            `*Plan:* ${member.planName || 'Gym Access'}\n` +
-            `*Amount Paid:* ₹${(member.amountPaid || 0).toLocaleString()}\n` +
-            `*Balance Due:* ₹${(member.balance || 0).toLocaleString()}\n` +
-            `*Status:* ${member.paymentStatus || 'Paid'}\n` +
-            `*Date:* ${member.receiptDate}\n\n` +
-            `Thank you for training with us! 💪`
-        );
-        window.open(`https://wa.me/91${cleanPhone}?text=${text}`, '_blank');
-    };
-
     if (loading) return <Loader text="Generating full A4 invoice..." />;
     if (!member) return <div className="p-8 text-center text-rose-500 font-bold">Member receipt not found.</div>;
 
@@ -243,13 +224,13 @@ export default function FeeReceipt() {
                     <div className="flex items-center gap-2 print:hidden">
                         <button 
                             onClick={handleSendWhatsAppWithDetails} 
-                            className="flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-xl font-bold text-xs shadow-sm transition-all"
+                            className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-sm transition-all cursor-pointer active:scale-95"
                         >
-                            <FiSend className="text-sm" /> WhatsApp Receipt
+                            <FaWhatsapp className="text-sm" /> WhatsApp Receipt
                         </button>
                         <button 
                             onClick={handlePrint} 
-                            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-extrabold text-xs shadow-md transition-all"
+                            className="flex items-center gap-1.5 bg-[#CA0410] hover:bg-[#b0030e] text-white px-5 py-2 rounded-xl font-extrabold text-xs shadow-md transition-all cursor-pointer active:scale-95"
                         >
                             <FiPrinter className="text-sm" /> Print A4 Invoice
                         </button>
@@ -257,21 +238,21 @@ export default function FeeReceipt() {
                 }
             />
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-200/70 print:p-0 print:bg-white print:overflow-visible">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#FAEEEF] print:p-0 print:bg-white print:overflow-visible flex flex-col items-center">
                 
                 {/* Full A4 Printable Sheet Container */}
-                <div className="a4-container w-full max-w-4xl min-h-[1020px] mx-auto bg-white border border-slate-300 rounded-2xl shadow-xl p-8 sm:p-12 print:rounded-none print:border-none print:shadow-none flex flex-col justify-between text-slate-800 relative">
+                <div className="a4-container w-full max-w-4xl min-h-[1020px] mx-auto bg-white border border-rose-200/80 rounded-2xl shadow-xl p-8 sm:p-12 print:rounded-none print:border-none print:shadow-none flex flex-col justify-between text-slate-800 relative">
                     
                     {/* Top Header Section */}
                     <div>
                         <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-8">
                             <div className="flex items-start gap-4">
-                                <div className="w-16 h-16 rounded-2xl bg-slate-900 text-emerald-400 flex items-center justify-center font-black text-3xl shadow-md shrink-0">
+                                <div className="w-16 h-16 rounded-2xl bg-[#CA0410] text-white flex items-center justify-center font-black text-3xl shadow-md shrink-0">
                                     <CgGym />
                                 </div>
                                 <div>
                                     <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">{gymName}</h1>
-                                    <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest mt-0.5">FITNESS & PERSONAL TRAINING STUDIO</p>
+                                    <p className="text-xs font-bold text-[#CA0410] uppercase tracking-widest mt-0.5">FITNESS & PERSONAL TRAINING STUDIO</p>
                                     <p className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1">
                                         <FiMapPin className="text-slate-400 text-xs" /> Main Branch Facility, Gym Center
                                     </p>
@@ -279,7 +260,7 @@ export default function FeeReceipt() {
                             </div>
 
                             <div className="text-right">
-                                <div className="inline-block bg-slate-900 text-white px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest mb-2">
+                                <div className="inline-block bg-slate-900 text-white px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest mb-2 shadow-2xs">
                                     FEE RECEIPT / TAX INVOICE
                                 </div>
                                 <p className="text-xs font-bold text-slate-500">Invoice No: <span className="font-mono text-slate-900 font-black text-sm">{receiptNo}</span></p>
@@ -293,7 +274,7 @@ export default function FeeReceipt() {
                             {/* Customer Information */}
                             <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
-                                    <FiUser className="text-emerald-600" /> BILLED TO (MEMBER INFORMATION)
+                                    <FiUser className="text-[#CA0410]" /> BILLED TO (MEMBER INFORMATION)
                                 </p>
                                 <h3 className="text-lg font-black text-slate-900 mb-1">{member.firstName} {member.lastName}</h3>
                                 <div className="space-y-1 text-slate-600 font-medium mt-2">
@@ -319,7 +300,7 @@ export default function FeeReceipt() {
                                         </p>
                                         <p className="flex justify-between">
                                             <span className="font-bold text-slate-500">Paid Now (This Receipt):</span>
-                                            <span className="font-extrabold text-emerald-700 font-mono">₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            <span className="font-extrabold text-[#CA0410] font-mono">₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                         </p>
                                         <p className="flex justify-between">
                                             <span className="font-bold text-slate-500">Payment Mode:</span>
@@ -334,7 +315,7 @@ export default function FeeReceipt() {
 
                                 <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center text-xs">
                                     <span className="font-bold text-slate-500">Access Valid Until:</span>
-                                    <span className="font-black text-emerald-700 font-mono text-sm">
+                                    <span className="font-black text-slate-900 font-mono text-sm">
                                         {formatDate(member.paidUntilDate, 'N/A')}
                                     </span>
                                 </div>
@@ -389,7 +370,7 @@ export default function FeeReceipt() {
                             {/* Gym Rules & Policy */}
                             <div className="w-1/2 bg-slate-50 p-5 rounded-xl border border-slate-200 text-xs space-y-1.5 text-slate-600">
                                 <p className="font-black text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1">
-                                    <FiShield className="text-emerald-600" /> GYM RULES & PAYMENT POLICY
+                                    <FiShield className="text-[#CA0410]" /> GYM RULES & PAYMENT POLICY
                                 </p>
                                 <ul className="list-disc pl-4 space-y-1.5 text-[11px] text-slate-600 leading-relaxed font-medium">
                                     <li>Fees once paid are non-refundable and non-transferable under any circumstances.</li>
@@ -420,9 +401,9 @@ export default function FeeReceipt() {
                                         <span className="font-bold text-slate-300">₹{previousPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                     </div>
                                 )}
-                                <div className="flex justify-between text-emerald-400 py-1.5 px-2 bg-emerald-950/60 rounded border border-emerald-500/30 font-extrabold text-sm">
+                                <div className="flex justify-between text-white py-1.5 px-2 bg-slate-800 rounded border border-slate-700 font-extrabold text-sm">
                                     <span>Paid Now (This Receipt):</span>
-                                    <span>₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    <span className="text-[#CA0410] font-black">₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                 </div>
                                 <div className="flex justify-between text-slate-300 pb-2 border-b border-slate-800 font-bold">
                                     <span>Total Paid So Far:</span>
@@ -470,5 +451,3 @@ export default function FeeReceipt() {
         </PageLayout>
     );
 }
-
-

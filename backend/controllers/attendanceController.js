@@ -533,20 +533,69 @@ exports.getDailySheet = async (req, res) => {
                 name: `${e.firstName} ${e.lastName || ''}`.trim(),
                 phone: e.contactNumber,
                 profilePhoto: null,
-                status: e.status
+                status: e.status,
+                membershipStatus: e.status || 'Trial'
             }));
         } else {
             const members = await Member.find({ 
                 gymId: req.user.gymId
-            }).select('firstName lastName contactNumber profilePhoto status');
-            
-            users = members.map(m => ({
-                _id: m._id,
-                name: `${m.firstName} ${m.lastName || ''}`.trim(),
-                phone: m.contactNumber,
-                profilePhoto: m.profilePhoto,
-                status: m.status
-            }));
+            }).select('firstName lastName contactNumber profilePhoto status memberId');
+
+            const memberIds = members.map(m => m._id);
+            const memberships = await MemberMembership.find({
+                gymId: req.user.gymId,
+                memberId: { $in: memberIds }
+            }).sort({ createdAt: -1 });
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            users = members.map(m => {
+                const memberMemberships = memberships.filter(ms => ms.memberId.toString() === m._id.toString());
+                const activeMs = memberMemberships.find(ms => ms.membershipStatus === 'Active' || ms.membershipStatus === 'Frozen');
+                const latestMs = activeMs || memberMemberships[0];
+
+                let computedStatus = m.status || 'Inactive';
+
+                if (computedStatus !== 'Frozen') {
+                    if (!latestMs) {
+                        computedStatus = 'Inactive';
+                    } else {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+
+                        const validityDate = latestMs.paidUntilDate ? new Date(latestMs.paidUntilDate) : new Date(latestMs.endDate);
+                        validityDate.setHours(23, 59, 59, 999);
+
+                        const hasPaid = (latestMs.paidAmount || 0) > 0;
+                        const isExpired = validityDate < today;
+
+                        if (!hasPaid || isExpired || latestMs.membershipStatus === 'Expired' || latestMs.membershipStatus === 'Cancelled') {
+                            computedStatus = 'Inactive';
+                        } else {
+                            computedStatus = 'Active';
+                        }
+                    }
+                }
+
+                return {
+                    _id: m._id,
+                    name: `${m.firstName} ${m.lastName || ''}`.trim(),
+                    phone: m.contactNumber,
+                    profilePhoto: m.profilePhoto,
+                    status: computedStatus,
+                    memberId: m.memberId,
+                    membershipStatus: computedStatus,
+                    planName: latestMs ? latestMs.planName : null,
+                    activeMembership: latestMs ? {
+                        planName: latestMs.planName,
+                        startDate: latestMs.startDate,
+                        endDate: latestMs.endDate,
+                        paidUntilDate: latestMs.paidUntilDate,
+                        membershipStatus: latestMs.membershipStatus
+                    } : null
+                };
+            });
         }
 
         const attendanceRecords = await Attendance.find({

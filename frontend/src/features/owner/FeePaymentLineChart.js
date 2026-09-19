@@ -4,12 +4,17 @@ export default function FeePaymentLineChart({ transactions = [] }) {
     const [viewMode, setViewMode] = useState('monthly'); // 'monthly' or 'daily'
     const [hoveredPoint, setHoveredPoint] = useState(null);
 
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+    const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
     // Prepare data based on viewMode
     const prepareChartData = () => {
         if (viewMode === 'monthly') {
             const monthsMap = {};
             const months = [];
-            const now = new Date();
 
             // Last 6 months
             for (let i = 5; i >= 0; i--) {
@@ -22,10 +27,12 @@ export default function FeePaymentLineChart({ transactions = [] }) {
 
             transactions.forEach(tx => {
                 const d = new Date(tx.paymentDate || tx.createdAt);
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                if (monthsMap[key]) {
-                    monthsMap[key].amount += (tx.amountPaid || 0);
-                    monthsMap[key].count += 1;
+                if (!isNaN(d.getTime())) {
+                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    if (monthsMap[key]) {
+                        monthsMap[key].amount += (tx.amountPaid || 0);
+                        monthsMap[key].count += 1;
+                    }
                 }
             });
 
@@ -34,7 +41,6 @@ export default function FeePaymentLineChart({ transactions = [] }) {
             // Daily for last 14 days
             const daysMap = {};
             const days = [];
-            const now = new Date();
 
             for (let i = 13; i >= 0; i--) {
                 const d = new Date();
@@ -47,10 +53,12 @@ export default function FeePaymentLineChart({ transactions = [] }) {
 
             transactions.forEach(tx => {
                 const d = new Date(tx.paymentDate || tx.createdAt);
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                if (daysMap[key]) {
-                    daysMap[key].amount += (tx.amountPaid || 0);
-                    daysMap[key].count += 1;
+                if (!isNaN(d.getTime())) {
+                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    if (daysMap[key]) {
+                        daysMap[key].amount += (tx.amountPaid || 0);
+                        daysMap[key].count += 1;
+                    }
                 }
             });
 
@@ -61,9 +69,75 @@ export default function FeePaymentLineChart({ transactions = [] }) {
     const data = prepareChartData();
     const maxAmount = Math.max(...data.map(d => d.amount), 1000);
 
-    // Calculate totals
+    // Calculate totals for currently selected period
     const totalFee = data.reduce((sum, d) => sum + d.amount, 0);
-    const avgFee = Math.round(totalFee / (data.length || 1));
+    const totalCount = data.reduce((sum, d) => sum + d.count, 0);
+    const avgFee = totalCount > 0 ? Math.round(totalFee / totalCount) : 0;
+
+    // Dynamic Growth Calculations
+    let collectionGrowth = { percentage: '0%', isPositive: true };
+    let avgGrowth = { percentage: '0%', isPositive: true };
+
+    if (viewMode === 'monthly') {
+        const curMonthTx = transactions.filter(t => {
+            const d = new Date(t.paymentDate || t.createdAt);
+            return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        });
+        const prevMonthTx = transactions.filter(t => {
+            const d = new Date(t.paymentDate || t.createdAt);
+            return !isNaN(d.getTime()) && d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
+        });
+
+        const curTotal = curMonthTx.reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+        const prevTotal = prevMonthTx.reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+
+        if (prevTotal === 0) {
+            collectionGrowth = { percentage: curTotal > 0 ? '+100%' : '0%', isPositive: true };
+        } else {
+            const diff = curTotal - prevTotal;
+            const pct = Math.round((diff / prevTotal) * 100);
+            collectionGrowth = { percentage: `${pct >= 0 ? '+' : ''}${pct}%`, isPositive: pct >= 0 };
+        }
+
+        const curAvg = curMonthTx.length > 0 ? curTotal / curMonthTx.length : 0;
+        const prevAvg = prevMonthTx.length > 0 ? prevTotal / prevMonthTx.length : 0;
+
+        if (prevAvg === 0) {
+            avgGrowth = { percentage: curAvg > 0 ? '+100%' : '0%', isPositive: true };
+        } else {
+            const diff = curAvg - prevAvg;
+            const pct = Math.round((diff / prevAvg) * 100);
+            avgGrowth = { percentage: `${pct >= 0 ? '+' : ''}${pct}%`, isPositive: pct >= 0 };
+        }
+    } else {
+        // 14 Days: First 7 days vs previous 7 days
+        const recent7Data = data.slice(7);
+        const prev7Data = data.slice(0, 7);
+
+        const recTotal = recent7Data.reduce((sum, d) => sum + d.amount, 0);
+        const prevTotal = prev7Data.reduce((sum, d) => sum + d.amount, 0);
+
+        if (prevTotal === 0) {
+            collectionGrowth = { percentage: recTotal > 0 ? '+100%' : '0%', isPositive: true };
+        } else {
+            const diff = recTotal - prevTotal;
+            const pct = Math.round((diff / prevTotal) * 100);
+            collectionGrowth = { percentage: `${pct >= 0 ? '+' : ''}${pct}%`, isPositive: pct >= 0 };
+        }
+
+        const recCount = recent7Data.reduce((sum, d) => sum + d.count, 0);
+        const prevCount = prev7Data.reduce((sum, d) => sum + d.count, 0);
+        const recAvg = recCount > 0 ? recTotal / recCount : 0;
+        const prevAvg = prevCount > 0 ? prevTotal / prevCount : 0;
+
+        if (prevAvg === 0) {
+            avgGrowth = { percentage: recAvg > 0 ? '+100%' : '0%', isPositive: true };
+        } else {
+            const diff = recAvg - prevAvg;
+            const pct = Math.round((diff / prevAvg) * 100);
+            avgGrowth = { percentage: `${pct >= 0 ? '+' : ''}${pct}%`, isPositive: pct >= 0 };
+        }
+    }
 
     // SVG dimensions
     const width = 600;
@@ -150,17 +224,21 @@ export default function FeePaymentLineChart({ transactions = [] }) {
                 </div>
             </div>
 
-            {/* 3 Metric Cards Sub-Bar */}
+            {/* 3 Metric Cards Sub-Bar with Dynamic Backend Values */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
                 {/* 1. TOTAL COLLECTION */}
                 <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TOTAL COLLECTION</span>
                     <div className="flex items-baseline gap-2 mt-1">
                         <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none">
-                            ₹{totalFee > 0 ? totalFee.toLocaleString() : '4,187'}
+                            ₹{totalFee.toLocaleString()}
                         </span>
-                        <span className="text-[10px] font-bold text-[#CA0410] bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
-                            +12%
+                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                            collectionGrowth.isPositive 
+                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200' 
+                                : 'text-rose-700 bg-rose-50 border-rose-200'
+                        }`}>
+                            {collectionGrowth.percentage}
                         </span>
                     </div>
                 </div>
@@ -170,10 +248,14 @@ export default function FeePaymentLineChart({ transactions = [] }) {
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">AVERAGE FEE</span>
                     <div className="flex items-baseline gap-2 mt-1">
                         <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none">
-                            ₹{avgFee > 0 ? avgFee.toLocaleString() : '689'}
+                            ₹{avgFee.toLocaleString()}
                         </span>
-                        <span className="text-[10px] font-bold text-[#CA0410] bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
-                            +8%
+                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                            avgGrowth.isPositive 
+                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200' 
+                                : 'text-rose-700 bg-rose-50 border-rose-200'
+                        }`}>
+                            {avgGrowth.percentage}
                         </span>
                     </div>
                 </div>

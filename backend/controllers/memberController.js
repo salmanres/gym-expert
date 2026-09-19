@@ -4,6 +4,7 @@ const Enquiry = require('../models/Enquiry');
 const Gym = require('../models/Gym');
 const MemberMembership = require('../models/MemberMembership');
 const User = require('../models/User');
+const { notifyGym } = require('../socket');
 
 // @desc    Create new member
 // @route   POST /api/members
@@ -134,6 +135,15 @@ const createMember = async (req, res) => {
                 console.error("Staff Referral reward processing error:", refErr);
             }
         }
+
+        // Broadcast real-time Socket notification
+        notifyGym(gymId, {
+            title: 'New Member Registered',
+            description: `${savedMember.firstName} ${savedMember.lastName || ''} (${savedMember.memberId || 'MEM'}) has joined the gym.`,
+            type: 'MEMBER',
+            targetId: savedMember._id,
+            link: `/dashboard/owner/members/view/${savedMember._id}`
+        });
 
         res.status(201).json(savedMember);
     } catch (error) {

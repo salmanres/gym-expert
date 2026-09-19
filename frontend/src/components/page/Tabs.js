@@ -12,15 +12,13 @@ export default function Tabs({ tabs, activeTab, onTabChange, bgClass = 'bg-[#FAE
                     <button
                         key={tabKey}
                         onClick={() => onTabChange(tabKey)}
-                        className={`py-2 px-1 uppercase tracking-wider text-xs sm:text-[13px] font-bold whitespace-nowrap transition-all duration-200 relative cursor-pointer flex items-center gap-1.5 ${
-                            isActive ? 'text-[#CA0410]' : 'text-slate-600 hover:text-[#CA0410]/85 hover:-translate-y-0.5'
-                        }`}
+                        className={`py-2.5 px-1 uppercase tracking-wider text-xs sm:text-[13px] font-bold whitespace-nowrap transition-all duration-200 relative cursor-pointer flex items-center gap-1.5 ${isActive ? 'text-[#CA0410]' : 'text-slate-600 hover:text-[#CA0410]/85 hover:-translate-y-0.5'
+                            }`}
                     >
                         <span>{tabLabel}</span>
                         {typeof tabItem === 'object' && tabItem.count !== undefined && (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                                isActive ? 'bg-[#CA0410]/10 text-[#CA0410]' : 'bg-slate-200/70 text-slate-600'
-                            }`}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isActive ? 'bg-[#CA0410]/10 text-[#CA0410]' : 'bg-slate-200/70 text-slate-600'
+                                }`}>
                                 {tabItem.count}
                             </span>
                         )}

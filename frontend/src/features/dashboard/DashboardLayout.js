@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { FiClipboard, FiCheckSquare, FiCreditCard, FiActivity } from 'react-icons/fi';
+import { FiClipboard, FiCheckSquare, FiCreditCard, FiActivity, FiUser } from 'react-icons/fi';
 import { toast } from '../../utils/toast';
 import apiClient from '../../api/apiClient';
 import { io } from 'socket.io-client';
@@ -145,6 +145,8 @@ function DashboardLayout() {
         switch (type) {
             case 'LEAD':
                 return <FiClipboard size={15} className="text-amber-500 shrink-0 mt-0.5" />;
+            case 'MEMBER':
+                return <FiUser size={15} className="text-[#CA0410] shrink-0 mt-0.5" />;
             case 'ATTENDANCE':
                 return <FiCheckSquare size={15} className="text-emerald-500 shrink-0 mt-0.5" />;
             case 'MEMBERSHIP':
@@ -171,6 +173,7 @@ function DashboardLayout() {
     // Category Unread Counts
     const unreadCategoryCounts = {
         ALL: logs.filter(l => !l.isRead).length,
+        MEMBER: logs.filter(l => l.type === 'MEMBER' && !l.isRead).length,
         LEAD: logs.filter(l => l.type === 'LEAD' && !l.isRead).length,
         ATTENDANCE: logs.filter(l => l.type === 'ATTENDANCE' && !l.isRead).length,
         MEMBERSHIP: logs.filter(l => (l.type === 'MEMBERSHIP' || l.type === 'PAYMENT') && !l.isRead).length
