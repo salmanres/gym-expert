@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function FeePaymentLineChart({ transactions = [] }) {
+export default function FeePaymentLineChart({ transactions = [], loading = false }) {
     const [viewMode, setViewMode] = useState('monthly'); // 'monthly' or 'daily'
     const [hoveredPoint, setHoveredPoint] = useState(null);
 
@@ -96,7 +96,8 @@ export default function FeePaymentLineChart({ transactions = [] }) {
         } else {
             const diff = curTotal - prevTotal;
             const pct = Math.round((diff / prevTotal) * 100);
-            collectionGrowth = { percentage: `${pct >= 0 ? '+' : ''}${pct}%`, isPositive: pct >= 0 };
+            const displayPct = Math.abs(pct) > 999 ? (pct > 0 ? '+999%' : '-999%') : `${pct >= 0 ? '+' : ''}${pct}%`;
+            collectionGrowth = { percentage: displayPct, isPositive: pct >= 0 };
         }
 
         const curAvg = curMonthTx.length > 0 ? curTotal / curMonthTx.length : 0;
@@ -107,7 +108,8 @@ export default function FeePaymentLineChart({ transactions = [] }) {
         } else {
             const diff = curAvg - prevAvg;
             const pct = Math.round((diff / prevAvg) * 100);
-            avgGrowth = { percentage: `${pct >= 0 ? '+' : ''}${pct}%`, isPositive: pct >= 0 };
+            const displayPct = Math.abs(pct) > 999 ? (pct > 0 ? '+999%' : '-999%') : `${pct >= 0 ? '+' : ''}${pct}%`;
+            avgGrowth = { percentage: displayPct, isPositive: pct >= 0 };
         }
     } else {
         // 14 Days: First 7 days vs previous 7 days
@@ -122,7 +124,8 @@ export default function FeePaymentLineChart({ transactions = [] }) {
         } else {
             const diff = recTotal - prevTotal;
             const pct = Math.round((diff / prevTotal) * 100);
-            collectionGrowth = { percentage: `${pct >= 0 ? '+' : ''}${pct}%`, isPositive: pct >= 0 };
+            const displayPct = Math.abs(pct) > 999 ? (pct > 0 ? '+999%' : '-999%') : `${pct >= 0 ? '+' : ''}${pct}%`;
+            collectionGrowth = { percentage: displayPct, isPositive: pct >= 0 };
         }
 
         const recCount = recent7Data.reduce((sum, d) => sum + d.count, 0);
@@ -135,7 +138,8 @@ export default function FeePaymentLineChart({ transactions = [] }) {
         } else {
             const diff = recAvg - prevAvg;
             const pct = Math.round((diff / prevAvg) * 100);
-            avgGrowth = { percentage: `${pct >= 0 ? '+' : ''}${pct}%`, isPositive: pct >= 0 };
+            const displayPct = Math.abs(pct) > 999 ? (pct > 0 ? '+999%' : '-999%') : `${pct >= 0 ? '+' : ''}${pct}%`;
+            avgGrowth = { percentage: displayPct, isPositive: pct >= 0 };
         }
     }
 
@@ -225,45 +229,45 @@ export default function FeePaymentLineChart({ transactions = [] }) {
             </div>
 
             {/* 3 Metric Cards Sub-Bar with Dynamic Backend Values */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 shrink-0 items-stretch">
                 {/* 1. TOTAL COLLECTION */}
-                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TOTAL COLLECTION</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                        <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none">
-                            ₹{totalFee.toLocaleString()}
-                        </span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-                            collectionGrowth.isPositive 
-                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200' 
-                                : 'text-rose-700 bg-rose-50 border-rose-200'
-                        }`}>
-                            {collectionGrowth.percentage}
-                        </span>
+                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between min-w-0 h-full min-h-[88px]">
+                    <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">TOTAL COLLECTION</span>
+                    <div className="mt-1.5 min-w-0">
+                        {loading ? (
+                            <div className="flex items-center gap-2">
+                                <div className="w-3.5 h-3.5 border-2 border-rose-200 border-t-[#CA0410] rounded-full animate-spin shrink-0"></div>
+                                <span className="text-xs font-bold text-slate-400 animate-pulse">Loading...</span>
+                            </div>
+                        ) : (
+                            <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none break-words">
+                                ₹{totalFee.toLocaleString()}
+                            </span>
+                        )}
                     </div>
                 </div>
 
                 {/* 2. AVERAGE FEE */}
-                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">AVERAGE FEE</span>
-                    <div className="flex items-baseline gap-2 mt-1">
-                        <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none">
-                            ₹{avgFee.toLocaleString()}
-                        </span>
-                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-                            avgGrowth.isPositive 
-                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200' 
-                                : 'text-rose-700 bg-rose-50 border-rose-200'
-                        }`}>
-                            {avgGrowth.percentage}
-                        </span>
+                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between min-w-0 h-full min-h-[88px]">
+                    <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">AVERAGE FEE</span>
+                    <div className="mt-1.5 min-w-0">
+                        {loading ? (
+                            <div className="flex items-center gap-2">
+                                <div className="w-3.5 h-3.5 border-2 border-rose-200 border-t-[#CA0410] rounded-full animate-spin shrink-0"></div>
+                                <span className="text-xs font-bold text-slate-400 animate-pulse">Loading...</span>
+                            </div>
+                        ) : (
+                            <span className="text-xl sm:text-2xl font-black text-slate-900 leading-none break-words">
+                                ₹{avgFee.toLocaleString()}
+                            </span>
+                        )}
                     </div>
                 </div>
 
                 {/* 3. TIME WINDOW */}
-                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">TIME WINDOW</span>
-                    <div className="mt-1">
+                <div className="bg-[#F8F9FA] p-3.5 sm:p-4 rounded-2xl border border-slate-100 flex flex-col justify-between min-w-0 h-full min-h-[88px]">
+                    <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider">TIME WINDOW</span>
+                    <div className="mt-1.5">
                         <span className="text-sm sm:text-base font-black text-slate-900 leading-none">
                             {viewMode === 'monthly' ? 'Last 6 months' : 'Last 14 days'}
                         </span>

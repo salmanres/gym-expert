@@ -7,9 +7,10 @@ import Input from '../../components/form/Input';
 import Select from '../../components/form/Select';
 import Button from '../../components/form/Button';
 import Loader from '../../components/page/Loader';
-import { FiUser, FiLock, FiMapPin, FiBriefcase, FiClock, FiTrash2, FiUpload, FiCamera, FiX } from 'react-icons/fi';
+import { FiUser, FiLock, FiMapPin, FiBriefcase, FiClock, FiTrash2, FiUpload, FiCamera, FiX, FiCheckCircle, FiUserX } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
+import { toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
 import Webcam from 'react-webcam';
 
 export default function StaffForm() {
@@ -28,7 +29,7 @@ export default function StaffForm() {
     const [formData, setFormData] = useState({
         name: '', email: '', phone: '', role: 'TRAINER', password: '',
         gender: 'Male', dob: '', address: '', emergencyContactName: '', emergencyContactNumber: '',
-        joiningDate: new Date().toISOString().split('T')[0], specialization: '', experienceYears: '', salary: '', 
+        joiningDate: getTodayInputDate(), specialization: '', experienceYears: '', salary: '', 
         shiftStart: '', shiftEnd: '', status: 'Active', profilePhoto: ''
     });
 
@@ -50,11 +51,11 @@ export default function StaffForm() {
                 role: staff.role || 'TRAINER',
                 password: '',
                 gender: staff.gender || 'Male',
-                dob: staff.dob ? new Date(staff.dob).toISOString().split('T')[0] : '',
+                dob: toInputDateFormat(staff.dob),
                 address: staff.address || '',
                 emergencyContactName: staff.emergencyContactName || '',
                 emergencyContactNumber: staff.emergencyContactNumber || '',
-                joiningDate: staff.joiningDate ? new Date(staff.joiningDate).toISOString().split('T')[0] : '',
+                joiningDate: toInputDateFormat(staff.joiningDate),
                 specialization: staff.specialization || '',
                 experienceYears: staff.experienceYears || '',
                 salary: staff.salary || '',
@@ -223,10 +224,78 @@ export default function StaffForm() {
                             <Input type="tel" label="Emergency Contact Phone" name="emergencyContactNumber" value={formData.emergencyContactNumber || ''} onChange={handleChange} placeholder="10-digit mobile" />
                         </FormSection>
 
-                        <FormSection title="Shift & Status" icon={<FiClock />} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <FormSection title="Shift & Account Status" icon={<FiClock />} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input type="time" label="Shift Start Time" name="shiftStart" value={formData.shiftStart || ''} onChange={handleChange} />
                             <Input type="time" label="Shift End Time" name="shiftEnd" value={formData.shiftEnd || ''} onChange={handleChange} />
-                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} options={['Active', 'Inactive']} />
+                            
+                            {/* Action Buttons for Status */}
+                            <div className="sm:col-span-2 pt-1">
+                                <label className="block text-xs font-bold text-slate-700 mb-2">Staff Account Status</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {/* Active Button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData(prev => ({ ...prev, status: 'Active' }))}
+                                        className={`p-3 rounded-xl border flex items-center gap-3 transition-all cursor-pointer text-left ${
+                                            (formData.status || 'Active') === 'Active'
+                                                ? 'border-emerald-500 bg-emerald-50/90 text-emerald-950 ring-2 ring-emerald-500/20 shadow-xs'
+                                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                        }`}
+                                    >
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold shrink-0 ${
+                                            (formData.status || 'Active') === 'Active' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                            <FiCheckCircle size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-xs">Active</p>
+                                            <p className="text-[10px] text-slate-500">Full system & login access</p>
+                                        </div>
+                                    </button>
+
+                                    {/* Suspended Button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData(prev => ({ ...prev, status: 'Suspended' }))}
+                                        className={`p-3 rounded-xl border flex items-center gap-3 transition-all cursor-pointer text-left ${
+                                            formData.status === 'Suspended'
+                                                ? 'border-rose-500 bg-rose-50/90 text-rose-950 ring-2 ring-rose-500/20 shadow-xs'
+                                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                        }`}
+                                    >
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold shrink-0 ${
+                                            formData.status === 'Suspended' ? 'bg-[#CA0410] text-white' : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                            <FiUserX size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-xs">Suspended</p>
+                                            <p className="text-[10px] text-slate-500">Block login / Disciplinary</p>
+                                        </div>
+                                    </button>
+
+                                    {/* Inactive Button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData(prev => ({ ...prev, status: 'Inactive' }))}
+                                        className={`p-3 rounded-xl border flex items-center gap-3 transition-all cursor-pointer text-left ${
+                                            formData.status === 'Inactive'
+                                                ? 'border-slate-500 bg-slate-100 text-slate-950 ring-2 ring-slate-400/20 shadow-xs'
+                                                : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                                        }`}
+                                    >
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold shrink-0 ${
+                                            formData.status === 'Inactive' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                            <FiClock size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-xs">Inactive</p>
+                                            <p className="text-[10px] text-slate-500">Off-duty / Left job</p>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
                         </FormSection>
 
                         <FormSection title="Account Credentials" icon={<FiLock />} className="grid grid-cols-1 sm:grid-cols-2 gap-4">

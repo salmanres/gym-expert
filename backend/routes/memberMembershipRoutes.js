@@ -7,6 +7,7 @@ const {
     getLatestMemberships,
     getMemberMembershipHistory,
     updateAssignedMembership,
+    deleteAssignedMembership,
     addBonusDays,
     addPayment,
     markPTSessionUsed,
@@ -17,6 +18,7 @@ const { protect } = require("../middleware/authMiddleware");
 
 router.post("/", protect, assignMembership);
 router.put("/:id", protect, updateAssignedMembership);
+router.delete("/:id", protect, deleteAssignedMembership);
 router.post("/:id/payment", protect, addPayment);
 router.post("/:id/bonus", protect, addBonusDays);
 router.post("/:id/use-session", protect, markPTSessionUsed);

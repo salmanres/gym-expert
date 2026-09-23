@@ -14,15 +14,6 @@ export default function DataTable({
     className = '',
     pagination = null
 }) {
-    if (loading) {
-        return (
-            <div className={`w-full overflow-hidden rounded-2xl bg-white border border-rose-200/50 shadow-2xs p-12 flex flex-col items-center justify-center ${className}`}>
-                <div className="w-10 h-10 border-4 border-rose-200 border-t-[#CA0410] rounded-full animate-spin"></div>
-                <p className="text-slate-500 font-bold text-xs mt-3">Loading data...</p>
-            </div>
-        );
-    }
-
     const getHeaderBg = () => {
         if (darkHeader) return 'bg-[#162544] text-white';
         if (headerBgClass) return headerBgClass;
@@ -66,7 +57,21 @@ export default function DataTable({
 
                     {/* BODY */}
                     <tbody className="divide-y divide-slate-100 bg-white">
-                        {!data || data.length === 0 ? (
+                        {loading ? (
+                            <tr className="h-56">
+                                <td
+                                    colSpan={columns.length}
+                                    className="h-56 text-center bg-white align-middle py-12"
+                                >
+                                    <div className="flex flex-col items-center justify-center gap-3">
+                                        <div className="w-10 h-10 border-[3.5px] border-slate-200 border-t-[#CA0410] rounded-full animate-spin"></div>
+                                        <span className="text-xs font-bold text-slate-500 tracking-wide animate-pulse">
+                                            Loading records...
+                                        </span>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : !data || data.length === 0 ? (
                             <tr className="h-36">
                                 <td
                                     colSpan={columns.length}

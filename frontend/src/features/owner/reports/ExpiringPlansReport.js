@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import SummaryCards from '../../../components/page/SummaryCards';
-import LineChart from '../../../components/page/LineChart';
 import DataTable from '../../../components/page/DataTable';
-import EmptyState from '../../../components/page/EmptyState';
-import { FiAlertCircle, FiCalendar, FiDollarSign, FiCheckCircle, FiMessageSquare, FiLayers, FiPhone, FiCreditCard } from 'react-icons/fi';
+import LineChart from '../../../components/page/LineChart';
+import { FiCalendar, FiAlertCircle, FiPhone, FiCreditCard, FiTrendingUp, FiRefreshCw, FiCheckCircle, FiDollarSign, FiMessageSquare } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
-import { formatDate } from '../../../utils/dateUtils';
+import { formatDate, toInputDateFormat } from '../../../utils/dateUtils';
 
 export default function ExpiringPlansReport({ 
     expiringPlans = [], 
-    allActivePlans = []
+    allActivePlans = [],
+    loading = false
 }) {
     const today = new Date();
     const sevenDaysLater = new Date();
@@ -80,12 +80,12 @@ export default function ExpiringPlansReport({
     for (let i = 0; i < 7; i++) {
         const d = new Date();
         d.setDate(today.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = toInputDateFormat(d);
         const dayLabel = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
         const dayExpiringCount = allActivePlans.filter(p => {
             if (!p.endDate) return false;
-            const pDateStr = new Date(p.endDate).toISOString().split('T')[0];
+            const pDateStr = toInputDateFormat(p.endDate);
             return pDateStr === dateStr;
         }).length;
 
@@ -391,27 +391,21 @@ export default function ExpiringPlansReport({
 
             {/* 4. Full Data Table */}
             <div className="px-6 md:px-8 pb-6 pt-1">
-                {expiringPlans.length > 0 ? (
-                    <DataTable 
-                        columns={columns} 
-                        data={paginatedExpiringPlans} 
-                        renderRow={renderRow} 
-                        pagination={{
-                            currentPage: currentPage,
-                            totalItems: totalItems,
-                            pageSize: pageSize,
-                            onPageChange: (p) => setCurrentPage(p),
-                            onPageSizeChange: (s) => setPageSize(s),
-                            itemLabel: "expiring plans"
-                        }}
-                    />
-                ) : (
-                    <EmptyState 
-                        icon={<FiCalendar size={48} />} 
-                        title="No plans expiring soon" 
-                        subtitle="All active memberships are up to date." 
-                    />
-                )}
+                <DataTable 
+                    columns={columns} 
+                    data={paginatedExpiringPlans} 
+                    loading={loading}
+                    emptyMessage="No plans expiring soon."
+                    renderRow={renderRow} 
+                    pagination={{
+                        currentPage: currentPage,
+                        totalItems: totalItems,
+                        pageSize: pageSize,
+                        onPageChange: (p) => setCurrentPage(p),
+                        onPageSizeChange: (s) => setPageSize(s),
+                        itemLabel: "expiring plans"
+                    }}
+                />
             </div>
         </div>
     );

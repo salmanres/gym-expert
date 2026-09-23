@@ -49,7 +49,7 @@ const userSchema = new mongoose.Schema({
     salary: { type: Number },
     shiftStart: { type: String },
     shiftEnd: { type: String },
-    status: { type: String, enum: ['Active', 'Inactive'], default: 'Active' },
+    status: { type: String, enum: ['Active', 'Inactive', 'Suspended'], default: 'Active' },
     profilePhoto: { type: String },
     walletBalance: { type: Number, default: 0 }
 }, { timestamps: true });

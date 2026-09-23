@@ -1,4 +1,5 @@
 const MembershipPlan = require("../models/MembershipPlan");
+const { notifyGym } = require("../socket");
 
 // @desc    Get all membership plans
 // @route   GET /api/membership-plans
@@ -40,6 +41,15 @@ exports.createMembership = async (req, res) => {
         const membership = await MembershipPlan.create({
             gymId,
             ...req.body,
+        });
+
+        // Broadcast real-time Socket notification
+        notifyGym(gymId, {
+            title: `New Plan Created: ${membership.name}`,
+            description: `Price: ₹${membership.price || 0} • Duration: ${membership.duration || 1} ${membership.durationUnit || 'Months'}.`,
+            type: 'MEMBERSHIP',
+            targetId: membership._id,
+            link: '/dashboard/owner/membership'
         });
 
         res.status(201).json(membership);
@@ -105,6 +115,15 @@ exports.updateMembership = async (req, res) => {
             });
         }
 
+        // Broadcast real-time Socket notification
+        notifyGym(gymId, {
+            title: `Plan Updated: ${membership.name}`,
+            description: `Price: ₹${membership.price || 0} • Duration: ${membership.duration || 1} ${membership.durationUnit || 'Months'}.`,
+            type: 'MEMBERSHIP',
+            targetId: membership._id,
+            link: '/dashboard/owner/membership'
+        });
+
         res.status(200).json(membership);
     } catch (err) {
         console.error(err);
@@ -139,6 +158,15 @@ exports.deleteMembership = async (req, res) => {
                 message: "Membership plan not found",
             });
         }
+
+        // Broadcast real-time Socket notification
+        notifyGym(gymId, {
+            title: `Plan Deactivated: ${membership.name}`,
+            description: `${membership.name} has been deactivated.`,
+            type: 'MEMBERSHIP',
+            targetId: membership._id,
+            link: '/dashboard/owner/membership'
+        });
 
         res.status(200).json({
             message: "Membership plan deactivated successfully",

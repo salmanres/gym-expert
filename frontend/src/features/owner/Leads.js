@@ -10,16 +10,18 @@ import {
 import { FaWhatsapp } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 
-// Import layout & page components
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import SummaryCards from '../../components/page/SummaryCards';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import DataTable from '../../components/page/DataTable';
+import Loader from '../../components/page/Loader';
 import Modal from '../../components/modal/Modal';
 import FollowUpCalendar from './FollowUpCalendar';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
+import DatePicker from '../../components/form/DatePicker';
+import TimePicker from '../../components/form/TimePicker';
 
 export default function Leads() {
     const navigate = useNavigate();
@@ -61,6 +63,7 @@ export default function Leads() {
         trialFee: '',
         trialPaymentStatus: 'Unpaid',
         trialPaymentMode: 'Cash',
+        securityAmount: '',
         lostReason: '',
         selectedOffer: '',
         offerAmount: '',
@@ -93,19 +96,6 @@ export default function Leads() {
     }, []);
 
     // Date formatting helpers
-    const toInputDateFormat = (dateVal) => {
-        if (!dateVal) return '';
-        if (typeof dateVal === 'string' && dateVal.includes('T')) {
-            return dateVal.split('T')[0];
-        }
-        const d = new Date(dateVal);
-        if (isNaN(d.getTime())) return '';
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
     const formatShortDate = (dateVal) => {
         return formatDate(dateVal);
     };
@@ -121,7 +111,7 @@ export default function Leads() {
     const handleViewLead = (lead) => {
         setViewLead(lead);
         setQuickNote('');
-        setQuickNextDate(toInputDateFormat(lead.followUpDate || new Date()));
+        setQuickNextDate(lead.followUpDate ? toInputDateFormat(lead.followUpDate) : '');
         setQuickNextTime(lead.followUpTime || '');
         setViewModalOpen(true);
     };
@@ -145,36 +135,71 @@ export default function Leads() {
     const handleOpenStatusModal = (lead, targetStatus) => {
         const statusToUse = targetStatus || lead.status || 'Contacted';
         setSelectedLead(lead);
+
+        const allCoupons = gymSettings?.couponOffers || [];
         let matchedOfferId = '';
-        if (gymSettings) {
-            const matchedOffer = gymSettings.couponOffers?.find(o => o.title === lead.offerDetails);
-            matchedOfferId = matchedOffer ? matchedOffer._id : (lead.offerDetails ? 'Custom' : '');
+        let matchedOfferDetails = lead.offerDetails || lead.offer || '';
+        let matchedOfferAmount = (lead.offerAmount !== undefined && lead.offerAmount !== null) ? lead.offerAmount : '';
+
+        if (allCoupons.length > 0) {
+            const rawOfferId = (lead.selectedOffer || '').toString().trim();
+            const rawDetails = (lead.offerDetails || lead.offer || '').toString().trim();
+
+            const matchedOffer = allCoupons.find(o => 
+                (rawOfferId && (o._id?.toString() === rawOfferId || o.code?.toLowerCase() === rawOfferId.toLowerCase())) ||
+                (rawDetails && o.title?.toLowerCase() === rawDetails.toLowerCase()) ||
+                (rawDetails && o.code?.toLowerCase() === rawDetails.toLowerCase()) ||
+                (rawDetails && (rawDetails.toLowerCase().includes(o.title?.toLowerCase()) || (o.code && rawDetails.toLowerCase().includes(o.code.toLowerCase())))) ||
+                (rawDetails && o.title && o.title.toLowerCase().includes(rawDetails.toLowerCase())) ||
+                (matchedOfferAmount !== '' && Number(matchedOfferAmount) === Number(o.discountValue) && o.isActive)
+            );
+
+            if (matchedOffer) {
+                matchedOfferId = matchedOffer._id;
+                if (!matchedOfferDetails) {
+                    matchedOfferDetails = matchedOffer.title;
+                }
+                if (matchedOfferAmount === '' && matchedOffer.discountValue !== undefined) {
+                    matchedOfferAmount = matchedOffer.discountValue;
+                }
+            } else if (rawOfferId === 'Custom' || rawDetails || (matchedOfferAmount !== '' && Number(matchedOfferAmount) > 0)) {
+                matchedOfferId = 'Custom';
+            }
+        } else if (lead.selectedOffer === 'Custom' || lead.offerDetails || (matchedOfferAmount !== '' && Number(matchedOfferAmount) > 0)) {
+            matchedOfferId = 'Custom';
         }
+
         setStatusFormData({
             status: statusToUse,
             response: '',
-            followUpDate: toInputDateFormat(lead.followUpDate || new Date()),
+            followUpDate: lead.followUpDate ? toInputDateFormat(lead.followUpDate) : '',
             followUpTime: lead.followUpTime || '',
-            trialDate: toInputDateFormat(lead.trialDate || new Date()),
-            trialEndDate: toInputDateFormat(lead.trialEndDate || new Date()),
+            trialDate: statusToUse === 'Trial' ? toInputDateFormat(lead.trialDate || new Date()) : (lead.status === 'Trial' && lead.trialDate ? toInputDateFormat(lead.trialDate) : ''),
+            trialEndDate: statusToUse === 'Trial' ? toInputDateFormat(lead.trialEndDate || new Date()) : (lead.status === 'Trial' && lead.trialEndDate ? toInputDateFormat(lead.trialEndDate) : ''),
             trialFeeType: lead.trialFeeType || 'Unpaid',
             trialFee: lead.trialFee ?? '',
             trialPaymentStatus: lead.trialPaymentStatus || 'Unpaid',
             trialPaymentMode: lead.trialPaymentMode || 'Cash',
+            securityAmount: lead.securityAmount ?? '',
             lostReason: lead.lostReason || '',
             selectedOffer: matchedOfferId,
-            offerAmount: lead.offerAmount || '',
-            offerDetails: lead.offerDetails || ''
+            offerAmount: matchedOfferAmount,
+            offerDetails: matchedOfferDetails
         });
         setStatusModalOpen(true);
     };
 
     const handleOfferChange = (e) => {
         const value = e.target.value;
-        if (value === 'Custom' || value === '') {
+        if (value === 'Custom') {
             setStatusFormData({
                 ...statusFormData,
-                selectedOffer: value,
+                selectedOffer: 'Custom'
+            });
+        } else if (value === '') {
+            setStatusFormData({
+                ...statusFormData,
+                selectedOffer: '',
                 offerDetails: '',
                 offerAmount: ''
             });
@@ -185,7 +210,7 @@ export default function Leads() {
                     ...statusFormData,
                     selectedOffer: value,
                     offerDetails: selectedOffer.title,
-                    offerAmount: selectedOffer.discountType === 'Flat' ? selectedOffer.discountValue : ''
+                    offerAmount: selectedOffer.discountValue !== undefined ? selectedOffer.discountValue : ''
                 });
             }
         }
@@ -195,19 +220,40 @@ export default function Leads() {
         e.preventDefault();
         setSubmittingStatus(true);
         try {
-            const todayStr = toInputDateFormat(new Date());
-            const finalFollowUpDate = statusFormData.followUpDate || todayStr;
+            const finalFollowUpDate = statusFormData.followUpDate || null;
             let submitData = {
                 ...selectedLead,
                 ...statusFormData,
                 followUpDate: finalFollowUpDate
             };
 
+            // Retain trial dates and fees if status is Trial, Negotiation, or Converted, or if lead previously had a trial
+            if (!['Trial', 'Negotiation', 'Converted'].includes(statusFormData.status) && !selectedLead?.trialDate) {
+                submitData.trialDate = null;
+                submitData.trialEndDate = null;
+                submitData.trialFee = 0;
+                submitData.securityAmount = 0;
+            } else {
+                if (statusFormData.status === 'Trial') {
+                    submitData.trialDate = statusFormData.trialDate || selectedLead?.trialDate || null;
+                    submitData.trialEndDate = statusFormData.trialEndDate || selectedLead?.trialEndDate || null;
+                    submitData.trialFeeType = statusFormData.trialFeeType || selectedLead?.trialFeeType || 'Unpaid';
+                    submitData.securityAmount = statusFormData.trialFeeType === 'Paid' ? (statusFormData.securityAmount || selectedLead?.securityAmount || 0) : 0;
+                    submitData.trialPaymentMode = statusFormData.trialPaymentMode || selectedLead?.trialPaymentMode || 'Cash';
+                } else {
+                    submitData.trialDate = selectedLead?.trialDate || null;
+                    submitData.trialEndDate = selectedLead?.trialEndDate || null;
+                    submitData.trialFeeType = selectedLead?.trialFeeType || 'Unpaid';
+                    submitData.securityAmount = selectedLead?.trialFeeType === 'Paid' ? (selectedLead?.securityAmount || 0) : 0;
+                    submitData.trialPaymentMode = selectedLead?.trialPaymentMode || 'Cash';
+                }
+            }
+
             const hasResponse = statusFormData.response && statusFormData.response.trim() !== '';
             const autoAddedItem = {
                 contactDate: new Date().toISOString(),
                 response: hasResponse ? statusFormData.response : `Status changed to ${statusFormData.status}`,
-                nextFollowUpDate: finalFollowUpDate,
+                nextFollowUpDate: finalFollowUpDate || null,
                 nextFollowUpTime: statusFormData.followUpTime || '',
                 status: statusFormData.status
             };
@@ -244,11 +290,11 @@ export default function Leads() {
         }
         setSavingQuickNote(true);
         try {
-            const finalFollowUpDate = quickNextDate || toInputDateFormat(new Date());
+            const finalFollowUpDate = quickNextDate || viewLead.followUpDate || null;
             const newHistoryItem = {
                 contactDate: new Date().toISOString(),
                 response: quickNote.trim(),
-                nextFollowUpDate: finalFollowUpDate,
+                nextFollowUpDate: finalFollowUpDate || null,
                 nextFollowUpTime: quickNextTime || '',
                 status: viewLead.status || 'Contacted'
             };
@@ -309,9 +355,9 @@ export default function Leads() {
         return leads.filter(lead => {
             let tabMatch = true;
             if (activeTab === 'All Leads') tabMatch = true;
-            else if (activeTab === 'New Enquiries') tabMatch = lead.status === 'Pending';
+            else if (activeTab === 'New Enquiries') tabMatch = lead.status === 'Pending' || (!lead.followUpDate && ['New', 'Lead'].includes(lead.status));
             else if (activeTab === 'Active Leads') tabMatch = ['Lead', 'Contacted', 'Trial', 'Negotiation'].includes(lead.status);
-            else if (activeTab === 'Follow Ups') tabMatch = (!!lead.followUpDate || lead.status === 'Contacted') && !['Converted', 'Lost'].includes(lead.status);
+            else if (activeTab === 'Follow Ups') tabMatch = (Boolean(lead.followUpDate) || lead.status === 'Contacted') && !['Converted', 'Lost'].includes(lead.status) && (lead.status !== 'Pending' || Boolean(lead.followUpDate));
             else if (activeTab === 'Trials') {
                 if (['Converted', 'Lost'].includes(lead.status)) {
                     tabMatch = false;
@@ -367,9 +413,9 @@ export default function Leads() {
 
     // Counts for summary cards
     const totalLeadsCount = leads.length;
-    const newEnquiriesCount = leads.filter(l => l.status === 'Pending').length;
+    const newEnquiriesCount = leads.filter(l => l.status === 'Pending' || (!l.followUpDate && ['New', 'Lead'].includes(l.status))).length;
     const activeTrialsCount = leads.filter(l => l.status === 'Trial' || l.trialDate).length;
-    const followUpsCount = leads.filter(l => (!!l.followUpDate || l.status === 'Contacted') && !['Converted', 'Lost'].includes(l.status)).length;
+    const followUpsCount = leads.filter(l => (Boolean(l.followUpDate) || l.status === 'Contacted') && !['Converted', 'Lost'].includes(l.status) && (l.status !== 'Pending' || Boolean(l.followUpDate))).length;
     const convertedCount = leads.filter(l => l.status === 'Converted').length;
     const lostCount = leads.filter(l => l.status === 'Lost').length;
 
@@ -442,21 +488,21 @@ export default function Leads() {
         const totalLeadsGrowth = getGrowthStats(curTotalLeads, prevTotalLeads);
 
         // 2. New Enquiries
-        const isNew = (l) => !l.status || ['Pending', 'New', 'Open', 'Lead'].includes(l.status);
+        const isNew = (l) => l.status === 'Pending' || (!l.followUpDate && ['New', 'Open', 'Lead'].includes(l.status));
         const newEnquiriesCount = leads.filter(isNew).length;
         const curNew = leads.filter(l => isNew(l) && isCurrentMonth(l.createdAt || l.date)).length;
         const prevNew = leads.filter(l => isNew(l) && isPreviousMonth(l.createdAt || l.date)).length;
         const newGrowth = getGrowthStats(curNew, prevNew);
 
         // 3. Trials
-        const isTrial = (l) => l.status === 'Trial' || Boolean(l.trialDate) || l.convertibility === 'Hot';
+        const isTrial = (l) => l.status === 'Trial' || Boolean(l.trialDate);
         const trialsCount = leads.filter(isTrial).length;
         const curTrials = leads.filter(l => isTrial(l) && isCurrentMonth(l.trialDate || l.createdAt)).length;
         const prevTrials = leads.filter(l => isTrial(l) && isPreviousMonth(l.trialDate || l.createdAt)).length;
         const trialsGrowth = getGrowthStats(curTrials, prevTrials);
 
         // 4. Follow Ups
-        const isFollowUp = (l) => (Boolean(l.followUpDate) || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up') && !['Converted', 'Lost'].includes(l.status);
+        const isFollowUp = (l) => (Boolean(l.followUpDate) || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up') && !['Converted', 'Lost'].includes(l.status) && (l.status !== 'Pending' || Boolean(l.followUpDate));
         const followUpsCount = leads.filter(isFollowUp).length;
         const curFollowUps = leads.filter(l => isFollowUp(l) && isCurrentMonth(l.followUpDate || l.createdAt)).length;
         const prevFollowUps = leads.filter(l => isFollowUp(l) && isPreviousMonth(l.followUpDate || l.createdAt)).length;
@@ -554,8 +600,8 @@ export default function Leads() {
     const renderRow = (lead, index) => {
         const cleanPhone = (lead.contactNumber || lead.phone || '').toString().replace(/\D/g, '');
 
-        const hasTrial = Boolean(lead.trialDate || lead.status === 'Trial');
-        const isPaidTrial = lead.trialFeeType === 'Paid' && lead.trialFee;
+        const hasTrial = lead.status === 'Trial';
+        const isPaidTrial = lead.trialFeeType === 'Paid' || Boolean(lead.securityAmount);
 
         return (
             <tr
@@ -577,9 +623,8 @@ export default function Leads() {
                                 title={`${lead.firstName || lead.name || ''} ${lead.lastName || ''}`}
                             >
                                 {lead.firstName || lead.name || 'Unknown'} {lead.lastName || ''}
-                            </button>
-                            <p className="text-[11px] text-slate-500 font-normal leading-tight mt-0.5">
-                                {lead.gender || 'Female'} • Enquired: {lead.createdAt ? formatFullDate(lead.createdAt) : '26 Aug 2026'}
+                            </button>                            <p className="text-[11px] text-slate-500 font-normal leading-tight mt-0.5">
+                                {lead.gender || 'Female'} • Enquired: {lead.createdAt ? formatFullDate(lead.createdAt) : '-'}
                             </p>
 
                             {/* Only show trial badges if actual trial info exists */}
@@ -590,7 +635,7 @@ export default function Leads() {
                                     </span>
                                     {isPaidTrial ? (
                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 leading-none">
-                                            Paid (₹{lead.trialFee})
+                                            Paid Trial (Sec: ₹{lead.securityAmount || 0})
                                         </span>
                                     ) : (
                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 leading-none">
@@ -618,6 +663,12 @@ export default function Leads() {
                             <span className="text-slate-500 font-normal">Source: </span>
                             <span className="font-semibold text-slate-800">{lead.source || 'Walk-in'}</span>
                         </div>
+                        {lead.referredBy && (
+                            <div className="whitespace-nowrap">
+                                <span className="text-slate-500 font-normal">Ref: </span>
+                                <span className="font-semibold text-purple-700 bg-purple-50 px-1 py-0.2 rounded border border-purple-200">{lead.referredBy}</span>
+                            </div>
+                        )}
                         <div className="whitespace-nowrap">
                             <span className="text-slate-500 font-normal">Plan/For: </span>
                             <span className="font-semibold text-slate-800">{lead.inquiryFor || 'GYM'}</span>
@@ -641,12 +692,22 @@ export default function Leads() {
                                 {lead.convertibility || 'WARM'}
                             </span>
                         </div>
-                        {lead.offer && (
-                            <div className="whitespace-nowrap">
-                                <span className="text-slate-500 font-normal">Offer: </span>
-                                <span className="font-semibold text-emerald-600">{lead.offer}</span>
-                            </div>
-                        )}
+                        {(() => {
+                            const hasOffDetails = lead.offerDetails && lead.offerDetails.trim() !== '' && !['none', 'discount'].includes(lead.offerDetails.toLowerCase());
+                            const hasOffAmt = Number(lead.offerAmount) > 0;
+                            const hasGenOffer = lead.offer && lead.offer.trim() !== '' && !['none', 'discount'].includes(lead.offer.toLowerCase());
+                            if (!hasOffDetails && !hasOffAmt && !hasGenOffer) return null;
+
+                            return (
+                                <div className="whitespace-nowrap">
+                                    <span className="text-slate-500 font-normal">Offer: </span>
+                                    <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                        {lead.offerDetails || lead.offer || 'Special Offer'}
+                                        {hasOffAmt ? ` (₹${lead.offerAmount})` : ''}
+                                    </span>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </td>
 
@@ -660,7 +721,7 @@ export default function Leads() {
                             <span className="font-semibold text-slate-900">
                                 {lead.followUpHistory && lead.followUpHistory.length > 0
                                     ? formatShortDate(lead.followUpHistory[lead.followUpHistory.length - 1].contactDate)
-                                    : '26 Aug'
+                                    : (lead.createdAt ? formatShortDate(lead.createdAt) : '-')
                                 }
                             </span>
                             <span className="ml-1 px-1.5 py-0.2 bg-purple-100 text-purple-700 text-[9.5px] font-bold rounded">
@@ -673,11 +734,11 @@ export default function Leads() {
                             <FiCalendar className="text-emerald-600 text-[11px] shrink-0" />
                             <span className="text-emerald-600 font-medium text-[11.5px]">Next: </span>
                             <span className="font-semibold text-slate-900">
-                                {lead.followUpDate ? formatShortDate(lead.followUpDate) : '27 Aug'}
+                                {lead.followUpDate ? formatShortDate(lead.followUpDate) : 'Not Scheduled'}
                             </span>
                         </div>
 
-                        {/* Trial date - Only if actually present */}
+                        {/* Trial date - Show whenever trialDate exists */}
                         {lead.trialDate && (
                             <div className="flex items-center gap-1.5">
                                 <FiCalendar className="text-amber-600 text-[11px] shrink-0" />
@@ -686,13 +747,25 @@ export default function Leads() {
                                     {formatShortDate(lead.trialDate)}
                                     {lead.trialEndDate ? ` - ${formatShortDate(lead.trialEndDate)}` : ''}
                                 </span>
+                                {lead.status === 'Negotiation' && (
+                                    <span className="text-[9.5px] px-1 py-0.2 bg-amber-50 text-amber-700 border border-amber-200 rounded font-semibold">
+                                        Trial Taken
+                                    </span>
+                                )}
                             </div>
                         )}
 
-                        {/* Assigned */}
-                        <div className="flex items-center gap-1.5 text-slate-500">
-                            <span className="font-normal">Assigned: </span>
-                            <span className="font-semibold text-slate-800">{lead.attendedBy || 'Admin'}</span>
+                        {/* Added by / Assigned */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-slate-500 text-[11px]">
+                            <span className="font-normal text-slate-400">Added by:</span>
+                            <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                {lead.addedByName || lead.addedByRole || (lead.attendedBy || 'Admin')}
+                            </span>
+                            {lead.attendedBy && lead.attendedBy !== (lead.addedByName || lead.addedByRole) && (
+                                <span className="text-[10px] text-slate-400">
+                                    (Assigned: <strong className="text-slate-600">{lead.attendedBy}</strong>)
+                                </span>
+                            )}
                         </div>
                     </div>
                 </td>
@@ -768,7 +841,7 @@ export default function Leads() {
 
             {/* 2. SUMMARY STATS CARDS (6 IN A ROW) */}
             <div className="px-6 md:px-8 pt-1 pb-3 bg-[#FAEEEF] shrink-0">
-                <SummaryCards cards={summaryCardsData} />
+                <SummaryCards cards={summaryCardsData} loading={loading} />
             </div>
 
             {/* 3. TABS NAVIGATION */}
@@ -824,21 +897,27 @@ export default function Leads() {
                 </select>
 
                 {/* Date Picker */}
-                <div className="flex items-center bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl shadow-2xs h-9 px-2.5 transition-all focus-within:border-[#CA0410] focus-within:ring-2 focus-within:ring-[#CA0410]/20 w-full sm:w-auto">
-                    <FiCalendar className="text-slate-400 text-xs mr-1.5 shrink-0 pointer-events-none" />
-                    <input 
-                        type="date"
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                    <DatePicker
+                        compact={true}
                         value={filterDate}
                         onChange={(e) => {
                             setFilterDate(e.target.value);
                             setCurrentPage(1);
                         }}
-                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-28 cursor-pointer"
-                        title="Filter Date"
+                        placeholder="Filter Date"
                     />
                     {filterDate && (
-                        <button onClick={() => setFilterDate('')} className="ml-1 text-slate-400 hover:text-slate-600">
-                            <FiX size={12} />
+                        <button 
+                            type="button"
+                            onClick={() => {
+                                setFilterDate('');
+                                setCurrentPage(1);
+                            }} 
+                            className="p-1.5 text-slate-400 hover:text-rose-600 bg-white border border-slate-200 rounded-lg shadow-2xs transition-colors cursor-pointer"
+                            title="Clear Date"
+                        >
+                            <FiX size={13} />
                         </button>
                     )}
                 </div>
@@ -983,6 +1062,19 @@ export default function Leads() {
                                 <p className="font-extrabold text-slate-800 mt-0.5">{viewLead.inquiryFor || 'General GYM'}</p>
                             </div>
                             <div>
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Source & Ref</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5">
+                                    {viewLead.source || 'Walk-in'}
+                                    {viewLead.referredBy ? ` (Ref: ${viewLead.referredBy})` : ''}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-slate-400 font-bold uppercase text-[10px]">Added By</p>
+                                <p className="font-extrabold text-slate-800 mt-0.5">
+                                    {viewLead.addedByName || viewLead.addedByRole || (viewLead.attendedBy || 'Admin')}
+                                </p>
+                            </div>
+                            <div>
                                 <p className="text-slate-400 font-bold uppercase text-[10px]">Assigned Staff</p>
                                 <p className="font-extrabold text-slate-800 mt-0.5">{viewLead.attendedBy || 'Admin'}</p>
                             </div>
@@ -992,12 +1084,30 @@ export default function Leads() {
                                     {viewLead.trialDate ? `${formatShortDate(viewLead.trialDate)} - ${formatShortDate(viewLead.trialEndDate || viewLead.trialDate)}` : 'None'}
                                 </p>
                             </div>
-                            <div>
-                                <p className="text-slate-400 font-bold uppercase text-[10px]">Trial Fee</p>
-                                <p className="font-extrabold text-slate-800 mt-0.5">
-                                    {viewLead.trialFeeType === 'Paid' ? `₹${viewLead.trialFee || 0} (${viewLead.trialPaymentStatus})` : 'Free'}
-                                </p>
-                            </div>
+                            {viewLead.trialFeeType === 'Paid' && (
+                                <div>
+                                    <p className="text-slate-400 font-bold uppercase text-[10px]">Security Fee</p>
+                                    <p className="font-extrabold text-slate-800 mt-0.5">
+                                        ₹{viewLead.securityAmount || 0} ({viewLead.trialPaymentMode || 'Cash'})
+                                    </p>
+                                </div>
+                            )}
+                            {(() => {
+                                const hasOffDetails = viewLead.offerDetails && viewLead.offerDetails.trim() !== '' && !['none', 'discount'].includes(viewLead.offerDetails.toLowerCase());
+                                const hasOffAmt = Number(viewLead.offerAmount) > 0;
+                                const hasGenOffer = viewLead.offer && viewLead.offer.trim() !== '' && !['none', 'discount'].includes(viewLead.offer.toLowerCase());
+                                if (!hasOffDetails && !hasOffAmt && !hasGenOffer) return null;
+
+                                return (
+                                    <div className="sm:col-span-2">
+                                        <p className="text-slate-400 font-bold uppercase text-[10px]">Negotiated Offer / Discount</p>
+                                        <p className="font-extrabold text-emerald-700 mt-0.5">
+                                            {viewLead.offerDetails || viewLead.offer || 'Special Offer'}
+                                            {hasOffAmt ? ` (₹${viewLead.offerAmount})` : ''}
+                                        </p>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Quick interaction note input */}
@@ -1016,17 +1126,17 @@ export default function Leads() {
                             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                                 <div className="flex items-center gap-2">
                                     <span className="text-[11px] font-bold text-slate-500">Next Follow-up:</span>
-                                    <input
-                                        type="date"
+                                    <DatePicker
+                                        compact={true}
                                         value={quickNextDate}
                                         onChange={(e) => setQuickNextDate(e.target.value)}
-                                        className="p-1 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700"
+                                        placeholder="Next Date"
                                     />
-                                    <input
-                                        type="time"
+                                    <TimePicker
+                                        compact={true}
                                         value={quickNextTime}
                                         onChange={(e) => setQuickNextTime(e.target.value)}
-                                        className="p-1 bg-slate-50 border border-slate-200 rounded-md text-[11px] font-bold text-slate-700"
+                                        placeholder="Next Time"
                                     />
                                 </div>
                                 <button
@@ -1093,9 +1203,14 @@ export default function Leads() {
                             type="button"
                             onClick={handleStatusModalSubmit}
                             disabled={submittingStatus}
-                            className="px-5 py-2 bg-[#CA0410] hover:bg-[#b3030e] disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
+                            className="px-5 py-2 bg-[#CA0410] hover:bg-[#b3030e] disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
                         >
-                            {submittingStatus ? 'Updating...' : 'Save & Update'}
+                            {submittingStatus ? (
+                                <>
+                                    <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
+                                    <span>Updating...</span>
+                                </>
+                            ) : 'Save & Update'}
                         </button>
                     </div>
                 }
@@ -1108,7 +1223,7 @@ export default function Leads() {
                             onChange={(e) => setStatusFormData({ ...statusFormData, status: e.target.value })}
                             className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
                         >
-                            <option value="Lead">Lead (Active)</option>
+                            <option value="Pending">Pending (New)</option>
                             <option value="Contacted">Contacted (Follow Up)</option>
                             <option value="Trial">Trial Active</option>
                             <option value="Negotiation">Negotiation</option>
@@ -1132,45 +1247,155 @@ export default function Leads() {
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 mb-1">Next Follow-Up Date</label>
-                                <input
-                                    type="date"
+                                <DatePicker
                                     value={statusFormData.followUpDate}
                                     onChange={(e) => setStatusFormData({ ...statusFormData, followUpDate: e.target.value })}
-                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
                                 />
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 mb-1">Follow-Up Time</label>
-                                <input
-                                    type="time"
+                                <TimePicker
                                     value={statusFormData.followUpTime}
                                     onChange={(e) => setStatusFormData({ ...statusFormData, followUpTime: e.target.value })}
-                                    className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
                                 />
                             </div>
                         </div>
                     )}
 
-                    {(statusFormData.status === 'Trial' || statusFormData.trialDate) && (
+                    {statusFormData.status === 'Trial' && (
                         <div className="p-3.5 bg-orange-50/60 rounded-xl border border-orange-100 space-y-3">
-                            <h4 className="font-bold text-xs text-orange-900">Trial Scheduling</h4>
+                            <div className="flex items-center justify-between border-b border-orange-200/60 pb-2">
+                                <h4 className="font-bold text-xs text-orange-900">Trial Scheduling & Fee</h4>
+                                <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-orange-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => setStatusFormData({ 
+                                            ...statusFormData, 
+                                            trialFeeType: 'Unpaid',
+                                            trialPaymentStatus: 'Unpaid'
+                                        })}
+                                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                                            statusFormData.trialFeeType !== 'Paid' 
+                                                ? 'bg-[#CA0410] text-white shadow-2xs' 
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        Unpaid (Free)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setStatusFormData({ 
+                                            ...statusFormData, 
+                                            trialFeeType: 'Paid',
+                                            trialPaymentStatus: 'Paid'
+                                        })}
+                                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                                            statusFormData.trialFeeType === 'Paid' 
+                                                ? 'bg-[#CA0410] text-white shadow-2xs' 
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        Paid Trial
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Trial Start</label>
-                                    <input
-                                        type="date"
+                                    <DatePicker
                                         value={statusFormData.trialDate}
                                         onChange={(e) => setStatusFormData({ ...statusFormData, trialDate: e.target.value })}
-                                        className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Trial End</label>
-                                    <input
-                                        type="date"
+                                    <DatePicker
                                         value={statusFormData.trialEndDate}
                                         onChange={(e) => setStatusFormData({ ...statusFormData, trialEndDate: e.target.value })}
-                                        className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                                    />
+                                </div>
+                            </div>
+
+                            {statusFormData.trialFeeType === 'Paid' && (
+                                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-orange-200/40">
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Security Amount (₹)</label>
+                                        <input
+                                            type="number"
+                                            value={statusFormData.securityAmount || ''}
+                                            onChange={(e) => setStatusFormData({ ...statusFormData, securityAmount: e.target.value })}
+                                            placeholder="e.g. 500 (Refundable)"
+                                            className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Payment Mode</label>
+                                        <select
+                                            value={statusFormData.trialPaymentMode || 'Cash'}
+                                            onChange={(e) => setStatusFormData({ ...statusFormData, trialPaymentMode: e.target.value })}
+                                            className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
+                                        >
+                                            <option value="Cash">Cash</option>
+                                            <option value="UPI">UPI</option>
+                                            <option value="Card">Card</option>
+                                            <option value="Net Banking">Net Banking</option>
+                                            <option value="Online">Online</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {(statusFormData.status === 'Negotiation' || statusFormData.status === 'Converted') && (
+                        <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-100 space-y-3">
+                            <h4 className="font-bold text-xs text-emerald-900">Negotiation Offer & Coupon Discount</h4>
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Preset Offer / Coupon</label>
+                                <select
+                                    name="selectedOffer"
+                                    value={statusFormData.selectedOffer || ''}
+                                    onChange={handleOfferChange}
+                                    className="w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410]"
+                                >
+                                    <option value="">-- Choose an Offer / Coupon --</option>
+                                    {gymSettings?.couponOffers?.filter(o => o.isActive || o._id === statusFormData.selectedOffer).map(offer => (
+                                        <option key={offer._id} value={offer._id}>
+                                            {offer.title} ({offer.discountType === 'Percentage' ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} OFF`}){!offer.isActive ? ' (Inactive)' : ''}
+                                        </option>
+                                    ))}
+                                    <option value="Custom">Custom Offer / Manual Discount</option>
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Offer Amount (₹)</label>
+                                    <input
+                                        type="number"
+                                        name="offerAmount"
+                                        value={statusFormData.offerAmount || ''}
+                                        onChange={(e) => setStatusFormData({ ...statusFormData, offerAmount: e.target.value })}
+                                        placeholder="e.g. 500"
+                                        disabled={statusFormData.selectedOffer !== 'Custom'}
+                                        className={`w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410] ${
+                                            statusFormData.selectedOffer !== 'Custom' ? 'opacity-60 bg-slate-50 cursor-not-allowed' : ''
+                                        }`}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 mb-0.5">Offer Details / Note</label>
+                                    <input
+                                        type="text"
+                                        name="offerDetails"
+                                        value={statusFormData.offerDetails || ''}
+                                        onChange={(e) => setStatusFormData({ ...statusFormData, offerDetails: e.target.value })}
+                                        placeholder="e.g. 10% Off on 3 Months"
+                                        disabled={statusFormData.selectedOffer !== 'Custom'}
+                                        className={`w-full h-9 px-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-[#CA0410] ${
+                                            statusFormData.selectedOffer !== 'Custom' ? 'opacity-60 bg-slate-50 cursor-not-allowed' : ''
+                                        }`}
                                     />
                                 </div>
                             </div>

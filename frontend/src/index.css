@@ -11,21 +11,78 @@ code {
     monospace;
 }
 
-/* Custom Modern Toast Notifications */
+/* Custom Modern Gym Brand Toast Notifications */
 .Toastify__toast {
-  border-radius: 0.75rem !important;
-  font-family: inherit !important;
-  font-size: 0.875rem !important;
-  font-weight: 600 !important;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 1rem !important;
+  font-family: 'Roboto', sans-serif !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  box-shadow: 0 16px 36px -4px rgba(202, 4, 16, 0.12), 0 6px 14px -3px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid rgba(254, 205, 211, 0.9) !important;
   padding: 12px 16px !important;
-  min-height: 52px !important;
+  min-height: 54px !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.Toastify__toast--success {
+  border-left: 5px solid #10b981 !important;
+}
+
+.Toastify__toast--error {
+  border-left: 5px solid #CA0410 !important;
+  background: #FFF8F8 !important;
+}
+
+.Toastify__toast--info {
+  border-left: 5px solid #CA0410 !important;
+}
+
+.Toastify__toast--warning {
+  border-left: 5px solid #f59e0b !important;
 }
 
 .Toastify__toast-theme--dark {
-  background: #0f172a !important;
+  background: #111217 !important;
   color: #f8fafc !important;
+  border: 1px solid rgba(202, 4, 16, 0.25) !important;
+}
+
+.Toastify__toast-theme--dark.Toastify__toast--success {
+  border-left: 5px solid #10b981 !important;
+}
+
+.Toastify__toast-theme--dark.Toastify__toast--error {
+  border-left: 5px solid #CA0410 !important;
+  box-shadow: 0 12px 30px -5px rgba(202, 4, 16, 0.3) !important;
+}
+
+.Toastify__toast-theme--dark.Toastify__toast--info {
+  border-left: 5px solid #CA0410 !important;
+}
+
+.Toastify__toast-theme--dark.Toastify__toast--warning {
+  border-left: 5px solid #f59e0b !important;
+}
+
+.Toastify__progress-bar {
+  height: 3.5px !important;
+}
+
+.Toastify__progress-bar--success {
+  background: #10b981 !important;
+}
+
+.Toastify__progress-bar--error {
+  background: #CA0410 !important;
+}
+
+.Toastify__progress-bar--info {
+  background: #CA0410 !important;
+}
+
+.Toastify__progress-bar--warning {
+  background: #f59e0b !important;
 }
 
 .Toastify__toast-icon {
@@ -36,17 +93,18 @@ code {
   justify-content: center !important;
 }
 
-/* Custom Webkit Date/Time Picker Indicator */
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="time"]::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: 0;
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
+.Toastify__close-button {
+  color: #64748b !important;
+  opacity: 0.8 !important;
+  transition: all 0.2s ease !important;
+  align-self: center !important;
 }
+
+.Toastify__close-button:hover {
+  color: #CA0410 !important;
+  opacity: 1 !important;
+}
+
 
 /* Custom Scrollbar for Modals */
 .custom-scrollbar::-webkit-scrollbar {
@@ -64,3 +122,14 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Dark Autofill Fix */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0d0e12 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+

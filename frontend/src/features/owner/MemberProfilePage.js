@@ -3,14 +3,15 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { 
     FiUser, FiPhone, FiMail, FiMapPin, FiCalendar, FiActivity, FiAward, 
     FiEdit2, FiUsers, FiCreditCard, FiClock, FiCheckCircle, FiXCircle, 
-    FiShield, FiHeart, FiZap, FiPlusCircle, FiArrowLeft, FiTag, FiFileText, FiShare2
+    FiShield, FiHeart, FiZap, FiPlusCircle, FiArrowLeft, FiTag, FiFileText, FiShare2,
+    FiEye, FiTrash2, FiDollarSign
 } from 'react-icons/fi';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import Loader from '../../components/page/Loader';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, toInputDateFormat } from '../../utils/dateUtils';
 
 export default function MemberProfilePage() {
     const { id } = useParams();
@@ -36,6 +37,17 @@ export default function MemberProfilePage() {
         paymentMode: 'Cash',
         useWallet: false,
         walletUsed: 0,
+        submitting: false
+    });
+
+    const [editTxModal, setEditTxModal] = useState({
+        open: false,
+        transaction: null,
+        amountPaid: '',
+        paymentMode: 'Cash',
+        paymentDate: '',
+        transactionId: '',
+        notes: '',
         submitting: false
     });
     
@@ -139,6 +151,81 @@ export default function MemberProfilePage() {
         }
     };
 
+    const handleDeleteTx = async (txId, amount) => {
+        if (!window.confirm(`Are you sure you want to delete this payment transaction of ₹${amount}? The member's remaining balance will be adjusted automatically.`)) {
+            return;
+        }
+        try {
+            await apiClient.delete(`/members/transactions/${txId}`);
+            toast.success("Payment transaction deleted and balance updated");
+            fetchMembershipData();
+            if (memberIdVal) {
+                apiClient.get('/members/transactions/all')
+                    .then(res => {
+                        const memberTxs = (res.data || []).filter(t => (t.memberId?._id || t.memberId) === memberIdVal);
+                        setTransactions(memberTxs);
+                    })
+                    .catch(console.error);
+                if (id) {
+                    apiClient.get(`/members/${id}`).then(r => setFetchedMember(r.data)).catch(console.error);
+                }
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to delete transaction");
+        }
+    };
+
+    const openEditTxModal = (tx) => {
+        setEditTxModal({
+            open: true,
+            transaction: tx,
+            amountPaid: tx.amountPaid || '',
+            paymentMode: tx.paymentMode || 'Cash',
+            paymentDate: toInputDateFormat(tx.paymentDate || tx.createdAt || new Date()),
+            transactionId: tx.transactionId || '',
+            notes: tx.notes || '',
+            submitting: false
+        });
+    };
+
+    const handleUpdateTxSubmit = async (e) => {
+        e.preventDefault();
+        if (!editTxModal.transaction) return;
+        const amt = Number(editTxModal.amountPaid);
+        if (isNaN(amt) || amt <= 0) {
+            toast.error("Please enter a valid amount");
+            return;
+        }
+
+        setEditTxModal(prev => ({ ...prev, submitting: true }));
+        try {
+            await apiClient.put(`/members/transactions/${editTxModal.transaction._id}`, {
+                amountPaid: amt,
+                paymentMode: editTxModal.paymentMode,
+                paymentDate: editTxModal.paymentDate,
+                transactionId: editTxModal.transactionId,
+                notes: editTxModal.notes
+            });
+            toast.success("Payment transaction updated successfully!");
+            setEditTxModal({ open: false, transaction: null, amountPaid: '', paymentMode: 'Cash', paymentDate: '', transactionId: '', notes: '', submitting: false });
+            fetchMembershipData();
+            if (memberIdVal) {
+                apiClient.get('/members/transactions/all')
+                    .then(res => {
+                        const memberTxs = (res.data || []).filter(t => (t.memberId?._id || t.memberId) === memberIdVal);
+                        setTransactions(memberTxs);
+                    })
+                    .catch(console.error);
+                if (id) {
+                    apiClient.get(`/members/${id}`).then(r => setFetchedMember(r.data)).catch(console.error);
+                }
+            }
+        } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to update transaction");
+            setEditTxModal(prev => ({ ...prev, submitting: false }));
+        }
+    };
+
     if (loadingMember) {
         return <Loader text="Loading member profile..." />;
     }
@@ -184,17 +271,60 @@ export default function MemberProfilePage() {
     const attendedBy = member.attendedBy;
 
     const today = new Date();
-    today.setHours(0,0,0,0);
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
-    const activeMem = allMemberships.find(m => m.membershipStatus === 'Active' || (new Date(m.startDate) <= today && new Date(m.endDate) >= today));
-    const scheduledMembership = allMemberships.find(m => m.membershipStatus === 'Scheduled' || new Date(m.startDate) > today);
-    const activeMembership = activeMem || rawMember?.activeMembership || (rawMember?.membershipPlanId ? rawMember : null);
+    const parseLocalDateStart = (val) => {
+        if (!val) return null;
+        if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+            const [y, m, d] = val.split('T')[0].split('-').map(Number);
+            return new Date(y, m - 1, d, 0, 0, 0, 0);
+        }
+        const d = new Date(val);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    };
 
-    const planEnd = activeMembership?.paidUntilDate ? new Date(activeMembership.paidUntilDate) : activeMembership?.endDate ? new Date(activeMembership.endDate) : (rawMember?.endDate ? new Date(rawMember.endDate) : null);
+    const parseLocalDateEnd = (val) => {
+        if (!val) return null;
+        if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+            const [y, m, d] = val.split('T')[0].split('-').map(Number);
+            return new Date(y, m - 1, d, 23, 59, 59, 999);
+        }
+        const d = new Date(val);
+        d.setHours(23, 59, 59, 999);
+        return d;
+    };
+
+    const activeList = allMemberships.filter(m => {
+        if (m.membershipStatus === 'Cancelled') return false;
+        if (m.membershipStatus === 'Frozen') return true;
+
+        const start = parseLocalDateStart(m.startDate);
+        const end = parseLocalDateEnd(m.endDate);
+
+        if (!start || !end) return m.membershipStatus === 'Active';
+
+        // Any package where today falls between startDate and endDate is ACTIVE
+        return start <= todayEnd && end >= today;
+    });
+    const activeMem = activeList[0];
+    const activeMembership = activeMem || (allMemberships.length === 0 ? (rawMember?.activeMembership || (rawMember?.membershipPlanId ? rawMember : null)) : null);
+
+    const scheduledMembership = allMemberships.find(m => {
+        if (m.membershipStatus === 'Cancelled' || m.membershipStatus === 'Frozen') return false;
+        if (activeList.some(act => (act._id && m._id && act._id.toString() === m._id.toString()))) return false;
+
+        const start = parseLocalDateStart(m.startDate);
+        return Boolean(start && start > todayEnd);
+    });
+
+    const planEnd = activeMembership?.paidUntilDate ? parseLocalDateEnd(activeMembership.paidUntilDate) : activeMembership?.endDate ? parseLocalDateEnd(activeMembership.endDate) : (scheduledMembership?.endDate ? parseLocalDateEnd(scheduledMembership.endDate) : null);
     const isPlanExpired = planEnd && planEnd < today;
-    const daysLeft = planEnd ? Math.ceil((planEnd - today) / (1000 * 60 * 60 * 24)) : null;
+    const daysLeft = planEnd ? Math.max(0, Math.ceil((planEnd - today) / (1000 * 60 * 60 * 24))) : null;
 
-    const planName = activeMembership?.membershipPlanId?.name || activeMembership?.planName || rawMember?.planName || 'No Plan';
+    const planName = activeMembership?.membershipPlanId?.name || activeMembership?.planName || (scheduledMembership ? `${scheduledMembership.membershipPlanId?.name || scheduledMembership.planName} (Scheduled from ${formatDate(scheduledMembership.startDate)})` : 'No Active Plan');
 
     const referredByName = member.referredByStaff?.name 
         ? `${member.referredByStaff.name} (Staff)`
@@ -257,7 +387,7 @@ export default function MemberProfilePage() {
                     {/* Quick Action Buttons */}
                     <div className="flex items-center gap-2.5 shrink-0 flex-wrap self-start sm:self-center">
                         <button 
-                            onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member, isRenew: true } })}
+                            onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member, activeMembership, isRenew: true } })}
                             className="px-4 py-2 bg-white/15 hover:bg-white/25 text-white border border-white/30 backdrop-blur-sm rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
                         >
                             <FiPlusCircle size={14} /> Assign / Renew Plan
@@ -478,19 +608,24 @@ export default function MemberProfilePage() {
                             </div>
 
                             {(() => {
-                                const activeList = allMemberships.filter(m => m.membershipStatus === 'Active' || m.membershipStatus === 'Frozen');
-                                const listToRender = activeList.length > 0 ? activeList : (activeMembership ? [activeMembership] : []);
+                                const listToRender = activeList.length > 0 ? activeList : (allMemberships.length === 0 && activeMembership ? [activeMembership] : []);
 
                                 if (listToRender.length === 0) {
                                     return (
-                                        <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-100">
-                                            <p className="text-xs text-slate-500 font-medium">No membership plan assigned yet.</p>
-                                            <button 
-                                                onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })}
-                                                className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-sm"
-                                            >
-                                                Assign First Plan
-                                            </button>
+                                        <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                                            <p className="text-xs text-slate-500 font-medium">
+                                                {scheduledMembership 
+                                                    ? `No active package for today. Upcoming package starts on ${formatDate(scheduledMembership.startDate)}.` 
+                                                    : 'No membership plan assigned yet.'}
+                                            </p>
+                                            {!scheduledMembership && (
+                                                <button 
+                                                    onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member } })}
+                                                    className="mt-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-sm"
+                                                >
+                                                    Assign First Plan
+                                                </button>
+                                            )}
                                         </div>
                                     );
                                 }
@@ -582,7 +717,14 @@ export default function MemberProfilePage() {
                                                     <div className={`grid grid-cols-3 gap-3 mt-4 pt-3 border-t ${isFrozen ? 'border-cyan-200 text-slate-800' : 'border-white/10 text-white'}`}>
                                                         <div className="text-center">
                                                             <p className="text-[10px] font-bold opacity-70 uppercase">Fee</p>
-                                                            <p className="text-xs sm:text-sm font-black">₹{m.finalPrice || m.originalPrice || 0}</p>
+                                                            <div className="flex flex-col items-center justify-center">
+                                                                <p className="text-xs sm:text-sm font-black">₹{m.originalPrice || m.finalPrice || 0}</p>
+                                                                {m.discount > 0 && (
+                                                                    <p className="text-[9px] font-medium text-amber-300 leading-tight mt-0.5 whitespace-nowrap">
+                                                                        -₹{m.discount} Disc (Net: ₹{m.finalPrice})
+                                                                    </p>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                         <div className="text-center">
                                                             <p className="text-[10px] font-bold opacity-70 uppercase">Paid</p>
@@ -609,7 +751,7 @@ export default function MemberProfilePage() {
                         </div>
 
                         {/* SCHEDULED / UPCOMING MEMBERSHIP CARD */}
-                        {scheduledMembership && (
+                        {scheduledMembership && !activeList.some(act => (act._id && scheduledMembership._id && act._id.toString() === scheduledMembership._id.toString())) && (
                             <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border border-indigo-200 p-6 shadow-sm space-y-4">
                                 <div className="flex items-center justify-between pb-3 border-b border-indigo-200/60">
                                     <div className="flex items-center gap-3">
@@ -647,7 +789,14 @@ export default function MemberProfilePage() {
                                         <div className="grid grid-cols-3 gap-3 pt-3 border-t border-indigo-800 text-white">
                                             <div className="text-center">
                                                 <p className="text-[10px] font-bold text-indigo-300 uppercase">Fee</p>
-                                                <p className="text-xs sm:text-sm font-black">₹{scheduledMembership.finalPrice || scheduledMembership.originalPrice || 0}</p>
+                                                <div className="flex flex-col items-center justify-center">
+                                                    <p className="text-xs sm:text-sm font-black">₹{scheduledMembership.originalPrice || scheduledMembership.finalPrice || 0}</p>
+                                                    {scheduledMembership.discount > 0 && (
+                                                        <p className="text-[9px] font-medium text-amber-300 leading-tight mt-0.5 whitespace-nowrap">
+                                                            -₹{scheduledMembership.discount} Disc (Net: ₹{scheduledMembership.finalPrice})
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="text-center">
                                                 <p className="text-[10px] font-bold text-indigo-300 uppercase">Paid</p>
@@ -762,6 +911,7 @@ export default function MemberProfilePage() {
                                                 <th className="px-4 py-3">Amount Paid</th>
                                                 <th className="px-4 py-3">Mode</th>
                                                 <th className="px-4 py-3">Txn ID</th>
+                                                <th className="px-4 py-3 text-center">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 bg-white font-medium text-slate-700">
@@ -783,6 +933,31 @@ export default function MemberProfilePage() {
                                                     </td>
                                                     <td className="px-4 py-3 text-[10px] text-slate-400 font-mono">
                                                         {tx.transactionId || tx._id?.toString().slice(-6)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <div className="flex items-center justify-center gap-1.5">
+                                                            <button 
+                                                                onClick={() => navigate(`/dashboard/owner/finance/receipt/${member._id}`)} 
+                                                                className="w-7 h-7 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                                                title="View Receipt"
+                                                            >
+                                                                <FiEye size={13} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => openEditTxModal(tx)} 
+                                                                className="w-7 h-7 rounded-lg border border-indigo-200 text-indigo-600 bg-indigo-50/60 hover:border-indigo-300 hover:bg-indigo-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                                                title="Edit Payment"
+                                                            >
+                                                                <FiEdit2 size={13} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteTx(tx._id, tx.amountPaid)} 
+                                                                className="w-7 h-7 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                                                title="Delete Payment"
+                                                            >
+                                                                <FiTrash2 size={13} />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -909,8 +1084,105 @@ export default function MemberProfilePage() {
 
                             <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
                                 <button type="button" onClick={() => setCollectModal({ open: false, membership: null })} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Cancel</button>
-                                <button type="submit" disabled={collectModal.submitting} className="px-4 py-2 text-xs font-bold text-white bg-[#CA0410] hover:bg-[#a8030d] rounded-xl shadow-2xs cursor-pointer">
-                                    {collectModal.submitting ? 'Recording...' : 'Submit Payment'}
+                                <button type="submit" disabled={collectModal.submitting} className="px-4 py-2 text-xs font-bold text-white bg-[#CA0410] hover:bg-[#a8030d] rounded-xl shadow-2xs cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2">
+                                    {collectModal.submitting ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
+                                            <span>Recording...</span>
+                                        </>
+                                    ) : 'Submit Payment'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* EDIT TRANSACTION MODAL */}
+            {editTxModal.open && editTxModal.transaction && (
+                <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-100">
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <div>
+                                <h3 className="font-extrabold text-slate-900 text-base">Edit Payment Transaction</h3>
+                                <p className="text-xs text-slate-500 font-medium">
+                                    Receipt: <span className="font-mono font-bold text-slate-700">{editTxModal.transaction.transactionId || editTxModal.transaction._id?.slice(-6)}</span>
+                                </p>
+                            </div>
+                            <button onClick={() => setEditTxModal({ open: false, transaction: null })} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+                        </div>
+
+                        <form onSubmit={handleUpdateTxSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Amount Paid (₹) *</label>
+                                <input 
+                                    type="number" 
+                                    required
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-sm font-bold text-slate-900 bg-white"
+                                    value={editTxModal.amountPaid} 
+                                    onChange={(e) => setEditTxModal(prev => ({ ...prev, amountPaid: e.target.value }))} 
+                                    placeholder="Enter amount"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">Payment Method *</label>
+                                    <select 
+                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-xs font-bold bg-white cursor-pointer"
+                                        value={editTxModal.paymentMode} 
+                                        onChange={(e) => setEditTxModal(prev => ({ ...prev, paymentMode: e.target.value }))}
+                                    >
+                                        <option value="Cash">Cash</option>
+                                        <option value="UPI">UPI</option>
+                                        <option value="Card">Card</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Cheque">Cheque</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">Payment Date</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-xs font-medium text-slate-800 bg-white"
+                                        value={editTxModal.paymentDate} 
+                                        onChange={(e) => setEditTxModal(prev => ({ ...prev, paymentDate: e.target.value }))} 
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Transaction Ref / UTR (Optional)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-xs font-medium text-slate-800 bg-white"
+                                    value={editTxModal.transactionId} 
+                                    onChange={(e) => setEditTxModal(prev => ({ ...prev, transactionId: e.target.value }))} 
+                                    placeholder="e.g. UPI-123456"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1">Notes (Optional)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 outline-none text-xs font-medium text-slate-800 bg-white"
+                                    value={editTxModal.notes} 
+                                    onChange={(e) => setEditTxModal(prev => ({ ...prev, notes: e.target.value }))} 
+                                    placeholder="e.g. Partial installment correction"
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                                <button type="button" onClick={() => setEditTxModal({ open: false, transaction: null })} className="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer">Cancel</button>
+                                <button type="submit" disabled={editTxModal.submitting} className="px-4 py-2 text-xs font-bold text-white bg-[#CA0410] hover:bg-[#a8030d] rounded-xl shadow-2xs cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2">
+                                    {editTxModal.submitting ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
+                                            <span>Saving...</span>
+                                        </>
+                                    ) : 'Save Changes'}
                                 </button>
                             </div>
                         </form>

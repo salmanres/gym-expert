@@ -1,6 +1,36 @@
 import React from 'react';
+import DatePicker from './DatePicker';
+import TimePicker from './TimePicker';
 
-export default function Input({ label, required, error, className = '', containerClassName = '', inputRef, ...props }) {
+export default function Input({ label, required, error, className = '', containerClassName = '', inputRef, type, ...props }) {
+    if (type === 'date') {
+        return (
+            <DatePicker
+                label={label}
+                required={required}
+                error={error}
+                className={className}
+                containerClassName={containerClassName}
+                inputRef={inputRef}
+                {...props}
+            />
+        );
+    }
+
+    if (type === 'time') {
+        return (
+            <TimePicker
+                label={label}
+                required={required}
+                error={error}
+                className={className}
+                containerClassName={containerClassName}
+                inputRef={inputRef}
+                {...props}
+            />
+        );
+    }
+
     return (
         <div className={`flex flex-col ${containerClassName}`}>
             {label && (
@@ -10,6 +40,7 @@ export default function Input({ label, required, error, className = '', containe
             )}
             <input 
                 ref={inputRef}
+                type={type}
                 required={required}
                 className={`w-full h-10 px-3.5 rounded-xl border ${
                     error 

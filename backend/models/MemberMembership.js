@@ -109,6 +109,8 @@ const memberMembershipSchema = new mongoose.Schema(
         "Expired",
         "Frozen",
         "Cancelled",
+        "Pending",
+        "Inactive",
       ],
       default: "Active",
     },

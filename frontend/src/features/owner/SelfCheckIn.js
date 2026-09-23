@@ -209,14 +209,30 @@ export default function SelfCheckIn() {
 
     return (
         <div className="min-h-screen bg-[#D4D4D8] flex flex-col items-center justify-center p-4 sm:p-6 relative font-sans select-none">
-            <ToastContainer theme="dark" position="top-center" icon={({ type }) => {
+            <ToastContainer theme="light" position="top-center" autoClose={3500} icon={({ type }) => {
                 const icons = {
-                    success: <FiCheckCircle size={20} className="text-emerald-400 flex-shrink-0" />,
-                    error: <FiXCircle size={20} className="text-rose-400 flex-shrink-0" />,
-                    info: <FiInfo size={20} className="text-sky-400 flex-shrink-0" />,
-                    warning: <FiAlertTriangle size={20} className="text-amber-400 flex-shrink-0" />
+                    success: (
+                        <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
+                            <FiCheckCircle size={16} />
+                        </div>
+                    ),
+                    error: (
+                        <div className="w-7 h-7 rounded-xl bg-rose-100 text-[#CA0410] border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+                            <FiXCircle size={16} />
+                        </div>
+                    ),
+                    info: (
+                        <div className="w-7 h-7 rounded-xl bg-rose-50 text-[#CA0410] border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+                            <FiInfo size={16} />
+                        </div>
+                    ),
+                    warning: (
+                        <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 shadow-2xs">
+                            <FiAlertTriangle size={16} />
+                        </div>
+                    )
                 };
-                return icons[type] || <FiInfo size={20} className="text-sky-400 flex-shrink-0" />;
+                return icons[type] || icons.info;
             }} />
             
             {/* MAIN CHECK-IN CARD */}

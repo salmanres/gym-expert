@@ -34,10 +34,26 @@ import SelfCheckIn from './features/owner/SelfCheckIn';
 import reportWebVitals from './reportWebVitals';
 
 const customToastIcons = {
-  success: <FiCheckCircle size={20} className="text-emerald-400 flex-shrink-0" />,
-  error: <FiXCircle size={20} className="text-rose-400 flex-shrink-0" />,
-  info: <FiInfo size={20} className="text-sky-400 flex-shrink-0" />,
-  warning: <FiAlertTriangle size={20} className="text-amber-400 flex-shrink-0" />
+  success: (
+    <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
+      <FiCheckCircle size={16} />
+    </div>
+  ),
+  error: (
+    <div className="w-7 h-7 rounded-xl bg-rose-100 text-[#CA0410] border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+      <FiXCircle size={16} />
+    </div>
+  ),
+  info: (
+    <div className="w-7 h-7 rounded-xl bg-rose-50 text-[#CA0410] border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+      <FiInfo size={16} />
+    </div>
+  ),
+  warning: (
+    <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 shadow-2xs">
+      <FiAlertTriangle size={16} />
+    </div>
+  )
 };
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -90,7 +106,7 @@ root.render(
             <Route path="owner/branches" element={<div className="p-8 text-2xl font-bold text-slate-800">My Branches (Coming Soon)</div>} />
         </Route>
       </Routes>
-      <ToastContainer theme="dark" position="bottom-right" icon={({ type }) => customToastIcons[type] || <FiInfo size={20} className="text-sky-400 flex-shrink-0" />} />
+      <ToastContainer theme="light" position="bottom-right" autoClose={3500} hideProgressBar={false} newestOnTop closeOnClick pauseOnHover icon={({ type }) => customToastIcons[type] || customToastIcons.info} />
     </Router>
   </React.StrictMode>
 );

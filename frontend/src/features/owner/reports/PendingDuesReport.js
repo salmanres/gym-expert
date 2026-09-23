@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import SummaryCards from '../../../components/page/SummaryCards';
 import LineChart from '../../../components/page/LineChart';
 import DataTable from '../../../components/page/DataTable';
-import EmptyState from '../../../components/page/EmptyState';
 import { FiUsers, FiDollarSign, FiTrendingUp, FiAlertCircle, FiPhone, FiCreditCard } from 'react-icons/fi';
+import { toInputDateFormat } from '../../../utils/dateUtils';
 
 export default function PendingDuesReport({ 
     pendingDues = [],
@@ -18,9 +18,26 @@ export default function PendingDuesReport({
     const avgPending = pendingDues.length ? Math.round(totalPendingDuesAmount / pendingDues.length) : 0;
 
     const cards = [
-        { title: 'Total Defaulters', value: `${pendingDues.length} Members`, icon: <FiUsers />, textColor: 'text-rose-500', valueColor: 'text-rose-600', bgClass: 'bg-rose-50', iconColor: 'text-rose-600' },
-        { title: 'Total Dues Outstanding', value: `₹${Math.round(totalPendingDuesAmount).toLocaleString()}`, icon: <FiDollarSign />, textColor: 'text-slate-500', valueColor: 'text-slate-800', bgClass: 'bg-slate-100', iconColor: 'text-slate-700' },
-        { title: 'Average Due Per Member', value: `₹${Math.round(avgPending).toLocaleString()}`, icon: <FiTrendingUp />, textColor: 'text-indigo-500', valueColor: 'text-indigo-600', bgClass: 'bg-indigo-50', iconColor: 'text-indigo-600' }
+        {
+            title: 'Total Pending Dues',
+            value: `₹${totalPendingDuesAmount.toLocaleString()}`,
+            percentage: `${pendingDues.length} Members`,
+            percentageColor: 'text-rose-600',
+            subtitle: 'Unpaid fee balance',
+            icon: <FiDollarSign />,
+            bgClass: 'bg-[#FFEBEE]',
+            iconColor: 'text-[#E53935]'
+        },
+        {
+            title: 'Average Pending / Member',
+            value: `₹${avgPending.toLocaleString()}`,
+            percentage: 'Avg Due',
+            percentageColor: 'text-amber-600',
+            subtitle: 'Across unpaid accounts',
+            icon: <FiTrendingUp />,
+            bgClass: 'bg-[#FFF9C4]',
+            iconColor: 'text-[#F57F17]'
+        }
     ];
 
     // Build Pending Dues Chart Points
@@ -29,11 +46,11 @@ export default function PendingDuesReport({
     for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(today.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = toInputDateFormat(d);
         const dayLabel = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
         const dayDues = pendingDues.filter(p => {
-            const pDateStr = new Date(p.createdAt || p.startDate).toISOString().split('T')[0];
+            const pDateStr = toInputDateFormat(p.createdAt || p.startDate);
             return pDateStr === dateStr;
         }).reduce((sum, p) => sum + (Number(p.pendingAmount || p.balanceAmount) || 0), 0);
 
@@ -173,27 +190,20 @@ export default function PendingDuesReport({
             {filterBar}
 
             <div className="px-6 md:px-8 pb-6 pt-1">
-                {pendingDues.length > 0 ? (
-                    <DataTable 
-                        columns={columns} 
-                        data={paginatedPendingDues} 
-                        renderRow={renderRow} 
-                        pagination={{
-                            currentPage: currentPage,
-                            totalItems: totalItems,
-                            pageSize: pageSize,
-                            onPageChange: (p) => setCurrentPage(p),
-                            onPageSizeChange: (s) => setPageSize(s),
-                            itemLabel: "pending dues"
-                        }}
-                    />
-                ) : (
-                    <EmptyState 
-                        icon={<FiAlertCircle size={48} />} 
-                        title="No pending dues found" 
-                        subtitle="Great job! All members are up to date on fee payments." 
-                    />
-                )}
+                <DataTable 
+                    columns={columns} 
+                    data={paginatedPendingDues} 
+                    emptyMessage="No pending dues found."
+                    renderRow={renderRow} 
+                    pagination={{
+                        currentPage: currentPage,
+                        totalItems: totalItems,
+                        pageSize: pageSize,
+                        onPageChange: (p) => setCurrentPage(p),
+                        onPageSizeChange: (s) => setPageSize(s),
+                        itemLabel: "pending dues"
+                    }}
+                />
             </div>
         </div>
     );

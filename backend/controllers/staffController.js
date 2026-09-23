@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Gym = require('../models/Gym');
+const { notifyGym } = require('../socket');
 
 // @desc    Get all staff for the logged-in gym
 // @route   GET /api/staff
@@ -56,6 +57,15 @@ exports.createStaff = async (req, res) => {
             joiningDate, specialization, experienceYears, salary, 
             shiftStart, shiftEnd, status, profilePhoto,
             gymId: req.user.gymId
+        });
+
+        // Broadcast real-time Socket notification
+        notifyGym(req.user.gymId, {
+            title: `New Staff Added: ${name}`,
+            description: `Role: ${role} • Phone: ${phone || 'N/A'} has been registered.`,
+            type: 'MEMBER',
+            targetId: newStaff._id,
+            link: '/dashboard/owner/staff'
         });
 
         // return without password
@@ -119,6 +129,15 @@ exports.updateStaff = async (req, res) => {
 
         await staff.save();
         
+        // Broadcast real-time Socket notification
+        notifyGym(req.user.gymId, {
+            title: `Staff Updated: ${staff.name}`,
+            description: `Profile & assignment updated for ${staff.name} (${staff.role}).`,
+            type: 'MEMBER',
+            targetId: staff._id,
+            link: '/dashboard/owner/staff'
+        });
+
         const staffObj = staff.toObject();
         delete staffObj.password;
 
@@ -143,7 +162,20 @@ exports.deleteStaff = async (req, res) => {
             return res.status(404).json({ message: 'Staff member not found' });
         }
 
+        const staffName = staff.name;
+        const staffRole = staff.role;
+
         await staff.deleteOne();
+
+        // Broadcast real-time Socket notification
+        notifyGym(req.user.gymId, {
+            title: `Staff Removed: ${staffName}`,
+            description: `${staffName} (${staffRole}) has been removed from staff directory.`,
+            type: 'MEMBER',
+            targetId: req.params.id,
+            link: '/dashboard/owner/staff'
+        });
+
         res.json({ message: 'Staff member deleted' });
     } catch (error) {
         console.error("Delete staff error:", error);

@@ -10,12 +10,14 @@ import SummaryCards from '../../components/page/SummaryCards';
 import { FiCheckCircle, FiXCircle, FiClock, FiUserCheck, FiPhone, FiX, FiCalendar, FiUsers, FiTrendingUp, FiActivity } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from '../../utils/toast';
+import DatePicker from '../../components/form/DatePicker';
+import { formatDate, toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
 
 export default function AttendanceDashboard() {
     const [sheet, setSheet] = useState([]);
     const [gymStatus, setGymStatus] = useState({ isClosed: false, closedReason: '' });
     const [loading, setLoading] = useState(true);
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState(getTodayInputDate());
     const [activeTab, setActiveTab] = useState('Members');
     const [searchTerm, setSearchTerm] = useState('');
     
@@ -149,7 +151,7 @@ export default function AttendanceDashboard() {
         const displayName = (user.name || `${user.firstName || ''} ${user.lastName || ''}`).trim() || `Member (${(user.memberId || user._id.slice(-5)).toUpperCase()})`;
         const memStatus = user.membershipStatus || user.status || 'No Plan';
         
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getTodayInputDate();
         const isPastDate = selectedDate < todayStr;
         
         if (currentStatus === 'Unmarked' && gymStatus.isClosed) {
@@ -347,7 +349,7 @@ export default function AttendanceDashboard() {
 
     const totalCount = sheet.length;
     const presentCount = sheet.filter(s => s.attendance?.status === 'Present').length;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayInputDate();
     const absentCount = sheet.filter(s => {
         const currentStatus = s.attendance?.status || 'Unmarked';
         return currentStatus === 'Absent' || (!gymStatus.isClosed && currentStatus === 'Unmarked' && selectedDate < todayStr);
@@ -400,8 +402,6 @@ export default function AttendanceDashboard() {
         }
     ];
 
-    if (loading && sheet.length === 0) return <Loader text="Loading attendance sheet..." />;
-
     return (
         <PageLayout>
             <PageHeader 
@@ -410,7 +410,7 @@ export default function AttendanceDashboard() {
             />
 
             <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
-                <SummaryCards cards={summaryCardsData} />
+                <SummaryCards cards={summaryCardsData} loading={loading} />
             </div>
 
             <Tabs 
@@ -446,15 +446,13 @@ export default function AttendanceDashboard() {
                 searchPlaceholder={`Search ${activeTab.toLowerCase()} by name, phone...`}
             >
                 {/* Date Picker Input */}
-                <div className="flex items-center gap-2 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl h-9 px-3 text-xs shadow-2xs shrink-0">
-                    <FiCalendar className="text-rose-400 text-sm" />
-                    <span className="font-bold text-slate-400 uppercase text-[10px]">Date:</span>
-                    <input 
-                        type="date" 
+                <div className="shrink-0">
+                    <DatePicker
+                        compact={true}
                         value={selectedDate}
-                        max={new Date().toISOString().split('T')[0]}
+                        max={getTodayInputDate()}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="bg-transparent text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
+                        placeholder="Select Date"
                     />
                 </div>
 

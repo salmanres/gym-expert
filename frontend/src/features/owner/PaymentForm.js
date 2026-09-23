@@ -11,6 +11,7 @@ import Button from '../../components/form/Button';
 import ReactSelect from 'react-select';
 import Loader from '../../components/page/Loader';
 import { FiDollarSign } from 'react-icons/fi';
+import { toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
 
 export default function PaymentForm() {
     const navigate = useNavigate();
@@ -94,14 +95,19 @@ export default function PaymentForm() {
                             targetMembershipId: targetMem._id
                         }));
                     } else {
+                        const memBase = freshMember.activeMembership?.originalPrice || freshMember.activeMembership?.finalPrice || freshMember.membershipPlan?.price || 0;
+                        const memDisc = freshMember.activeMembership?.discount !== undefined ? freshMember.activeMembership.discount : (freshMember.discount || 0);
+                        const memFinal = freshMember.activeMembership?.finalPrice !== undefined ? freshMember.activeMembership.finalPrice : (freshMember.finalAmount || Math.max(0, memBase - memDisc));
+                        const memPaid = freshMember.activeMembership?.paidAmount !== undefined ? freshMember.activeMembership.paidAmount : (freshMember.amountPaid || 0);
+
                         setFormData(prev => ({
                             ...prev,
                             memberId: freshMember._id,
                             membershipPlan: freshMember.membershipPlan?._id || '',
-                            baseAmount: freshMember.membershipPlan?.price || 0,
-                            discount: freshMember.discount || 0,
-                            finalAmount: freshMember.finalAmount || ((freshMember.membershipPlan?.price || 0) - (freshMember.discount || 0)),
-                            previouslyPaid: freshMember.amountPaid || 0,
+                            baseAmount: memBase,
+                            discount: memDisc,
+                            finalAmount: memFinal,
+                            previouslyPaid: memPaid,
                             newPaymentAmount: '',
                             paymentStatus: freshMember.paymentStatus || 'Pending',
                             paymentMode: freshMember.paymentMode || 'Cash',
@@ -126,11 +132,16 @@ export default function PaymentForm() {
         if (name === 'memberId') {
             const selectedMember = members.find(m => m._id === value);
             if (selectedMember) {
+                const memBase = selectedMember.activeMembership?.originalPrice || selectedMember.activeMembership?.finalPrice || selectedMember.membershipPlan?.price || 0;
+                const memDisc = selectedMember.activeMembership?.discount !== undefined ? selectedMember.activeMembership.discount : (selectedMember.discount || 0);
+                const memFinal = selectedMember.activeMembership?.finalPrice !== undefined ? selectedMember.activeMembership.finalPrice : (selectedMember.finalAmount || Math.max(0, memBase - memDisc));
+                const memPaid = selectedMember.activeMembership?.paidAmount !== undefined ? selectedMember.activeMembership.paidAmount : (selectedMember.amountPaid || 0);
+
                 updates.membershipPlan = selectedMember.membershipPlan?._id || '';
-                updates.baseAmount = selectedMember.membershipPlan?.price || 0;
-                updates.discount = selectedMember.discount || 0;
-                updates.finalAmount = selectedMember.finalAmount || Math.max(0, updates.baseAmount - updates.discount);
-                updates.previouslyPaid = selectedMember.amountPaid || 0;
+                updates.baseAmount = memBase;
+                updates.discount = memDisc;
+                updates.finalAmount = memFinal;
+                updates.previouslyPaid = memPaid;
                 updates.newPaymentAmount = '';
                 updates.paymentStatus = selectedMember.paymentStatus || 'Pending';
                 updates.paymentMode = selectedMember.paymentMode || 'Cash';
@@ -263,12 +274,12 @@ export default function PaymentForm() {
 
                 if (isFirstPayment) {
                     const today = new Date();
-                    updatedStartDate = today.toISOString().split('T')[0];
+                    updatedStartDate = toInputDateFormat(today);
                     
                     if (totalDurationDays > 0) {
                         const endDt = new Date(today);
                         endDt.setDate(endDt.getDate() + totalDurationDays);
-                        updatedEndDate = endDt.toISOString().split('T')[0];
+                        updatedEndDate = toInputDateFormat(endDt);
                     }
                 }
 
@@ -281,7 +292,7 @@ export default function PaymentForm() {
                         
                         let paidUntil = new Date(updatedStartDate || Date.now());
                         paidUntil.setDate(paidUntil.getDate() + daysPaidFor);
-                        updatedPaidUntil = paidUntil.toISOString().split('T')[0];
+                        updatedPaidUntil = toInputDateFormat(paidUntil);
                     }
                 }
             }

@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactSelect from 'react-select';
 
-export default function Select({ label, required, error, options = [], children, className = '', containerClassName = '', name, value, onChange, placeholder = "--Select--", ...props }) {
+export default function Select({ label, required, error, options = [], children, className = '', containerClassName = '', name, value, onChange, placeholder = "--Select--", inputRef, ...props }) {
     
     // Parse options from the `options` array
     let parsedOptions = options.map((opt) => {
@@ -172,6 +172,7 @@ export default function Select({ label, required, error, options = [], children,
             )}
             
             <ReactSelect
+                ref={inputRef}
                 name={name}
                 value={selectedOption}
                 onChange={handleChange}

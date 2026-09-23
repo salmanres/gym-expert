@@ -10,7 +10,8 @@ import {
     FiTrendingUp, FiCheckCircle, FiClock, FiUsers, FiActivity, FiUserCheck, FiUserX 
 } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
+import DatePicker from '../../components/form/DatePicker';
 
 // Modular Report Components
 import DailyCollectionsReport from './reports/DailyCollectionsReport';
@@ -149,24 +150,24 @@ export default function Reports() {
         setDatePreset(preset);
         const now = new Date();
         if (preset === 'Today') {
-            const todayStr = now.toISOString().split('T')[0];
+            const todayStr = getTodayInputDate();
             setFilterStartDate(todayStr);
             setFilterEndDate(todayStr);
         } else if (preset === 'This Week') {
             const firstDay = new Date(now.setDate(now.getDate() - now.getDay()));
             const lastDay = new Date(now.setDate(now.getDate() - now.getDay() + 6));
-            setFilterStartDate(firstDay.toISOString().split('T')[0]);
-            setFilterEndDate(lastDay.toISOString().split('T')[0]);
+            setFilterStartDate(toInputDateFormat(firstDay));
+            setFilterEndDate(toInputDateFormat(lastDay));
         } else if (preset === 'This Month') {
             const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
             const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-            setFilterStartDate(firstDay.toISOString().split('T')[0]);
-            setFilterEndDate(lastDay.toISOString().split('T')[0]);
+            setFilterStartDate(toInputDateFormat(firstDay));
+            setFilterEndDate(toInputDateFormat(lastDay));
         } else if (preset === 'This Year') {
             const firstDay = new Date(now.getFullYear(), 0, 1);
             const lastDay = new Date(now.getFullYear(), 11, 31);
-            setFilterStartDate(firstDay.toISOString().split('T')[0]);
-            setFilterEndDate(lastDay.toISOString().split('T')[0]);
+            setFilterStartDate(toInputDateFormat(firstDay));
+            setFilterEndDate(toInputDateFormat(lastDay));
         } else {
             setFilterStartDate('');
             setFilterEndDate('');
@@ -212,8 +213,6 @@ export default function Reports() {
             return true;
         });
     };
-
-    if (loading) return <Loader text="Loading reports analytics..." />;
 
     // 1. Expiring Plans Calculations
     const today = new Date();
@@ -270,11 +269,11 @@ export default function Reports() {
     for (let i = 6; i >= 0; i--) {
         const d = new Date();
         d.setDate(now.getDate() - i);
-        const dateStr = d.toISOString().split('T')[0];
+        const dateStr = toInputDateFormat(d);
         const dayLabel = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
         const dayTotal = transactions.filter(t => {
-            const tDateStr = new Date(t.paymentDate || t.createdAt).toISOString().split('T')[0];
+            const tDateStr = toInputDateFormat(t.paymentDate || t.createdAt);
             return tDateStr === dateStr;
         }).reduce((sum, t) => sum + (Number(t.amountPaid) || 0), 0);
 
@@ -344,7 +343,7 @@ export default function Reports() {
                 const logsMap = {};
                 if (realLogs && Array.isArray(realLogs)) {
                     realLogs.forEach(l => {
-                        const dKey = new Date(l.date || l.checkInTime).toISOString().split('T')[0];
+                        const dKey = toInputDateFormat(l.date || l.checkInTime);
                         logsMap[dKey] = l;
                     });
                 }
@@ -416,7 +415,7 @@ export default function Reports() {
                 const logsMap = {};
                 if (realLogs && Array.isArray(realLogs)) {
                     realLogs.forEach(l => {
-                        const dKey = new Date(l.date || l.checkInTime).toISOString().split('T')[0];
+                        const dKey = toInputDateFormat(l.date || l.checkInTime);
                         logsMap[dKey] = l;
                     });
                 }
@@ -518,20 +517,19 @@ export default function Reports() {
             </select>
 
             {/* Custom Start & End Date Pickers */}
-            <div className="flex items-center gap-1.5 bg-white border border-slate-200 h-9 px-2.5 rounded-lg text-xs shrink-0">
-                <span className="text-[11px] font-bold text-slate-400 uppercase">From:</span>
-                <input 
-                    type="date"
+            <div className="flex items-center gap-1.5 shrink-0">
+                <DatePicker
+                    compact={true}
                     value={filterStartDate}
                     onChange={(e) => { setFilterStartDate(e.target.value); setDatePreset('Custom'); }}
-                    className="bg-transparent text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
+                    placeholder="From Date"
                 />
-                <span className="text-[11px] font-bold text-slate-400 uppercase ml-1">To:</span>
-                <input 
-                    type="date"
+                <span className="text-[10px] font-bold text-slate-400">TO</span>
+                <DatePicker
+                    compact={true}
                     value={filterEndDate}
                     onChange={(e) => { setFilterEndDate(e.target.value); setDatePreset('Custom'); }}
-                    className="bg-transparent text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
+                    placeholder="To Date"
                 />
             </div>
 
@@ -774,7 +772,7 @@ export default function Reports() {
 
             {/* Summary Cards Rendered ABOVE the Tabs */}
             <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
-                <SummaryCards cards={getActiveSummaryCards()} />
+                <SummaryCards cards={getActiveSummaryCards()} loading={loading} />
             </div>
 
             <Tabs 
@@ -799,6 +797,7 @@ export default function Reports() {
                             totalOutstandingDue
                         }}
                         feeReceivedLinePoints={feeReceivedLinePoints}
+                        loading={loading}
                     />
                 )}
 
@@ -806,6 +805,7 @@ export default function Reports() {
                     <ExpiringPlansReport 
                         expiringPlans={filteredExpiring}
                         allActivePlans={activePlans}
+                        loading={loading}
                     />
                 )}
 
@@ -814,6 +814,7 @@ export default function Reports() {
                         staffAttendance={filteredStaffAttendance}
                         filterStartDate={filterStartDate}
                         filterEndDate={filterEndDate}
+                        loading={loading}
                     />
                 )}
 
@@ -824,6 +825,7 @@ export default function Reports() {
                         filterStartDate={filterStartDate}
                         filterEndDate={filterEndDate}
                         gymSettings={gymSettings}
+                        loading={loading}
                     />
                 )}
             </div>

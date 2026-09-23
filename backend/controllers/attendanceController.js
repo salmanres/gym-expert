@@ -337,6 +337,19 @@ exports.markAttendance = async (req, res) => {
                 }
 
                 await attendance.save();
+
+                const checkoutTitleRole = attendanceType === 'Trial' 
+                    ? 'Trial' 
+                    : (attendanceType === 'Staff' || targetUser?.role ? 'Staff' : 'Member');
+
+                notifyGym(gymId, {
+                    title: `${checkoutTitleRole} Checked Out`,
+                    description: `${targetUser.name || `${targetUser.firstName || ''} ${targetUser.lastName || ''}`.trim() || 'Person'} checked out at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+                    type: 'ATTENDANCE',
+                    targetId: attendance._id,
+                    link: '/dashboard/owner/attendance'
+                });
+
                 return res.json({ message: 'Check-out marked successfully', attendance });
             } else {
                 return res.status(400).json({ message: 'Attendance already completed for today' });

@@ -53,20 +53,20 @@ function GymNavbar({
 
                     {/* REAL-TIME NOTIFICATION DROPDOWN */}
                     {notifOpen && (
-                        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-shadow-2xl border border-slate-100 z-50 overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95">
+                        <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-rose-200/90 z-50 overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95">
                             
                             {/* Header */}
-                            <div className="px-4 py-3 bg-slate-950 text-white flex items-center justify-between">
+                            <div className="px-4 py-3 bg-gradient-to-r from-[#CA0410] to-[#a8030d] text-white flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                     <h3 className="font-extrabold text-sm text-white">Live Notifications</h3>
-                                    <span className="text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-md uppercase tracking-wider border border-emerald-500/30 flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> LIVE
+                                    <span className="text-[10px] font-extrabold bg-white/20 text-white px-2 py-0.5 rounded-md uppercase tracking-wider border border-white/30 flex items-center gap-1.5 shadow-2xs">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> LIVE
                                     </span>
                                 </div>
                                 {unreadCount > 0 && (
                                     <button 
                                         onClick={handleMarkAllRead}
-                                        className="px-2 py-1 text-xs text-emerald-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1 font-bold"
+                                        className="px-2.5 py-1 text-xs text-white bg-black/20 hover:bg-black/30 rounded-lg transition-colors flex items-center gap-1 font-bold cursor-pointer"
                                         title="Mark all as read"
                                     >
                                         <FiCheck size={14} />
@@ -76,7 +76,7 @@ function GymNavbar({
                             </div>
 
                             {/* Grid Filter Tabs */}
-                            <div className="grid grid-cols-5 gap-1 px-2 py-1.5 bg-slate-50 border-b border-slate-100">
+                            <div className="grid grid-cols-5 gap-1 px-2 py-1.5 bg-[#FFF8F8] border-b border-rose-100">
                                 {[
                                     { id: 'ALL', label: 'All', count: unreadCategoryCounts.ALL },
                                     { id: 'MEMBER', label: 'Members', count: unreadCategoryCounts.MEMBER },
@@ -87,18 +87,18 @@ function GymNavbar({
                                     <button
                                         key={tab.id}
                                         onClick={() => setActiveFilter(tab.id)}
-                                        className={`py-1 px-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center justify-center gap-1 ${
+                                        className={`py-1 px-1 rounded-lg text-[10px] font-extrabold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                                             activeFilter === tab.id 
-                                                ? 'bg-slate-900 text-white shadow-xs' 
-                                                : 'text-slate-600 hover:bg-slate-200/70'
+                                                ? 'bg-[#CA0410] text-white shadow-2xs' 
+                                                : 'text-slate-600 hover:bg-rose-100/60'
                                         }`}
                                     >
                                         <span className="truncate">{tab.label}</span>
                                         {tab.count > 0 && (
                                             <span className={`px-1 py-0.2 text-[8px] font-black rounded-full leading-none ${
                                                 activeFilter === tab.id 
-                                                    ? 'bg-emerald-400 text-slate-950' 
-                                                    : 'bg-emerald-100 text-emerald-800'
+                                                    ? 'bg-white text-[#CA0410]' 
+                                                    : 'bg-rose-100 text-[#CA0410]'
                                             }`}>
                                                 {tab.count}
                                             </span>
@@ -108,11 +108,11 @@ function GymNavbar({
                             </div>
 
                             {/* Notification List */}
-                            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-1.5 space-y-1 max-h-[340px]">
+                            <div className="flex-1 overflow-y-auto divide-y divide-rose-50 p-1.5 space-y-1 max-h-[340px] custom-scrollbar">
                                 {filteredLogsList.length === 0 ? (
                                     <div className="p-8 text-center flex flex-col items-center justify-center text-slate-400">
-                                        <FiBell size={28} className="mb-2 text-slate-300" />
-                                        <p className="text-xs font-bold text-slate-600">No new notifications</p>
+                                        <FiBell size={28} className="mb-2 text-rose-300" />
+                                        <p className="text-xs font-bold text-slate-700">No new notifications</p>
                                         <p className="text-[10px] text-slate-400 mt-0.5">Live events via Socket.io will pop up here instantly.</p>
                                     </div>
                                 ) : (
@@ -122,9 +122,9 @@ function GymNavbar({
                                             <div 
                                                 key={log._id}
                                                 onClick={() => handleNotificationClick(log)}
-                                                className={`p-2.5 transition-colors flex items-start gap-2.5 cursor-pointer ${
+                                                className={`p-2.5 transition-colors flex items-start gap-2.5 cursor-pointer rounded-xl ${
                                                     !log.isRead 
-                                                        ? 'bg-emerald-50/40 hover:bg-emerald-50/70' 
+                                                        ? 'bg-rose-50/70 hover:bg-rose-100/70 border-l-3 border-[#CA0410]' 
                                                         : 'bg-white hover:bg-slate-50'
                                                 }`}
                                             >
@@ -133,7 +133,7 @@ function GymNavbar({
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                         {!log.isRead && (
-                                                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" title="Unread"></span>
+                                                            <span className="w-2 h-2 rounded-full bg-[#CA0410] inline-block shrink-0 animate-pulse" title="Unread"></span>
                                                         )}
                                                         <h4 className={`text-xs ${
                                                             !log.isRead ? 'font-extrabold text-slate-900' : 'font-bold text-slate-700'
@@ -156,10 +156,10 @@ function GymNavbar({
                             </div>
 
                             {/* Footer */}
-                            <div className="p-3 bg-slate-50 border-t border-slate-100 flex flex-col gap-2">
+                            <div className="p-3 bg-[#FFF8F8] border-t border-rose-100 flex flex-col gap-2">
                                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 px-1">
                                     <span className="flex items-center gap-1.5 text-slate-600 font-bold">
-                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        <span className="w-2 h-2 rounded-full bg-[#CA0410] animate-pulse"></span>
                                         Live updates
                                     </span>
                                     <span className="text-slate-400">Auto-expires after 30 days</span>
@@ -170,7 +170,7 @@ function GymNavbar({
                                         setViewAllModalOpen(true);
                                         setNotifOpen(false);
                                     }}
-                                    className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                                    className="w-full py-2 bg-[#CA0410] hover:bg-[#a8030d] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs hover:shadow-sm cursor-pointer"
                                 >
                                     <span>View All Activity (30 Days)</span>
                                     <FiExternalLink size={13} />

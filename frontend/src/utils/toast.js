@@ -10,7 +10,11 @@ const toast = (content, options) => originalToast(content, options);
 toast.success = (content, options) => {
   notificationSound.playSuccessSound();
   return originalToast.success(content, {
-    icon: <FiCheckCircle size={20} className="text-emerald-400 flex-shrink-0" />,
+    icon: (
+      <div className="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
+        <FiCheckCircle size={16} />
+      </div>
+    ),
     ...options
   });
 };
@@ -18,7 +22,11 @@ toast.success = (content, options) => {
 toast.error = (content, options) => {
   notificationSound.playErrorSound();
   return originalToast.error(content, {
-    icon: <FiXCircle size={20} className="text-rose-400 flex-shrink-0" />,
+    icon: (
+      <div className="w-7 h-7 rounded-xl bg-rose-100 text-[#CA0410] border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+        <FiXCircle size={16} />
+      </div>
+    ),
     ...options
   });
 };
@@ -26,7 +34,11 @@ toast.error = (content, options) => {
 toast.info = (content, options) => {
   notificationSound.playSuccessSound();
   return originalToast.info(content, {
-    icon: <FiInfo size={20} className="text-sky-400 flex-shrink-0" />,
+    icon: (
+      <div className="w-7 h-7 rounded-xl bg-rose-50 text-[#CA0410] border border-rose-200 flex items-center justify-center shrink-0 shadow-2xs">
+        <FiInfo size={16} />
+      </div>
+    ),
     ...options
   });
 };
@@ -34,7 +46,11 @@ toast.info = (content, options) => {
 toast.warning = (content, options) => {
   notificationSound.playErrorSound();
   return originalToast.warning(content, {
-    icon: <FiAlertTriangle size={20} className="text-amber-400 flex-shrink-0" />,
+    icon: (
+      <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 shadow-2xs">
+        <FiAlertTriangle size={16} />
+      </div>
+    ),
     ...options
   });
 };
@@ -42,7 +58,11 @@ toast.warning = (content, options) => {
 toast.warn = (content, options) => {
   notificationSound.playErrorSound();
   return originalToast.warn(content, {
-    icon: <FiAlertTriangle size={20} className="text-amber-400 flex-shrink-0" />,
+    icon: (
+      <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 shadow-2xs">
+        <FiAlertTriangle size={16} />
+      </div>
+    ),
     ...options
   });
 };

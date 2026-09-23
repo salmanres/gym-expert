@@ -8,7 +8,7 @@ export default function PageHeader({ title, subtitle, searchTerm, onSearchChange
     const navigate = useNavigate();
 
     return (
-        <div className={`print:hidden relative flex flex-col lg:flex-row justify-between items-start lg:items-center px-5 py-4 md:px-8 md:py-4 bg-[#FAEEEF] shrink-0 gap-4 overflow-hidden ${className}`}>
+        <div className={`print:hidden relative flex flex-col lg:flex-row justify-between items-start lg:items-center px-6 py-4 md:px-8 md:py-4 bg-[#FAEEEF] shrink-0 gap-4 overflow-hidden ${className}`}>
             <div className="w-full lg:w-auto relative z-10 flex items-center gap-3.5">
                 {showBack && (
                     <button onClick={() => navigate(-1)} className="p-2 mr-1 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg text-slate-500 hover:text-[#CA0410] hover:bg-rose-50 hover:border-[#CA0410] transition-all shadow-sm cursor-pointer" title="Go Back">

@@ -5,9 +5,10 @@ import { toast } from 'react-toastify';
 import Loader from '../../components/page/Loader';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
-import { FiPrinter, FiSend, FiCheckCircle, FiPhone, FiMail, FiMapPin, FiShield, FiUser } from 'react-icons/fi';
+import { FiPrinter, FiCheckCircle, FiMapPin, FiShield, FiUser, FiCreditCard } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 import { CgGym } from 'react-icons/cg';
+import { IoWalletOutline } from 'react-icons/io5';
 import { formatDate } from '../../utils/dateUtils';
 
 export default function FeeReceipt() {
@@ -33,7 +34,11 @@ export default function FeeReceipt() {
                     const memberInfo = txData.memberId || {};
                     const memberId = memberInfo._id || memberInfo;
 
-                    const memRes = await apiClient.get(`/member-memberships/member/${memberId}`).catch(() => ({ data: [] }));
+                    const [memRes, memberFullRes] = await Promise.all([
+                        apiClient.get(`/member-memberships/member/${memberId}`).catch(() => ({ data: [] })),
+                        apiClient.get(`/members/${memberId}`).catch(() => null)
+                    ]);
+                    const fullMemberData = memberFullRes?.data || (typeof memberInfo === 'object' ? memberInfo : {});
                     const memberships = memRes.data || [];
                     const matchedPlan = memberships.find(m => m._id === txData.membershipId || m.membershipPlanId?._id === txData.planId?._id) || memberships[0];
 
@@ -41,11 +46,12 @@ export default function FeeReceipt() {
                     const discount = matchedPlan?.discount || 0;
                     const finalAmount = matchedPlan?.finalPrice || (basePrice - discount);
                     const amountPaidInTx = txData.amountPaid || 0;
+                    const walletUsedInTx = txData.walletAmount || 0;
                     const totalPlanPaid = matchedPlan?.paidAmount || amountPaidInTx;
                     const balance = Math.max(0, finalAmount - totalPlanPaid);
 
                     setMember({
-                        ...memberInfo,
+                        ...fullMemberData,
                         receiptType: 'transaction',
                         transactionId: txData.transactionId || txData._id || 'N/A',
                         paymentMode: txData.paymentMode || 'Cash',
@@ -57,6 +63,8 @@ export default function FeeReceipt() {
                         discount: discount,
                         finalAmount: finalAmount,
                         amountPaid: amountPaidInTx,
+                        walletUsed: walletUsedInTx,
+                        walletBalance: fullMemberData.walletBalance ?? 0,
                         totalPlanPaid: totalPlanPaid,
                         totalCollected: matchedPlan?.totalCollected || totalPlanPaid,
                         balance: balance,
@@ -84,12 +92,15 @@ export default function FeeReceipt() {
                             const finalAmount = activePlan.finalPrice || (basePrice - discount);
                             const totalPlanPaid = activePlan.paidAmount || 0;
                             const currentTxPaid = latestTx ? (latestTx.amountPaid || totalPlanPaid) : totalPlanPaid;
+                            const walletUsedInTx = latestTx?.walletAmount || activePlan?.walletUsed || 0;
 
                             memberData.paymentStatus = activePlan.paymentStatus;
                             memberData.membershipPlan = activePlan.membershipPlanId;
                             memberData.planName = activePlan.planName;
                             memberData.planStartDate = activePlan.startDate;
                             memberData.amountPaid = currentTxPaid;
+                            memberData.walletUsed = walletUsedInTx;
+                            memberData.walletBalance = memberData.walletBalance ?? 0;
                             memberData.totalPlanPaid = totalPlanPaid;
                             memberData.totalCollected = activePlan.totalCollected || totalPlanPaid;
                             memberData.transactionId = latestTx ? (latestTx.transactionId || latestTx._id) : 'N/A';
@@ -107,8 +118,8 @@ export default function FeeReceipt() {
                         const enqRes = await apiClient.get(`/enquiries/${id}`);
                         const enquiry = enqRes.data;
                         if (enquiry) {
-                            const trialFee = Number(enquiry.trialFee || 0);
-                            const isPaid = enquiry.trialPaymentStatus === 'Paid';
+                            const trialFee = Number(enquiry.securityAmount || enquiry.trialFee || 0);
+                            const isPaid = enquiry.trialPaymentStatus === 'Paid' || enquiry.trialFeeType === 'Paid';
                             setMember({
                                 firstName: enquiry.firstName,
                                 lastName: enquiry.lastName || '',
@@ -121,13 +132,15 @@ export default function FeeReceipt() {
                                 transactionId: `TRL-${enquiry._id.substring(enquiry._id.length - 6).toUpperCase()}`,
                                 paymentMode: enquiry.trialPaymentMode || 'Cash',
                                 receiptDate: formatDate(enquiry.updatedAt || enquiry.createdAt),
-                                planName: `Paid Trial Pass (${enquiry.inquiryFor || 'Gym Access'})`,
+                                planName: `Trial Pass - Security Deposit (${enquiry.inquiryFor || 'Gym Access'})`,
                                 planStartDate: enquiry.trialDate || enquiry.createdAt,
                                 paidUntilDate: enquiry.trialEndDate || enquiry.trialDate,
                                 originalPrice: trialFee,
                                 discount: 0,
                                 finalAmount: trialFee,
                                 amountPaid: isPaid ? trialFee : 0,
+                                walletUsed: 0,
+                                walletBalance: 0,
                                 totalPlanPaid: isPaid ? trialFee : 0,
                                 balance: isPaid ? 0 : trialFee,
                                 paymentStatus: enquiry.trialPaymentStatus || 'Paid'
@@ -149,8 +162,8 @@ export default function FeeReceipt() {
         window.print();
     };
 
-    if (loading) return <Loader text="Generating full A4 invoice..." />;
-    if (!member) return <div className="p-8 text-center text-rose-500 font-bold">Member receipt not found.</div>;
+    if (loading) return <Loader text="Generating invoice..." />;
+    if (!member) return <div className="p-8 text-center text-slate-600 font-bold">Member receipt not found.</div>;
 
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     const gymName = member.gymId?.name || member.gym?.name || user.gym?.name || "Fitness With Harjeet";
@@ -161,8 +174,10 @@ export default function FeeReceipt() {
     const discount = Number(member.discount || 0);
     const finalAmount = Number(member.finalAmount || (basePrice - discount));
 
-    // Transaction specific breakdown
+    // Transaction & Payment Breakdown
     const currentPaid = Number(member.amountPaid || 0);
+    const walletUsed = Number(member.walletUsed || 0);
+    const walletBalance = Number(member.walletBalance || 0);
     const totalPlanPaid = Number(member.totalPlanPaid !== undefined ? member.totalPlanPaid : currentPaid);
     const previousPaid = Math.max(0, totalPlanPaid - currentPaid);
     const balance = Number(member.balance !== undefined ? member.balance : Math.max(0, finalAmount - totalPlanPaid));
@@ -182,13 +197,15 @@ export default function FeeReceipt() {
             `🧾 *FEE RECEIPT - ${gymNameStr.toUpperCase()}*\n\n` +
             `*Member:* ${member.firstName} ${member.lastName || ''} (ID: ${member.memberId || 'N/A'})\n` +
             `*Plan:* ${member.planName || 'Gym Access'}\n` +
-            `*Paid Now (This Receipt):* ₹${currentPaid.toLocaleString()}\n` +
+            `*Paid (This Receipt):* ₹${currentPaid.toLocaleString()}\n` +
+            (walletUsed > 0 ? `*Wallet Used:* ₹${walletUsed.toLocaleString()}\n` : '') +
             (previousPaid > 0 ? `*Previously Paid:* ₹${previousPaid.toLocaleString()}\n` : '') +
-            `*Total Paid So Far:* ₹${totalPlanPaid.toLocaleString()}\n` +
+            `*Total Paid:* ₹${totalPlanPaid.toLocaleString()}\n` +
             `*Balance Due:* ₹${balance.toLocaleString()}\n` +
+            `*Wallet Balance:* ₹${walletBalance.toLocaleString()}\n` +
             `*Status:* ${member.paymentStatus || 'Paid'}\n` +
             `*Date:* ${member.receiptDate}\n\n` +
-            `Thank you for training with us! 💪`
+            `Thank you for training with us!`
         );
         window.open(`https://wa.me/91${cleanPhone}?text=${text}`, '_blank');
     };
@@ -199,40 +216,47 @@ export default function FeeReceipt() {
                 @media print {
                     @page {
                         size: A4 portrait;
-                        margin: 10mm;
+                        margin: 8mm 10mm;
                     }
                     body {
-                        background: white !important;
+                        background: #ffffff !important;
+                        color: #0f172a !important;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
+                    }
+                    .print-hidden {
+                        display: none !important;
                     }
                     .a4-container {
                         width: 100% !important;
-                        max-width: none !important;
-                        min-height: 277mm !important;
+                        max-width: 100% !important;
+                        min-height: auto !important;
                         border: none !important;
                         box-shadow: none !important;
                         margin: 0 !important;
                         padding: 0 !important;
+                        background: #ffffff !important;
                     }
                 }
             `}</style>
 
             <PageHeader 
-                title="A4 Tax Invoice / Fee Receipt" 
-                subtitle={`Printable full A4 sheet receipt for ${member.firstName} ${member.lastName || ''}`}
+                title="Invoice / Fee Receipt" 
+                subtitle={`Clean printable invoice for ${member.firstName} ${member.lastName || ''}`}
                 showBack={true}
                 action={
-                    <div className="flex items-center gap-2 print:hidden">
+                    <div className="flex items-center gap-2 print:hidden print-hidden">
                         <button 
                             onClick={handleSendWhatsAppWithDetails} 
-                            className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-sm transition-all cursor-pointer active:scale-95"
+                            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg font-semibold text-xs transition-all cursor-pointer shadow-xs active:scale-95"
                         >
-                            <FaWhatsapp className="text-sm" /> WhatsApp Receipt
+                            <FaWhatsapp className="text-emerald-400 text-sm" /> Send WhatsApp
                         </button>
                         <button 
                             onClick={handlePrint} 
-                            className="flex items-center gap-1.5 bg-[#CA0410] hover:bg-[#b0030e] text-white px-5 py-2 rounded-xl font-extrabold text-xs shadow-md transition-all cursor-pointer active:scale-95"
+                            className="flex items-center gap-1.5 bg-slate-900 hover:bg-black text-white px-5 py-2 rounded-lg font-bold text-xs transition-all cursor-pointer shadow-sm active:scale-95"
                         >
-                            <FiPrinter className="text-sm" /> Print A4 Invoice
+                            <FiPrinter className="text-sm" /> Print Invoice
                         </button>
                     </div>
                 }
@@ -240,82 +264,86 @@ export default function FeeReceipt() {
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#FAEEEF] print:p-0 print:bg-white print:overflow-visible flex flex-col items-center">
                 
-                {/* Full A4 Printable Sheet Container */}
-                <div className="a4-container w-full max-w-4xl min-h-[1020px] mx-auto bg-white border border-rose-200/80 rounded-2xl shadow-xl p-8 sm:p-12 print:rounded-none print:border-none print:shadow-none flex flex-col justify-between text-slate-800 relative">
+                {/* Clean Professional A4 Printable Sheet Container */}
+                <div className="a4-container w-full max-w-4xl min-h-[960px] mx-auto bg-white border border-slate-300 rounded-xl shadow-sm p-8 sm:p-10 print:rounded-none print:border-none print:shadow-none flex flex-col justify-between text-slate-800 relative">
                     
                     {/* Top Header Section */}
                     <div>
-                        <div className="flex justify-between items-start border-b-2 border-slate-900 pb-6 mb-8">
-                            <div className="flex items-start gap-4">
-                                <div className="w-16 h-16 rounded-2xl bg-[#CA0410] text-white flex items-center justify-center font-black text-3xl shadow-md shrink-0">
+                        <div className="flex justify-between items-start border-b border-slate-300 pb-5 mb-6">
+                            <div className="flex items-start gap-3.5">
+                                <div className="w-12 h-12 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-2xl shadow-xs shrink-0">
                                     <CgGym />
                                 </div>
                                 <div>
-                                    <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase">{gymName}</h1>
-                                    <p className="text-xs font-bold text-[#CA0410] uppercase tracking-widest mt-0.5">FITNESS & PERSONAL TRAINING STUDIO</p>
-                                    <p className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1">
-                                        <FiMapPin className="text-slate-400 text-xs" /> Main Branch Facility, Gym Center
+                                    <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight uppercase leading-tight">{gymName}</h1>
+                                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mt-0.5">Fitness & Training Facility</p>
+                                    <p className="text-xs text-slate-500 font-normal mt-1 flex items-center gap-1">
+                                        <FiMapPin className="text-slate-400 text-xs" /> Main Branch Center
                                     </p>
                                 </div>
                             </div>
 
                             <div className="text-right">
-                                <div className="inline-block bg-slate-900 text-white px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-widest mb-2 shadow-2xs">
-                                    FEE RECEIPT / TAX INVOICE
+                                <div className="inline-block bg-slate-100 text-slate-800 border border-slate-300 px-3 py-1 rounded text-xs font-bold uppercase tracking-wider mb-1.5">
+                                    Tax Invoice / Receipt
                                 </div>
-                                <p className="text-xs font-bold text-slate-500">Invoice No: <span className="font-mono text-slate-900 font-black text-sm">{receiptNo}</span></p>
-                                <p className="text-xs font-semibold text-slate-600 mt-0.5">Issue Date: <span className="font-bold text-slate-900">{receiptDate}</span></p>
+                                <p className="text-xs text-slate-500 font-medium">Invoice No: <span className="font-mono text-slate-900 font-bold text-sm">{receiptNo}</span></p>
+                                <p className="text-xs text-slate-500 font-medium mt-0.5">Issue Date: <span className="font-semibold text-slate-800">{receiptDate}</span></p>
                             </div>
                         </div>
 
-                        {/* Customer & Facility Information Cards (2 Columns) */}
-                        <div className="grid grid-cols-2 gap-6 mb-8 text-xs">
+                        {/* Customer, Payment & Wallet Information (2 Columns) */}
+                        <div className="grid grid-cols-2 gap-5 mb-6 text-xs">
                             
                             {/* Customer Information */}
-                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
-                                    <FiUser className="text-[#CA0410]" /> BILLED TO (MEMBER INFORMATION)
+                            <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <FiUser className="text-slate-600" /> Billed To (Member Details)
                                 </p>
-                                <h3 className="text-lg font-black text-slate-900 mb-1">{member.firstName} {member.lastName}</h3>
-                                <div className="space-y-1 text-slate-600 font-medium mt-2">
-                                    <p><span className="font-bold text-slate-500 w-24 inline-block">Member ID:</span> <span className="font-bold text-slate-900 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">{member.memberId || 'N/A'}</span></p>
-                                    <p><span className="font-bold text-slate-500 w-24 inline-block">Contact Phone:</span> <span className="font-bold text-slate-900">{member.contactNumber}</span></p>
-                                    {member.email && <p><span className="font-bold text-slate-500 w-24 inline-block">Email Address:</span> <span className="font-semibold text-slate-800">{member.email}</span></p>}
-                                    <p><span className="font-bold text-slate-500 w-24 inline-block">Gender:</span> <span className="font-bold text-slate-800">{member.gender || 'N/A'}</span></p>
+                                <h3 className="text-base font-bold text-slate-900 mb-1.5">{member.firstName} {member.lastName}</h3>
+                                <div className="space-y-1 text-slate-600 font-normal">
+                                    <p><span className="font-medium text-slate-500 w-24 inline-block">Member ID:</span> <span className="font-bold text-slate-900 font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200">{member.memberId || 'N/A'}</span></p>
+                                    <p><span className="font-medium text-slate-500 w-24 inline-block">Mobile:</span> <span className="font-semibold text-slate-800">{member.contactNumber}</span></p>
+                                    {member.email && <p><span className="font-medium text-slate-500 w-24 inline-block">Email:</span> <span className="text-slate-700">{member.email}</span></p>}
+                                    <p><span className="font-medium text-slate-500 w-24 inline-block">Gender:</span> <span className="text-slate-700">{member.gender || 'N/A'}</span></p>
                                 </div>
                             </div>
 
-                            {/* Payment & Validity Summary */}
-                            <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 flex flex-col justify-between">
+                            {/* Payment Transaction & Wallet Details */}
+                            <div className="bg-slate-50/70 p-4 rounded-lg border border-slate-200 flex flex-col justify-between">
                                 <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">PAYMENT TRANSACTION SUMMARY</p>
-                                    <div className="space-y-1.5 text-slate-600 font-medium">
-                                        <p className="flex justify-between">
-                                            <span className="font-bold text-slate-500">Payment Status:</span>
-                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-black uppercase ${
-                                                member.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
-                                            }`}>
-                                                <FiCheckCircle size={12} /> {member.paymentStatus || 'PAID'}
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                        <FiCreditCard className="text-slate-600" /> Payment & Wallet Summary
+                                    </p>
+                                    <div className="space-y-1 text-slate-600 font-normal">
+                                        <p className="flex justify-between items-center">
+                                            <span className="font-medium text-slate-500">Payment Status:</span>
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold uppercase bg-slate-200/80 text-slate-800 border border-slate-300">
+                                                <FiCheckCircle size={11} /> {member.paymentStatus || 'PAID'}
                                             </span>
                                         </p>
                                         <p className="flex justify-between">
-                                            <span className="font-bold text-slate-500">Paid Now (This Receipt):</span>
-                                            <span className="font-extrabold text-[#CA0410] font-mono">₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            <span className="font-medium text-slate-500">Payment Mode:</span>
+                                            <span className="font-semibold text-slate-800 font-mono">{member.paymentMode || 'Cash'}</span>
                                         </p>
                                         <p className="flex justify-between">
-                                            <span className="font-bold text-slate-500">Payment Mode:</span>
-                                            <span className="font-bold text-slate-900 font-mono">{member.paymentMode || 'Cash'}</span>
+                                            <span className="font-medium text-slate-500">Transaction ID:</span>
+                                            <span className="font-mono text-slate-800 font-semibold">{member.transactionId || 'N/A'}</span>
                                         </p>
-                                        <p className="flex justify-between">
-                                            <span className="font-bold text-slate-500">Transaction Ref:</span>
-                                            <span className="font-mono text-slate-800 font-bold">{member.transactionId || 'TX-DEFAULT'}</span>
+                                        <p className="flex justify-between items-center pt-0.5">
+                                            <span className="font-medium text-slate-500 flex items-center gap-1">
+                                                <IoWalletOutline className="text-slate-600" /> Member Wallet Balance:
+                                            </span>
+                                            <span className="font-bold text-slate-900 font-mono bg-white px-2 py-0.5 rounded border border-slate-200">
+                                                ₹{walletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </span>
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center text-xs">
-                                    <span className="font-bold text-slate-500">Access Valid Until:</span>
-                                    <span className="font-black text-slate-900 font-mono text-sm">
+                                <div className="mt-2.5 pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
+                                    <span className="font-medium text-slate-500">Plan Validity Until:</span>
+                                    <span className="font-bold text-slate-900 font-mono">
                                         {formatDate(member.paidUntilDate, 'N/A')}
                                     </span>
                                 </div>
@@ -324,39 +352,39 @@ export default function FeeReceipt() {
                         </div>
 
                         {/* Itemized Services & Plan Table */}
-                        <div className="border-2 border-slate-900 rounded-xl overflow-hidden mb-8">
+                        <div className="border border-slate-300 rounded-lg overflow-hidden mb-6">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="bg-slate-900 text-white text-xs font-black uppercase tracking-wider">
-                                        <th className="py-3.5 px-6">#</th>
-                                        <th className="py-3.5 px-6">Description / Plan Details</th>
-                                        <th className="py-3.5 px-4 text-center">Validity Range</th>
-                                        <th className="py-3.5 px-6 text-right">Base Price</th>
-                                        <th className="py-3.5 px-6 text-right">Discount</th>
-                                        <th className="py-3.5 px-6 text-right">Net Amount</th>
+                                    <tr className="bg-slate-100 text-slate-800 text-xs font-bold uppercase tracking-wider border-b border-slate-300">
+                                        <th className="py-2.5 px-4 w-12 text-center">#</th>
+                                        <th className="py-2.5 px-4">Description / Plan Details</th>
+                                        <th className="py-2.5 px-4 text-center">Validity Range</th>
+                                        <th className="py-2.5 px-4 text-right">Base Price</th>
+                                        <th className="py-2.5 px-4 text-right">Discount</th>
+                                        <th className="py-2.5 px-4 text-right">Net Amount</th>
                                     </tr>
                                 </thead>
-                                <tbody className="text-xs font-medium text-slate-700 divide-y divide-slate-200">
+                                <tbody className="text-xs font-normal text-slate-700 divide-y divide-slate-200">
                                     <tr className="bg-white">
-                                        <td className="py-4 px-6 font-bold text-slate-400">01</td>
-                                        <td className="py-4 px-6">
-                                            <p className="font-black text-slate-900 text-sm">{planName}</p>
-                                            <p className="text-[11px] text-slate-500 mt-0.5">Full Gym Access & Fitness Training Package</p>
+                                        <td className="py-3 px-4 text-center font-medium text-slate-400">01</td>
+                                        <td className="py-3 px-4">
+                                            <p className="font-bold text-slate-900">{planName}</p>
+                                            <p className="text-[11px] text-slate-500 mt-0.5">Gym Membership & Facility Access</p>
                                         </td>
-                                        <td className="py-4 px-4 text-center">
-                                            <span className="font-bold bg-slate-100 px-3 py-1 rounded text-slate-800 text-[11px]">
+                                        <td className="py-3 px-4 text-center">
+                                            <span className="font-medium bg-slate-100 px-2 py-0.5 rounded text-slate-700 text-[11px]">
                                                 {formatDate(member.planStartDate, 'N/A')}
                                                 {' to '}
                                                 {formatDate(member.paidUntilDate, 'N/A')}
                                             </span>
                                         </td>
-                                        <td className="py-4 px-6 text-right font-bold text-slate-800 text-sm">
+                                        <td className="py-3 px-4 text-right font-medium text-slate-800">
                                             ₹{basePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </td>
-                                        <td className="py-4 px-6 text-right font-bold text-emerald-600 text-sm">
+                                        <td className="py-3 px-4 text-right font-medium text-slate-700">
                                             {discount > 0 ? `- ₹${discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '₹0.00'}
                                         </td>
-                                        <td className="py-4 px-6 text-right font-black text-slate-900 text-sm">
+                                        <td className="py-3 px-4 text-right font-bold text-slate-900">
                                             ₹{finalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </td>
                                     </tr>
@@ -365,54 +393,68 @@ export default function FeeReceipt() {
                         </div>
 
                         {/* Calculations & Summary Section */}
-                        <div className="flex justify-between items-start gap-8 mb-12">
+                        <div className="flex justify-between items-start gap-6 mb-8">
                             
-                            {/* Gym Rules & Policy */}
-                            <div className="w-1/2 bg-slate-50 p-5 rounded-xl border border-slate-200 text-xs space-y-1.5 text-slate-600">
-                                <p className="font-black text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1">
-                                    <FiShield className="text-[#CA0410]" /> GYM RULES & PAYMENT POLICY
+                            {/* Terms & Policies */}
+                            <div className="w-1/2 bg-slate-50/70 p-4 rounded-lg border border-slate-200 text-xs space-y-1.5 text-slate-600">
+                                <p className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1">
+                                    <FiShield className="text-slate-600" /> Terms & Payment Policy
                                 </p>
-                                <ul className="list-disc pl-4 space-y-1.5 text-[11px] text-slate-600 leading-relaxed font-medium">
+                                <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-500 leading-relaxed">
                                     <li>Fees once paid are non-refundable and non-transferable under any circumstances.</li>
-                                    <li>Members must check-in / scan QR code upon every workout session.</li>
-                                    <li>Membership plans & Personal Training (PT) sessions must be utilized within the valid duration.</li>
+                                    <li>Members must check-in / scan QR code on each workout visit.</li>
+                                    <li>Wallet balance can be utilized for subsequent plan renewals or add-on services.</li>
                                 </ul>
                             </div>
 
-                            {/* Total Calculation Table */}
-                            <div className="w-80 bg-slate-900 text-white rounded-xl p-5 text-xs shadow-lg space-y-2 font-medium">
-                                <div className="flex justify-between text-slate-300">
+                            {/* Clean Total Calculation Table */}
+                            <div className="w-80 bg-slate-50 border border-slate-300 rounded-lg p-4 text-xs space-y-1.5 font-normal">
+                                <div className="flex justify-between text-slate-600">
                                     <span>Subtotal Base Amount:</span>
-                                    <span className="font-bold text-white">₹{basePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    <span className="font-semibold text-slate-800">₹{basePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                 </div>
                                 {discount > 0 && (
-                                    <div className="flex justify-between text-emerald-400 font-bold">
-                                        <span>Total Discount Savings:</span>
-                                        <span>- ₹{discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    <div className="flex justify-between text-slate-600">
+                                        <span>Discount Savings:</span>
+                                        <span className="font-semibold text-slate-800">- ₹{discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                     </div>
                                 )}
-                                <div className="flex justify-between text-slate-300 pt-2 border-t border-slate-800">
+                                <div className="flex justify-between text-slate-800 pt-1.5 border-t border-slate-200 font-medium">
                                     <span>Net Payable Total:</span>
-                                    <span className="font-black text-white text-sm">₹{finalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    <span className="font-bold text-slate-900 text-xs">₹{finalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                 </div>
-                                {previousPaid > 0 && (
-                                    <div className="flex justify-between text-slate-400">
-                                        <span>Previously Paid:</span>
-                                        <span className="font-bold text-slate-300">₹{previousPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                {walletUsed > 0 && (
+                                    <div className="flex justify-between text-slate-700">
+                                        <span className="flex items-center gap-1">
+                                            <IoWalletOutline className="text-xs" /> Wallet Amount Used:
+                                        </span>
+                                        <span className="font-bold text-slate-800">- ₹{walletUsed.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                     </div>
                                 )}
-                                <div className="flex justify-between text-white py-1.5 px-2 bg-slate-800 rounded border border-slate-700 font-extrabold text-sm">
+                                {previousPaid > 0 && (
+                                    <div className="flex justify-between text-slate-500">
+                                        <span>Previously Paid:</span>
+                                        <span className="font-medium text-slate-700">₹{previousPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between text-slate-900 py-1.5 px-2.5 bg-slate-100 rounded border border-slate-300 font-bold text-xs mt-1">
                                     <span>Paid Now (This Receipt):</span>
-                                    <span className="text-[#CA0410] font-black">₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    <span className="font-extrabold text-slate-900">₹{currentPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                 </div>
-                                <div className="flex justify-between text-slate-300 pb-2 border-b border-slate-800 font-bold">
+                                <div className="flex justify-between text-slate-600 pb-1.5 border-b border-slate-200">
                                     <span>Total Paid So Far:</span>
-                                    <span className="text-white font-black">₹{totalPlanPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    <span className="font-semibold text-slate-800">₹{totalPlanPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                 </div>
-                                <div className="flex justify-between items-center pt-2 text-sm">
-                                    <span className="font-black text-amber-400 uppercase">Balance Amount Due:</span>
-                                    <span className={`font-black font-mono text-xl ${balance > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                <div className="flex justify-between items-center pt-1.5 text-xs">
+                                    <span className="font-bold text-slate-800 uppercase">Balance Amount Due:</span>
+                                    <span className="font-extrabold font-mono text-sm text-slate-900">
                                         ₹{Math.max(0, balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center pt-1 text-[11px] text-slate-500 border-t border-slate-200">
+                                    <span>Available Wallet Balance:</span>
+                                    <span className="font-bold font-mono text-slate-800">
+                                        ₹{walletBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </span>
                                 </div>
                             </div>
@@ -422,26 +464,26 @@ export default function FeeReceipt() {
 
                     {/* Bottom Signature & Footer Section */}
                     <div>
-                        <div className="grid grid-cols-2 gap-12 pt-8 border-t border-slate-300 text-xs mb-6">
+                        <div className="grid grid-cols-2 gap-12 pt-6 border-t border-slate-300 text-xs mb-4">
                             <div>
-                                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">MEMBER SIGNATURE</p>
-                                <div className="h-12 flex items-end">
-                                    <span className="w-48 border-b border-slate-400"></span>
+                                <p className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">Member Signature</p>
+                                <div className="h-10 flex items-end">
+                                    <span className="w-40 border-b border-slate-400"></span>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <p className="font-bold text-slate-400 uppercase tracking-widest text-[10px]">FOR {gymName.toUpperCase()}</p>
-                                <div className="h-12 flex items-end justify-end">
-                                    <span className="font-bold text-slate-800 border-b border-slate-400 pb-1 px-4 italic">
-                                        Authorized Stamp & Sign
+                                <p className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">For {gymName.toUpperCase()}</p>
+                                <div className="h-10 flex items-end justify-end">
+                                    <span className="font-medium text-slate-700 border-b border-slate-400 pb-0.5 px-3 italic text-[11px]">
+                                        Authorized Signatory
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Computer Generated Footer Line */}
-                        <div className="bg-slate-100 p-3 rounded-lg text-center text-xs text-slate-500 font-medium">
-                            <p className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">THANK YOU FOR YOUR BUSINESS! STAY FIT & STRONG 💪</p>
+                        {/* Clean Computer Generated Footer Line */}
+                        <div className="bg-slate-50 border border-slate-200 p-2.5 rounded text-center text-xs text-slate-500">
+                            <p className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">Thank You For Your Payment</p>
                             <p className="text-[10px] text-slate-400 mt-0.5">This is an official computer-generated receipt issued by {gymName}.</p>
                         </div>
                     </div>

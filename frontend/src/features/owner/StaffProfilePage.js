@@ -3,11 +3,13 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { 
     FiUser, FiPhone, FiMail, FiCalendar, FiAward, FiBriefcase, 
     FiEdit2, FiUsers, FiMapPin, FiClock, FiTag, FiDollarSign, 
-    FiCheckCircle, FiShield, FiTrendingUp
+    FiCheckCircle, FiShield, FiTrendingUp, FiUserCheck, FiUserX
 } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import Loader from '../../components/page/Loader';
+import ConfirmModal from '../../components/modal/ConfirmModal';
 import apiClient from '../../api/apiClient';
 import { formatDate } from '../../utils/dateUtils';
 
@@ -15,9 +17,13 @@ export default function StaffProfilePage() {
     const { id } = useParams();
     const location = useLocation();
     const navigate = useNavigate();
+    const userStr = localStorage.getItem('user');
+    const currentUser = userStr ? JSON.parse(userStr) : null;
+    const isOwner = currentUser?.role === 'GYM_OWNER' || currentUser?.role === 'OWNER' || currentUser?.role === 'SUPER_ADMIN';
 
     const [fetchedStaff, setFetchedStaff] = useState(null);
     const [loadingStaff, setLoadingStaff] = useState(!location.state?.staff && !!id);
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDestructive: false });
 
     const staff = fetchedStaff || location.state?.staff;
     const staffIdVal = staff?._id || id;
@@ -54,6 +60,34 @@ export default function StaffProfilePage() {
             }).catch(err => console.error("Failed to fetch staff attribution data", err));
         }
     }, [staffIdVal]);
+
+    const handleToggleStatus = () => {
+        if (!isOwner) {
+            toast.error("Only Gym Owner can change staff status.");
+            return;
+        }
+
+        const isCurrentlySuspended = (staff?.status || 'Active') === 'Suspended';
+        const targetStatus = isCurrentlySuspended ? 'Active' : 'Suspended';
+
+        setConfirmModal({
+            isOpen: true,
+            title: isCurrentlySuspended ? 'Activate Staff Member' : 'Suspend Staff Member',
+            message: isCurrentlySuspended
+                ? `Are you sure you want to activate ${staff?.name || 'this staff member'}? Their system access and login will be restored.`
+                : `Are you sure you want to suspend ${staff?.name || 'this staff member'}? They will be blocked from logging into the gym portal.`,
+            isDestructive: !isCurrentlySuspended,
+            onConfirm: async () => {
+                try {
+                    await apiClient.put(`/staff/${staffIdVal}`, { status: targetStatus });
+                    toast.success(`Staff member ${isCurrentlySuspended ? 'activated' : 'suspended'} successfully`);
+                    setFetchedStaff(prev => ({ ...(prev || staff), status: targetStatus }));
+                } catch (error) {
+                    toast.error(error.response?.data?.message || `Failed to update staff status`);
+                }
+            }
+        });
+    };
 
     if (loadingStaff) {
         return <Loader text="Loading staff profile..." />;
@@ -131,6 +165,7 @@ export default function StaffProfilePage() {
                                     </h2>
                                     <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide leading-tight shadow-2xs ${
                                         status === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border border-[#BBF7D0]' : 
+                                        status === 'Suspended' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
                                         'bg-slate-100 text-slate-800 border border-slate-200'
                                     }`}>
                                         {status}
@@ -148,8 +183,28 @@ export default function StaffProfilePage() {
                             </div>
                         </div>
 
-                        {/* Quick Action Button */}
+                        {/* Quick Action Buttons */}
                         <div className="flex items-center gap-2.5 shrink-0 flex-wrap self-start sm:self-center">
+                            {isOwner && (
+                                <button 
+                                    onClick={handleToggleStatus}
+                                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer border ${
+                                        status === 'Suspended'
+                                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500'
+                                            : 'bg-white/15 hover:bg-white/25 text-white border-white/30 backdrop-blur-xs'
+                                    }`}
+                                >
+                                    {status === 'Suspended' ? (
+                                        <>
+                                            <FiUserCheck size={14} className="text-emerald-200" /> Activate Staff
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FiUserX size={14} className="text-rose-200" /> Suspend Staff
+                                        </>
+                                    )}
+                                </button>
+                            )}
                             <button 
                                 onClick={() => navigate(`/dashboard/owner/staff/edit/${staff._id || staffIdVal}`, { state: { staff } })}
                                 className="px-4 py-2 bg-white hover:bg-rose-50 text-slate-900 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
@@ -506,6 +561,18 @@ export default function StaffProfilePage() {
 
                 </div>
             </div>
+
+            {/* Confirmation Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                isDestructive={confirmModal.isDestructive}
+                confirmText={confirmModal.isDestructive ? 'Yes, Suspend' : 'Yes, Activate'}
+                cancelText="Cancel"
+            />
         </PageLayout>
     );
 }

@@ -20,7 +20,9 @@ const memberSchema = new mongoose.Schema({
 
     // Referral Details
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Member' },
+    referredByName: { type: String, default: '' },
     referredByStaff: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    referredByStaffName: { type: String, default: '' },
     referralBonusGranted: { type: Boolean, default: false },
 
     // Inherited Lead Fields
@@ -32,6 +34,9 @@ const memberSchema = new mongoose.Schema({
     convertibility: { type: String },
     attendedBy: { type: String },
     response: { type: String },
+    offerAmount: { type: Number, default: 0 },
+    offerDetails: { type: String, default: '' },
+    selectedOffer: { type: String, default: '' },
 
     // Address & Emergency
     address: { type: String },
@@ -47,7 +52,7 @@ const memberSchema = new mongoose.Schema({
     medicalConditions: { type: String },
     
     joiningDate: { type: Date, required: true, default: Date.now },
-    status: { type: String, enum: ['Active', 'Inactive', 'Frozen'], default: 'Active' },
+    status: { type: String, enum: ['Active', 'Inactive', 'Frozen', 'Pending', 'Expired'], default: 'Active' },
     freezeDate: { type: Date },
     profilePhoto: { type: String },
     

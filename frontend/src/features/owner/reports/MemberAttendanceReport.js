@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import SummaryCards from '../../../components/page/SummaryCards';
 import DataTable from '../../../components/page/DataTable';
-import EmptyState from '../../../components/page/EmptyState';
 import { FiUsers, FiCheckCircle, FiClock, FiActivity, FiEye, FiX, FiCalendar, FiDownload, FiList, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import apiClient from '../../../api/apiClient';
 import { formatDate } from '../../../utils/dateUtils';
+import DatePicker from '../../../components/form/DatePicker';
 
 export default function MemberAttendanceReport({ 
     memberAttendance = [],
     activePlans = [],
     filterStartDate = '',
     filterEndDate = '',
-    gymSettings = {}
+    gymSettings = {},
+    loading = false
 }) {
     // Helper to check if gym is closed based on weekly off or holidays
     const isGymClosed = (date) => {
@@ -566,27 +567,21 @@ export default function MemberAttendanceReport({
         <div className="space-y-4 w-full m-0 p-0">
             {/* Member Attendance Table */}
             <div className="px-6 md:px-8 pb-6 pt-1">
-                {memberAttendance.length > 0 ? (
-                    <DataTable 
-                        columns={columns} 
-                        data={paginatedMemberAttendance} 
-                        renderRow={renderRow} 
-                        pagination={{
-                            currentPage: currentPage,
-                            totalItems: totalItems,
-                            pageSize: pageSize,
-                            onPageChange: (p) => setCurrentPage(p),
-                            onPageSizeChange: (s) => setPageSize(s),
-                            itemLabel: "member attendance records"
-                        }}
-                    />
-                ) : (
-                    <EmptyState 
-                        icon={<FiClock size={48} />} 
-                        title="No member attendance records found" 
-                        subtitle="Try adjusting your date filters or search parameters." 
-                    />
-                )}
+                <DataTable 
+                    columns={columns} 
+                    data={paginatedMemberAttendance} 
+                    loading={loading}
+                    emptyMessage="No member attendance records found."
+                    renderRow={renderRow} 
+                    pagination={{
+                        currentPage: currentPage,
+                        totalItems: totalItems,
+                        pageSize: pageSize,
+                        onPageChange: (p) => setCurrentPage(p),
+                        onPageSizeChange: (s) => setPageSize(s),
+                        itemLabel: "member attendance records"
+                    }}
+                />
             </div>
 
             {/* View Attendance Full Day Table Modal with Date Picker for Member */}
@@ -695,20 +690,19 @@ export default function MemberAttendanceReport({
                                     </div>
                                 ) : (
                                     <>
-                                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 h-9 px-3 rounded-lg text-xs">
-                                            <span className="text-[11px] font-bold text-slate-400 uppercase">From:</span>
-                                            <input 
-                                                type="date"
+                                        <div className="flex items-center gap-1.5">
+                                            <DatePicker
+                                                compact={true}
                                                 value={modalStartDate}
                                                 onChange={(e) => setModalStartDate(e.target.value)}
-                                                className="bg-transparent text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
+                                                placeholder="From Date"
                                             />
-                                            <span className="text-[11px] font-bold text-slate-400 uppercase ml-1">To:</span>
-                                            <input 
-                                                type="date"
+                                            <span className="text-[10px] font-bold text-slate-400">TO</span>
+                                            <DatePicker
+                                                compact={true}
                                                 value={modalEndDate}
                                                 onChange={(e) => setModalEndDate(e.target.value)}
-                                                className="bg-transparent text-xs text-slate-700 font-bold focus:outline-none cursor-pointer"
+                                                placeholder="To Date"
                                             />
                                         </div>
 

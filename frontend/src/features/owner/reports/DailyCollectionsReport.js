@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import SummaryCards from '../../../components/page/SummaryCards';
-import LineChart from '../../../components/page/LineChart';
 import DataTable from '../../../components/page/DataTable';
-import EmptyState from '../../../components/page/EmptyState';
-import { FiDollarSign, FiCalendar, FiTrendingUp, FiAlertCircle, FiEye, FiPieChart } from 'react-icons/fi';
+import LineChart from '../../../components/page/LineChart';
+import { FiDollarSign, FiCalendar, FiPieChart, FiTrendingUp, FiCreditCard, FiCheckCircle, FiClock, FiEye, FiAlertCircle } from 'react-icons/fi';
 import { formatDate } from '../../../utils/dateUtils';
 
 export default function DailyCollectionsReport({ 
     transactions = [], 
     summaryMetrics = {}, 
-    feeReceivedLinePoints = []
+    feeReceivedLinePoints = [],
+    loading = false
 }) {
     const { 
         todayCollection = 0, 
@@ -334,28 +334,22 @@ export default function DailyCollectionsReport({
 
             {/* 4. App Theme Data Table */}
             <div className="px-6 md:px-8 pb-6 pt-1">
-                {transactions.length > 0 ? (
-                    <DataTable 
-                        columns={columns} 
-                        data={paginatedTransactions} 
-                        renderRow={renderRow} 
-                        darkHeader={false}
-                        pagination={{
-                            currentPage: currentPage,
-                            totalItems: totalItems,
-                            pageSize: pageSize,
-                            onPageChange: (p) => setCurrentPage(p),
-                            onPageSizeChange: (s) => setPageSize(s),
-                            itemLabel: "transactions"
-                        }}
-                    />
-                ) : (
-                    <EmptyState 
-                        icon={<FiDollarSign size={48} />} 
-                        title="No collection records found" 
-                        subtitle="Try adjusting your date filters or search parameters." 
-                    />
-                )}
+                <DataTable 
+                    columns={columns} 
+                    data={paginatedTransactions} 
+                    loading={loading}
+                    emptyMessage="No collection records found."
+                    renderRow={renderRow} 
+                    darkHeader={false}
+                    pagination={{
+                        currentPage: currentPage,
+                        totalItems: totalItems,
+                        pageSize: pageSize,
+                        onPageChange: (p) => setCurrentPage(p),
+                        onPageSizeChange: (s) => setPageSize(s),
+                        itemLabel: "transactions"
+                    }}
+                />
             </div>
         </div>
     );

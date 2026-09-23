@@ -23,14 +23,14 @@ function ActivityLogModal({
             subtitle="Historical logs from the last 30 days (Auto-cleared after 30 days)"
             icon={FiActivity}
             maxWidth="sm:max-w-3xl"
-            headerBg="bg-slate-900"
+            headerBg="bg-[#162544]"
             headerTextColor="text-white"
             footer={
                 <div className="flex items-center justify-between w-full text-xs font-bold text-slate-500">
                     <span>Showing {modalFilteredLogs.length} activity records</span>
                     <button 
                         onClick={() => setViewAllModalOpen(false)}
-                        className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition-colors"
+                        className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                     >
                         Close
                     </button>
@@ -38,7 +38,7 @@ function ActivityLogModal({
             }
         >
             {/* Search & Category Filter Header */}
-            <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 mb-4">
+            <div className="p-3 bg-[#FFF8F8] border-b border-rose-100 flex flex-col sm:flex-row items-center justify-between gap-3 -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 mb-4">
                 {/* Search */}
                 <div className="relative w-full sm:w-64">
                     <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
@@ -47,7 +47,7 @@ function ActivityLogModal({
                         placeholder="Search activity log..."
                         value={modalSearch}
                         onChange={(e) => setModalSearch(e.target.value)}
-                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition-colors"
+                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:border-[#CA0410] focus:ring-1 focus:ring-[#CA0410]/20 transition-all"
                     />
                 </div>
 
@@ -63,10 +63,10 @@ function ActivityLogModal({
                         <button
                             key={cat.id}
                             onClick={() => setModalCategory(cat.id)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap ${
+                            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap cursor-pointer ${
                                 modalCategory === cat.id 
-                                    ? 'bg-slate-900 text-white shadow-xs' 
-                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                                    ? 'bg-[#CA0410] text-white shadow-2xs' 
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:border-rose-200 hover:text-[#CA0410]'
                             }`}
                         >
                             {cat.label}
@@ -76,10 +76,10 @@ function ActivityLogModal({
             </div>
 
             {/* Modal Activity List */}
-            <div className="divide-y divide-slate-100 space-y-2">
+            <div className="divide-y divide-rose-50 space-y-1.5">
                 {modalFilteredLogs.length === 0 ? (
                     <div className="py-12 text-center flex flex-col items-center justify-center text-slate-400">
-                        <FiActivity size={36} className="mb-2 text-slate-300" />
+                        <FiActivity size={36} className="mb-2 text-rose-300" />
                         <p className="text-sm font-extrabold text-slate-700">No activity logs found</p>
                         <p className="text-xs text-slate-400 mt-1">Logs automatically clear 30 days after creation.</p>
                     </div>
@@ -92,7 +92,7 @@ function ActivityLogModal({
                                 onClick={() => handleNotificationClick(log)}
                                 className={`p-3 transition-colors flex items-start gap-3 cursor-pointer rounded-xl ${
                                     !log.isRead 
-                                        ? 'bg-emerald-50/40 hover:bg-emerald-50/70' 
+                                        ? 'bg-rose-50/70 hover:bg-rose-100/70 border-l-3 border-[#CA0410]' 
                                         : 'bg-white hover:bg-slate-50'
                                 }`}
                             >
@@ -101,7 +101,7 @@ function ActivityLogModal({
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-1.5 flex-wrap">
                                             {!log.isRead && (
-                                                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" title="Unread"></span>
+                                                <span className="w-2 h-2 rounded-full bg-[#CA0410] inline-block shrink-0 animate-pulse" title="Unread"></span>
                                             )}
                                             <h4 className={`text-xs ${
                                                 !log.isRead ? 'font-extrabold text-slate-900' : 'font-bold text-slate-700'

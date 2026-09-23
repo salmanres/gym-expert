@@ -8,7 +8,8 @@ import EmptyState from '../../components/page/EmptyState';
 import Loader from '../../components/page/Loader';
 import FilterBar from '../../components/page/FilterBar';
 import SummaryCards from '../../components/page/SummaryCards';
-import { FiUsers, FiEdit2, FiTrash2, FiPhone, FiMail, FiEye, FiLock, FiClock, FiUserCheck, FiAward, FiDollarSign } from 'react-icons/fi';
+import Tabs from '../../components/page/Tabs';
+import { FiUsers, FiEdit2, FiTrash2, FiPhone, FiMail, FiEye, FiLock, FiClock, FiUserCheck, FiAward, FiDollarSign, FiBriefcase, FiUserX } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 
@@ -17,7 +18,8 @@ export default function Staff() {
     const [staffList, setStaffList] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterRole, setFilterRole] = useState('All');
+    const [activeTab, setActiveTab] = useState('All Staff');
+    const [filterStatus, setFilterStatus] = useState('All');
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDestructive: false });
 
     // Pagination
@@ -67,6 +69,34 @@ export default function Staff() {
         });
     };
 
+    const handleToggleStatus = (staff) => {
+        if (!isOwner) {
+            toast.error("Only Gym Owner can change staff status.");
+            return;
+        }
+
+        const isCurrentlySuspended = staff.status === 'Suspended';
+        const targetStatus = isCurrentlySuspended ? 'Active' : 'Suspended';
+
+        setConfirmModal({
+            isOpen: true,
+            title: isCurrentlySuspended ? 'Activate Staff Member' : 'Suspend Staff Member',
+            message: isCurrentlySuspended
+                ? `Are you sure you want to activate ${staff.name}? Their system access and login will be restored.`
+                : `Are you sure you want to suspend ${staff.name}? They will be blocked from logging into the gym portal.`,
+            isDestructive: !isCurrentlySuspended,
+            onConfirm: async () => {
+                try {
+                    await apiClient.put(`/staff/${staff._id}`, { status: targetStatus });
+                    toast.success(`Staff member ${isCurrentlySuspended ? 'activated' : 'suspended'} successfully`);
+                    setStaffList(prev => prev.map(s => s._id === staff._id ? { ...s, status: targetStatus } : s));
+                } catch (error) {
+                    toast.error(error.response?.data?.message || `Failed to update staff status`);
+                }
+            }
+        });
+    };
+
     const handleEdit = (staff) => {
         if (!isOwner) {
             toast.error("Only Gym Owner can edit staff members.");
@@ -76,9 +106,13 @@ export default function Staff() {
     };
 
     const filteredStaff = staffList.filter(staff => {
-        if (filterRole !== 'All' && staff.role !== filterRole) return false;
+        const roleUpper = (staff.role || '').toUpperCase();
+        if (activeTab === 'Trainers' && roleUpper !== 'TRAINER') return false;
+        if (activeTab === 'Admin & Supporting Staff' && roleUpper === 'TRAINER') return false;
+
+        if (filterStatus !== 'All' && (staff.status || 'Active') !== filterStatus) return false;
         
-        const searchStr = `${staff.name} ${staff.email} ${staff.phone}`.toLowerCase();
+        const searchStr = `${staff.name || ''} ${staff.email || ''} ${staff.phone || ''} ${staff.staffId || ''}`.toLowerCase();
         return searchStr.includes(searchTerm.toLowerCase());
     });
 
@@ -200,7 +234,11 @@ export default function Staff() {
 
                 {/* STATUS */}
                 <td className="py-2.5 px-2 text-center align-middle">
-                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${staff.status === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
+                        staff.status === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
+                        staff.status === 'Suspended' ? 'bg-rose-50 text-[#CA0410] border-rose-200' :
+                        'bg-slate-50 text-slate-700 border-slate-200'
+                    }`}>
                         {staff.status || 'Active'}
                     </span>
                 </td>
@@ -221,10 +259,25 @@ export default function Staff() {
                         {isOwner && (
                             <button 
                                 onClick={() => handleEdit(staff)} 
-                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
-                                title="Edit Record"
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-amber-400 hover:text-amber-700 hover:bg-amber-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="Edit Staff"
                             >
                                 <FiEdit2 size={14} />
+                            </button>
+                        )}
+
+                        {/* Suspend / Activate Toggle */}
+                        {isOwner && (
+                            <button 
+                                onClick={() => handleToggleStatus(staff)} 
+                                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95 ${
+                                    staff.status === 'Suspended'
+                                        ? 'border-emerald-200 text-emerald-600 bg-emerald-50/60 hover:border-emerald-400 hover:bg-emerald-100'
+                                        : 'border-amber-200 text-amber-700 bg-amber-50/60 hover:border-amber-400 hover:bg-amber-100'
+                                }`}
+                                title={staff.status === 'Suspended' ? 'Activate Staff' : 'Suspend Staff'}
+                            >
+                                {staff.status === 'Suspended' ? <FiUserCheck size={14} /> : <FiUserX size={14} />}
                             </button>
                         )}
 
@@ -232,8 +285,8 @@ export default function Staff() {
                         {isOwner && (
                             <button 
                                 onClick={() => handleDelete(staff._id)} 
-                                className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
-                                title="Delete Record"
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-rose-300 hover:text-[#CA0410] hover:bg-rose-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                title="Delete Staff"
                             >
                                 <FiTrash2 size={14} />
                             </button>
@@ -246,53 +299,47 @@ export default function Staff() {
 
     const totalStaff = staffList.length;
     const trainersCount = staffList.filter(s => (s.role || '').toUpperCase() === 'TRAINER').length;
-    const supportStaffCount = staffList.filter(s => (s.role || '').toUpperCase() !== 'TRAINER').length;
+    const staffCount = staffList.filter(s => (s.role || '').toUpperCase() !== 'TRAINER').length;
     const activeStaffCount = staffList.filter(s => s.status === 'Active' || !s.status).length;
 
     const summaryCardsData = [
         {
             title: 'Total Staff',
             value: totalStaff,
-            percentage: 'Team',
-            percentageColor: 'text-purple-600',
-            subtitle: 'Registered staff',
+            subtitle: 'Registered members',
             icon: <FiUsers />,
             bgClass: 'bg-[#FFECEC]',
-            iconColor: 'text-[#E53935]'
+            iconColor: 'text-[#E53935]',
+            onClick: () => { setActiveTab('All Staff'); setCurrentPage(1); }
         },
         {
             title: 'Trainers',
             value: trainersCount,
-            percentage: 'Coach',
-            percentageColor: 'text-emerald-600',
             subtitle: 'Fitness instructors',
             icon: <FiAward />,
             bgClass: 'bg-[#E8F5E9]',
-            iconColor: 'text-[#2E7D32]'
+            iconColor: 'text-[#2E7D32]',
+            onClick: () => { setActiveTab('Trainers'); setCurrentPage(1); }
         },
         {
-            title: 'Support Staff',
-            value: supportStaffCount,
-            percentage: 'Support',
-            percentageColor: 'text-amber-600',
-            subtitle: 'Ops & helper staff',
-            icon: <FiClock />,
-            bgClass: 'bg-[#FFF3E0]',
-            iconColor: 'text-[#EA580C]'
+            title: 'Admin & Staff',
+            value: staffCount,
+            subtitle: 'Admin & ops staff',
+            icon: <FiBriefcase />,
+            bgClass: 'bg-[#F3E8FF]',
+            iconColor: 'text-[#7E22CE]',
+            onClick: () => { setActiveTab('Admin & Supporting Staff'); setCurrentPage(1); }
         },
         {
             title: 'Active Duty',
             value: activeStaffCount,
-            percentage: 'Active',
-            percentageColor: 'text-emerald-600',
             subtitle: 'Working status',
             icon: <FiUserCheck />,
             bgClass: 'bg-[#E3F2FD]',
-            iconColor: 'text-[#1976D2]'
+            iconColor: 'text-[#1976D2]',
+            onClick: () => { setFilterStatus('Active'); setCurrentPage(1); }
         }
     ];
-
-    if (loading) return <Loader text="Loading staff..." />;
 
     return (
         <PageLayout>
@@ -304,8 +351,22 @@ export default function Staff() {
             />
 
             <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
-                <SummaryCards cards={summaryCardsData} />
+                <SummaryCards cards={summaryCardsData} loading={loading} />
             </div>
+
+            <Tabs 
+                tabs={[
+                    { key: 'All Staff', label: 'All Staff', count: totalStaff },
+                    { key: 'Trainers', label: 'Trainers', count: trainersCount },
+                    { key: 'Admin & Supporting Staff', label: 'Admin & Supporting Staff', count: staffCount }
+                ]}
+                activeTab={activeTab}
+                onTabChange={(tab) => {
+                    setActiveTab(tab);
+                    setSearchTerm('');
+                    setCurrentPage(1);
+                }}
+            />
 
             {!isOwner && (
                 <div className="mx-6 md:mx-8 my-2 p-3 bg-amber-50/90 backdrop-blur-sm border border-amber-200/80 rounded-xl text-amber-800 text-xs font-bold flex items-center gap-2 shadow-2xs">
@@ -323,17 +384,17 @@ export default function Staff() {
                 searchPlaceholder="Search by name, email or phone..."
             >
                 <select 
-                    value={filterRole} 
+                    value={filterStatus} 
                     onChange={(e) => {
-                        setFilterRole(e.target.value);
+                        setFilterStatus(e.target.value);
                         setCurrentPage(1);
                     }}
                     className="h-9 px-3 bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl text-xs font-medium focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20 text-slate-600 shadow-2xs w-full sm:w-auto"
                 >
-                    <option value="All">All Roles</option>
-                    <option value="TRAINER">Trainers</option>
-                    <option value="ADMIN">Admins</option>
-                    <option value="STAFF">Other Staff</option>
+                    <option value="All">All Statuses</option>
+                    <option value="Active">Active Only</option>
+                    <option value="Suspended">Suspended</option>
+                    <option value="Inactive">Inactive</option>
                 </select>
             </FilterBar>
 

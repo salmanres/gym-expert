@@ -68,51 +68,55 @@ export default function GymSettings() {
                     apiClient.get('/members').catch(() => ({ data: [] }))
                 ]);
 
+                const gymData = res?.data || {};
                 const membersList = membersRes.data || [];
                 const computedReferrals = membersList
-                    .filter(m => m.referredBy)
+                    .filter(m => m && m.referredBy)
                     .map(m => {
-                        const referrer = membersList.find(r => r._id === m.referredBy || r._id === m.referredBy._id);
+                        const refIdStr = (m.referredBy?._id || m.referredBy || '').toString();
+                        const referrer = membersList.find(r => r && (r._id || '').toString() === refIdStr);
+                        const memIdSuffix = (m._id || m.id || Math.random()).toString().slice(-4).toUpperCase();
                         return {
-                            id: `REF-${m._id.toString().slice(-4).toUpperCase()}`,
-                            referrer: referrer ? `${referrer.firstName} ${referrer.lastName || ''} (${referrer.memberId})`.trim() : 'Unknown Member',
-                            referee: `${m.firstName} ${m.lastName || ''} (${m.memberId})`.trim(),
-                            date: formatDate(m.createdAt),
+                            id: `REF-${memIdSuffix}`,
+                            referrer: referrer ? `${referrer.firstName || ''} ${referrer.lastName || ''} (${referrer.memberId || 'N/A'})`.trim() : 'Unknown Member',
+                            referee: `${m.firstName || ''} ${m.lastName || ''} (${m.memberId || 'N/A'})`.trim(),
+                            date: formatDate(m.createdAt || new Date()),
+                            rawDate: m.createdAt || new Date(),
                             reward: m.referralBonusGranted ? 'Granted' : 'Pending',
                             status: m.referralBonusGranted ? 'Credited' : 'Pending'
                         };
                     })
-                    .sort((a, b) => new Date(b.date) - new Date(a.date));
+                    .sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate));
                 setReferralHistory(computedReferrals);
 
                 setSettings({
-                    name: res.data.name || '',
-                    contactEmail: res.data.contactEmail || '',
-                    contactPhone: res.data.contactPhone || '',
-                    latitude: res.data.latitude || '',
-                    longitude: res.data.longitude || '',
-                    qrAttendanceEnabled: res.data.qrAttendanceEnabled || false,
-                    qrAttendanceRange: res.data.qrAttendanceRange || 50,
+                    name: gymData.name || '',
+                    contactEmail: gymData.contactEmail || '',
+                    contactPhone: gymData.contactPhone || '',
+                    latitude: gymData.latitude || '',
+                    longitude: gymData.longitude || '',
+                    qrAttendanceEnabled: gymData.qrAttendanceEnabled || false,
+                    qrAttendanceRange: gymData.qrAttendanceRange || 50,
                     
-                    weeklyOff: res.data.weeklyOff || ['Sunday'],
-                    workingHours: res.data.workingHours || { start: '06:00', end: '22:00' },
-                    holidays: res.data.holidays || [],
+                    weeklyOff: gymData.weeklyOff || ['Sunday'],
+                    workingHours: gymData.workingHours || { start: '06:00', end: '22:00' },
+                    holidays: gymData.holidays || [],
                     
-                    referralProgramEnabled: res.data.referralProgramEnabled !== undefined ? res.data.referralProgramEnabled : true,
-                    referralRewardType: res.data.referralRewardType || 'Both',
-                    referrerBonusDays: res.data.referrerBonusDays || 7,
-                    referrerWalletAmount: res.data.referrerWalletAmount || 200,
-                    referrerDiscountPercent: res.data.referrerDiscountPercent || 10,
-                    refereeBonusDays: res.data.refereeBonusDays || 5,
-                    refereeDiscountPercent: res.data.refereeDiscountPercent || 10,
-                    minPlanDurationDays: res.data.minPlanDurationDays || 30,
+                    referralProgramEnabled: gymData.referralProgramEnabled !== undefined ? gymData.referralProgramEnabled : true,
+                    referralRewardType: gymData.referralRewardType || 'Both',
+                    referrerBonusDays: gymData.referrerBonusDays || 7,
+                    referrerWalletAmount: gymData.referrerWalletAmount || 200,
+                    referrerDiscountPercent: gymData.referrerDiscountPercent || 10,
+                    refereeBonusDays: gymData.refereeBonusDays || 5,
+                    refereeDiscountPercent: gymData.refereeDiscountPercent || 10,
+                    minPlanDurationDays: gymData.minPlanDurationDays || 30,
 
-                    couponOffers: res.data.couponOffers && res.data.couponOffers.length > 0 ? res.data.couponOffers : []
+                    couponOffers: gymData.couponOffers && gymData.couponOffers.length > 0 ? gymData.couponOffers : []
                 });
                 setLoading(false);
             } catch (error) {
                 console.error("Fetch gym error:", error);
-                toast.error("Failed to load gym settings");
+                toast.error(error.response?.data?.message || "Failed to load gym settings");
                 setLoading(false);
             }
         };
@@ -317,9 +321,14 @@ export default function GymSettings() {
                             <button 
                                 type="submit" 
                                 disabled={saving}
-                                className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-sm rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-sm rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
-                                {saving ? 'Saving Settings...' : 'Save Settings'}
+                                {saving ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
+                                        <span>Saving Settings...</span>
+                                    </>
+                                ) : 'Save Settings'}
                             </button>
                         </div>
                     </form>

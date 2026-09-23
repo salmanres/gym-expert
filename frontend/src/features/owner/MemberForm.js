@@ -11,7 +11,7 @@ import Loader from '../../components/page/Loader';
 import { FiUser, FiMapPin, FiActivity, FiMessageSquare, FiCamera, FiUpload, FiX, FiTrash2, FiGift, FiAward, FiCheckCircle, FiCalendar, FiCreditCard, FiTag } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from '../../utils/toast';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
 import Webcam from 'react-webcam';
 
 export default function MemberForm() {
@@ -37,7 +37,7 @@ export default function MemberForm() {
         height: '', weight: '', bmi: '', bodyFat: '', dietPreference: '', medicalConditions: '',
         source: '--Select--', interest: '--Select--', followUpDate: '', followUpTime: '', convertibility: 'Warm',
         attendedBy: 'Admin', response: '',
-        joiningDate: new Date().toISOString().split('T')[0], status: 'Active',
+        joiningDate: getTodayInputDate(), status: 'Active',
         referredBy: '',
         referredByStaff: '',
         referralRewardType: 'Both', // 'Bonus Days' | 'Wallet Cash' | 'Both'
@@ -123,7 +123,9 @@ export default function MemberForm() {
                 ...member,
                 referredBy: member.referredBy?._id || member.referredBy || '',
                 referredByStaff: member.referredByStaff?._id || member.referredByStaff || '',
-                followUpDate: member.followUpDate ? new Date(member.followUpDate).toISOString().split('T')[0] : ''
+                followUpDate: toInputDateFormat(member.followUpDate),
+                dob: toInputDateFormat(member.dob),
+                joiningDate: toInputDateFormat(member.joiningDate)
             });
             setLoading(false);
         } else if (isConversion) {
@@ -146,13 +148,19 @@ export default function MemberForm() {
                         `${s.name || 'Staff'} (${s.role === 'STAFF' ? 'Staff' : s.role === 'TRAINER' ? 'Trainer' : (s.role || 'Staff')})` === refStr ||
                         (s.name && refStr.toLowerCase().includes(s.name.toLowerCase()))
                     );
-                    matchedStaffId = foundStaff ? foundStaff._id : refStr;
+                    matchedStaffId = foundStaff ? foundStaff._id : '';
                 } else {
+                    const phoneMatch = refStr.match(/\d{10}/);
+                    const phone = phoneMatch ? phoneMatch[0] : null;
+
                     const foundMember = existingMembers.find(m => 
                         m._id === refStr || 
-                        `${m.firstName || ''} ${m.lastName || ''}`.trim().toLowerCase() === refStr.toLowerCase()
+                        m.memberId === refStr ||
+                        (phone && m.contactNumber === phone) ||
+                        `${m.firstName || ''} ${m.lastName || ''}`.trim().toLowerCase() === refStr.toLowerCase() ||
+                        refStr.toLowerCase().includes(`${m.firstName || ''} ${m.lastName || ''}`.trim().toLowerCase())
                     );
-                    matchedMemberId = foundMember ? foundMember._id : refStr;
+                    matchedMemberId = foundMember ? foundMember._id : '';
                 }
             }
 
@@ -161,7 +169,7 @@ export default function MemberForm() {
                 firstName: lead.firstName || '',
                 lastName: lead.lastName || '',
                 gender: lead.gender || 'Male',
-                dob: lead.dob ? new Date(lead.dob).toISOString().split('T')[0] : '',
+                dob: toInputDateFormat(lead.dob),
                 contactNumber: lead.contactNumber || '',
                 altContact: lead.altContact || '',
                 email: lead.email || '',
@@ -170,12 +178,15 @@ export default function MemberForm() {
                 referredBy: matchedMemberId,
                 referredByStaff: matchedStaffId,
                 interest: lead.inquiryFor || '--Select--',
-                followUpDate: lead.followUpDate ? new Date(lead.followUpDate).toISOString().split('T')[0] : '',
+                followUpDate: toInputDateFormat(lead.followUpDate),
                 followUpTime: lead.followUpTime || '',
                 convertibility: lead.convertibility || 'Warm',
                 attendedBy: lead.attendedBy || 'Admin',
                 response: lead.response || '',
-                enquiryId: lead._id
+                enquiryId: lead._id,
+                offerAmount: lead.offerAmount || '',
+                offerDetails: lead.offerDetails || '',
+                selectedOffer: lead.selectedOffer || ''
             }));
             setLoading(false);
         } else if (isEdit) {
@@ -202,15 +213,15 @@ export default function MemberForm() {
             if (planId && startDateStr) {
                 const selectedPlan = memberships.find(m => m._id === planId);
                 if (selectedPlan) {
-                    const start = new Date(startDateStr);
-                    let end = new Date(start);
+                    const [sy, sm, sd] = startDateStr.split('-').map(Number);
+                    let end = new Date(sy, sm - 1, sd);
                     
                     if (selectedPlan.durationUnit === 'Days') end.setDate(end.getDate() + selectedPlan.duration);
                     else if (selectedPlan.durationUnit === 'Weeks') end.setDate(end.getDate() + selectedPlan.duration * 7);
                     else if (selectedPlan.durationUnit === 'Months') end.setMonth(end.getMonth() + selectedPlan.duration);
                     else if (selectedPlan.durationUnit === 'Years') end.setFullYear(end.getFullYear() + selectedPlan.duration);
                     
-                    updates.planEndDate = end.toISOString().split('T')[0];
+                    updates.planEndDate = toInputDateFormat(end);
                     if (name === 'membershipPlan') {
                         updates.totalSessions = selectedPlan.sessions || '';
                         updates.amountPaid = selectedPlan.price || '';
@@ -263,8 +274,28 @@ export default function MemberForm() {
                 } else {
                     toast.success("Member registered successfully");
                 }
-                // Navigate seamlessly to Assign Plan step
-                navigate('/dashboard/owner/membership/assign', { state: { member: res.data } });
+                
+                const lead = location.state?.convertedLead;
+                const hasNegotiatedOffer = Boolean(
+                    (lead?.offerDetails && lead.offerDetails.trim() !== '') || 
+                    (lead?.offerAmount && Number(lead.offerAmount) > 0) || 
+                    (lead?.selectedOffer && lead.selectedOffer.trim() !== '')
+                );
+
+                // Navigate seamlessly to Assign Plan step carrying over lead offer only if negotiated
+                navigate('/dashboard/owner/membership/assign', { 
+                    state: { 
+                        member: res.data,
+                        convertedLead: lead,
+                        leadOffer: hasNegotiatedOffer ? {
+                            offerAmount: Number(lead?.offerAmount || 0),
+                            offerDetails: lead?.offerDetails || '',
+                            selectedOffer: lead?.selectedOffer || '',
+                            inquiryFor: lead?.inquiryFor || '',
+                            referredBy: lead?.referredBy
+                        } : undefined
+                    } 
+                });
             }
         } catch (error) {
             const errorMsg = error.response?.data?.message || (isEdit ? "Failed to update member" : "Failed to register member");
@@ -491,9 +522,14 @@ export default function MemberForm() {
                             <button 
                                 type="submit" 
                                 disabled={submitting}
-                                className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-50"
+                                className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
                             >
-                                {submitting ? 'Saving Member...' : (isEdit ? 'Update Member' : 'Register Member')}
+                                {submitting ? (
+                                    <>
+                                        <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
+                                        <span>Saving Member...</span>
+                                    </>
+                                ) : (isEdit ? 'Update Member' : 'Register Member')}
                             </button>
                         </div>
                     </form>

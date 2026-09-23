@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Textarea({ label, required, error, className = '', containerClassName = '', rows = 3, ...props }) {
+export default function Textarea({ label, required, error, className = '', containerClassName = '', rows = 3, inputRef, ...props }) {
     return (
         <div className={`flex flex-col ${containerClassName}`}>
             {label && (
@@ -9,6 +9,7 @@ export default function Textarea({ label, required, error, className = '', conta
                 </label>
             )}
             <textarea 
+                ref={inputRef}
                 rows={rows}
                 required={required}
                 className={`w-full p-3.5 rounded-xl border ${

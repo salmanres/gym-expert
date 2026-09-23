@@ -16,6 +16,7 @@ router.route('/transactions/single/:id')
     .get(protect, memberController.getTransactionById);
 
 router.route('/transactions/:id')
+    .put(gymOwnerOnly, memberController.updateTransaction)
     .delete(gymOwnerOnly, memberController.deleteTransaction);
 
 router.route('/:id')

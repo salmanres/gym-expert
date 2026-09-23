@@ -9,6 +9,7 @@ import DataTable from '../../components/page/DataTable';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import SummaryCards from '../../components/page/SummaryCards';
+import Loader from '../../components/page/Loader';
 import { formatDate } from '../../utils/dateUtils';
 
 function Memberships() {
@@ -47,10 +48,49 @@ function Memberships() {
             const todayEnd = new Date();
             todayEnd.setHours(23, 59, 59, 999);
 
+            const parseLocalDateStart = (val) => {
+                if (!val) return null;
+                if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+                    const [y, m, d] = val.split('T')[0].split('-').map(Number);
+                    return new Date(y, m - 1, d, 0, 0, 0, 0);
+                }
+                const d = new Date(val);
+                d.setHours(0, 0, 0, 0);
+                return d;
+            };
+
+            const parseLocalDateEnd = (val) => {
+                if (!val) return null;
+                if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+                    const [y, m, d] = val.split('T')[0].split('-').map(Number);
+                    return new Date(y, m - 1, d, 23, 59, 59, 999);
+                }
+                const d = new Date(val);
+                d.setHours(23, 59, 59, 999);
+                return d;
+            };
+
             const membersWithPlans = memberRes.data.map(member => {
-                const activeMem = activeAndScheduled.find(m => (m.memberId?._id || m.memberId) === member._id && (m.membershipStatus === 'Active' || new Date(m.startDate) <= todayEnd));
-                const scheduledMem = activeAndScheduled.find(m => (m.memberId?._id || m.memberId) === member._id && (m.membershipStatus === 'Scheduled' || new Date(m.startDate) > todayEnd));
-                const latestMem = latestMemberships.find(m => (m.memberId?._id || m.memberId) === member._id);
+                const memIdStr = member._id?.toString();
+                const memberMemberships = activeAndScheduled.filter(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr);
+                
+                const activeMem = memberMemberships.find(m => {
+                    if (m.membershipStatus === 'Cancelled') return false;
+                    if (m.membershipStatus === 'Frozen') return true;
+                    const start = parseLocalDateStart(m.startDate);
+                    const end = parseLocalDateEnd(m.endDate);
+                    if (!start || !end) return m.membershipStatus === 'Active';
+                    return start <= todayEnd && end >= today;
+                });
+
+                const scheduledMem = memberMemberships.find(m => {
+                    if (m.membershipStatus === 'Cancelled' || m.membershipStatus === 'Frozen') return false;
+                    if (activeMem && m._id?.toString() === activeMem._id?.toString()) return false;
+                    const start = parseLocalDateStart(m.startDate);
+                    return Boolean(start && start > todayEnd);
+                });
+
+                const latestMem = latestMemberships.find(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr);
 
                 const mainMem = activeMem || scheduledMem || latestMem;
 
@@ -127,14 +167,14 @@ function Memberships() {
     const getMembersByStatus = () => {
         return members.filter(member => {
             if (activeTab === 'Assign') return !member.membershipPlan;
-            if (activeTab === 'Scheduled') return (member.scheduledMembership && new Date(member.scheduledMembership.startDate) > todayEnd) || (member.activeMembership?.membershipStatus === 'Scheduled' && new Date(member.activeMembership.startDate) > todayEnd);
+            if (activeTab === 'Scheduled') return Boolean(member.scheduledMembership);
 
             if (!member.planEndDate) return false;
             const endDate = new Date(member.planEndDate);
             const isExpired = endDate < today;
             const isRenewingSoon = endDate >= today && endDate <= nextWeek;
 
-            if (activeTab === 'Active') return !isExpired && (member.activeMembership?.membershipStatus === 'Active' || new Date(member.activeMembership?.startDate) <= todayEnd);
+            if (activeTab === 'Active') return !isExpired && Boolean(member.activeMembership);
             if (activeTab === 'Expired') return isExpired && !member.scheduledMembership;
             if (activeTab === 'Renewals') return isRenewingSoon;
             return false;
@@ -383,7 +423,7 @@ function Memberships() {
                         )}
                         {(activeTab === 'Expired' || activeTab === 'Renewals') && (
                             <button
-                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, isRenew: true } })}
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, activeMembership: m.activeMembership, isRenew: true } })}
                                 className="w-8 h-8 rounded-lg border border-blue-200 text-blue-600 bg-white hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                                 title="Renew Plan"
                             >
@@ -476,7 +516,7 @@ function Memberships() {
             />
 
             <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
-                <SummaryCards cards={summaryCardsData} />
+                <SummaryCards cards={summaryCardsData} loading={loading} />
             </div>
 
             <Tabs

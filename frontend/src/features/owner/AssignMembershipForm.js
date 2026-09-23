@@ -12,8 +12,31 @@ import {
 import apiClient from '../../api/apiClient';
 import { toast } from '../../utils/toast';
 import Loader from '../../components/page/Loader';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
 import ReactSelect from 'react-select';
+
+const formatToYMD = (date) => {
+    return toInputDateFormat(date);
+};
+
+const getRenewalStartDate = (rawEndDate) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = formatToYMD(today);
+    
+    if (!rawEndDate) return todayStr;
+    const activeEnd = new Date(rawEndDate);
+    if (isNaN(activeEnd.getTime())) return todayStr;
+    
+    // If plan end date is today or in future, renewal begins the next day
+    if (activeEnd >= today) {
+        const nextDay = new Date(activeEnd);
+        nextDay.setDate(nextDay.getDate() + 1);
+        return formatToYMD(nextDay);
+    }
+    // If already expired in the past, renewal begins today
+    return todayStr;
+};
 
 export default function AssignMembershipForm() {
     const navigate = useNavigate();
@@ -36,7 +59,7 @@ export default function AssignMembershipForm() {
     const [formData, setFormData] = useState({
         memberId: '',
         membershipPlanId: '',
-        planStartDate: new Date().toISOString().split('T')[0],
+        planStartDate: formatToYMD(new Date()),
         planEndDate: '',
         totalSessions: '',
         originalPrice: '',
@@ -75,21 +98,56 @@ export default function AssignMembershipForm() {
                 // Pre-fill if navigated from Member details or Finance
                 if (location.state?.member) {
                     const mem = location.state.member;
-                    const activeMem = activeMems.find(m => (m.memberId?._id || m.memberId) === mem._id) || mem.activeMembership;
+                    const memIdStr = (mem._id || mem.id || '').toString();
+                    const activeMem = activeMems.find(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr) || location.state?.activeMembership || mem.activeMembership;
                     const isFullyPaid = activeMem && (activeMem.paymentStatus === 'Paid' || (activeMem.balanceAmount || 0) <= 0);
 
-                    if (location.state.isRenew) {
-                        let renewalStartDate = new Date().toISOString().split('T')[0];
-                        if (activeMem?.endDate) {
-                            const activeEnd = new Date(activeMem.endDate);
-                            const today = new Date();
-                            today.setHours(0, 0, 0, 0);
-                            if (activeEnd >= today) {
-                                const nextDay = new Date(activeEnd);
-                                nextDay.setDate(nextDay.getDate() + 1);
-                                renewalStartDate = nextDay.toISOString().split('T')[0];
+                    // Resolve initial staff & reference
+                    let initialSalesPersonId = '';
+                    let initialReference = '';
+
+                    const allStaff = staffRes.data || [];
+
+                    if (mem.referredByStaff) {
+                        const sId = typeof mem.referredByStaff === 'object' ? mem.referredByStaff._id : mem.referredByStaff;
+                        const found = allStaff.find(s => s._id === sId);
+                        if (found) {
+                            initialSalesPersonId = found._id;
+                            initialReference = found.name;
+                        } else {
+                            initialSalesPersonId = sId;
+                            initialReference = typeof mem.referredByStaff === 'object' ? mem.referredByStaff.name : '';
+                        }
+                    }
+
+                    if (!initialSalesPersonId) {
+                        const rawRef = (
+                            (typeof mem.referredBy === 'object' && mem.referredBy?.name ? mem.referredBy.name : mem.referredBy) ||
+                            mem.enquiryId?.referredBy ||
+                            location.state?.convertedLead?.referredBy ||
+                            location.state?.leadOffer?.referredBy ||
+                            ''
+                        ).toString().trim();
+
+                        if (rawRef) {
+                            const foundStaff = allStaff.find(s => 
+                                s._id === rawRef || 
+                                (s.name && rawRef.toLowerCase().includes(s.name.toLowerCase())) ||
+                                `${s.name || ''} (${s.role === 'STAFF' ? 'Staff' : s.role === 'TRAINER' ? 'Trainer' : (s.role || 'Staff')})`.toLowerCase() === rawRef.toLowerCase()
+                            );
+                            if (foundStaff) {
+                                initialSalesPersonId = foundStaff._id;
+                                initialReference = foundStaff.name;
+                            } else {
+                                initialReference = rawRef;
                             }
                         }
+                    }
+
+                    const rawEnd = activeMem?.paidUntilDate || activeMem?.endDate || mem.paidUntilDate || mem.planEndDate || mem.endDate || location.state?.activeMembership?.endDate;
+                    const renewalStartDate = getRenewalStartDate(rawEnd);
+
+                    if (location.state.isRenew) {
                         const prevPlan = activeMem?.membershipPlanId?._id || activeMem?.membershipPlanId || (mem.membershipPlan?._id || mem.membershipPlan);
                         setEditMode(false);
                         setMembershipId(null);
@@ -97,7 +155,9 @@ export default function AssignMembershipForm() {
                             ...prev,
                             memberId: mem._id,
                             membershipPlanId: prevPlan || '',
-                            planStartDate: renewalStartDate
+                            planStartDate: renewalStartDate,
+                            salesPersonId: initialSalesPersonId || prev.salesPersonId,
+                            reference: initialReference || prev.reference
                         }));
                     } else if (activeMem && (location.state.isEdit || !isFullyPaid)) {
                         setEditMode(true);
@@ -106,8 +166,8 @@ export default function AssignMembershipForm() {
                             ...prev,
                             memberId: mem._id,
                             membershipPlanId: activeMem.membershipPlanId ? (activeMem.membershipPlanId._id || activeMem.membershipPlanId) : '',
-                            planStartDate: new Date(activeMem.startDate).toISOString().split('T')[0],
-                            planEndDate: new Date(activeMem.endDate).toISOString().split('T')[0],
+                            planStartDate: formatToYMD(activeMem.startDate) || renewalStartDate,
+                            planEndDate: formatToYMD(activeMem.endDate),
                             totalSessions: activeMem.totalSessions || '',
                             originalPrice: activeMem.originalPrice !== undefined ? activeMem.originalPrice : '',
                             discount: activeMem.discount || 0,
@@ -115,30 +175,136 @@ export default function AssignMembershipForm() {
                             paymentMode: 'Cash',
                             transactionId: '',
                             notes: '',
-                            paidUntilDate: activeMem.paidUntilDate ? new Date(activeMem.paidUntilDate).toISOString().split('T')[0] : '',
+                            paidUntilDate: activeMem.paidUntilDate ? formatToYMD(activeMem.paidUntilDate) : '',
                             useWallet: false,
                             walletUsed: 0,
-                            bonusDays: activeMem.bonusDays || 0
+                            bonusDays: activeMem.bonusDays || 0,
+                            trainerId: activeMem.trainerId ? (activeMem.trainerId._id || activeMem.trainerId) : prev.trainerId,
+                            salesPersonId: activeMem.salesPersonId ? (activeMem.salesPersonId._id || activeMem.salesPersonId) : (initialSalesPersonId || prev.salesPersonId),
+                            reference: activeMem.reference || initialReference || prev.reference,
+                            isPTConversion: activeMem.isPTConversion !== undefined ? activeMem.isPTConversion : prev.isPTConversion
                         }));
                     } else if (activeMem && isFullyPaid) {
                         // Member has fully paid active plan: default to Future/Scheduled plan starting day after current plan ends
-                        const activeEnd = new Date(activeMem.paidUntilDate || activeMem.endDate);
-                        const futureStartDate = activeEnd.toISOString().split('T')[0];
-
                         setEditMode(false);
                         setMembershipId(null);
                         setFormData(prev => ({
                             ...prev,
                             memberId: mem._id,
-                            planStartDate: futureStartDate
+                            planStartDate: renewalStartDate,
+                            salesPersonId: initialSalesPersonId || prev.salesPersonId,
+                            reference: initialReference || prev.reference
                         }));
                     } else {
                         setEditMode(false);
                         setMembershipId(null);
-                        setFormData(prev => ({
-                            ...prev,
-                            memberId: mem._id
-                        }));
+
+                        const leadOffer = location.state.leadOffer;
+                        const offerAmount = Number(leadOffer?.offerAmount || mem.offerAmount || 0);
+                        const offerDetails = (leadOffer?.offerDetails || mem.offerDetails || '').trim();
+                        const hasRealNegotiation = offerAmount > 0 || (offerDetails !== '' && !['none', 'discount'].includes(offerDetails.toLowerCase()));
+                        const selectedOfferId = leadOffer?.selectedOffer || mem.selectedOffer || '';
+                        const inquiryFor = leadOffer?.inquiryFor || mem.interest || '';
+
+                        let matchedPlanId = '';
+                        let planPrice = 0;
+                        if (inquiryFor && planRes.data) {
+                            const foundPlan = planRes.data.find(p => 
+                                p.name?.toLowerCase() === inquiryFor.toLowerCase() || 
+                                p.planName?.toLowerCase() === inquiryFor.toLowerCase() ||
+                                (inquiryFor.toLowerCase().includes((p.name || '').toLowerCase()) && (p.name || '').length > 2)
+                            );
+                            if (foundPlan) {
+                                matchedPlanId = foundPlan._id;
+                                planPrice = foundPlan.price || 0;
+                            }
+                        }
+
+                        // Auto-match against gym coupon offers
+                        const allCoupons = (gymRes.data?.couponOffers || []).filter(c => c.isActive);
+                        const matchedCoupon = allCoupons.find(c => 
+                            (selectedOfferId && (c._id === selectedOfferId || c.code === selectedOfferId)) ||
+                            (c.title && offerDetails && c.title.toLowerCase() === offerDetails.toLowerCase()) ||
+                            (c.code && offerDetails && c.code.toLowerCase() === offerDetails.toLowerCase())
+                        );
+
+                        if (matchedCoupon) {
+                            let discountAmt = 0;
+                            if (matchedCoupon.discountValue > 0) {
+                                if (matchedCoupon.discountType === 'Percentage') {
+                                    discountAmt = planPrice > 0 ? Math.round((planPrice * matchedCoupon.discountValue) / 100) : 0;
+                                } else {
+                                    discountAmt = matchedCoupon.discountValue || 0;
+                                }
+                            } else if (offerAmount > 0) {
+                                discountAmt = offerAmount;
+                            }
+
+                            const bonus = matchedCoupon.bonusDays || 0;
+                            let descDesc = matchedCoupon.title;
+                            let parts = [];
+                            if (matchedCoupon.discountValue > 0) {
+                                parts.push(matchedCoupon.discountType === 'Percentage' ? `${matchedCoupon.discountValue}% OFF` : `₹${matchedCoupon.discountValue} OFF`);
+                            }
+                            if (bonus > 0) parts.push(`+${bonus} Free Days`);
+                            if (parts.length > 0) descDesc += ` (${parts.join(' ')})`;
+
+                            setAppliedCoupon({
+                                code: matchedCoupon.code,
+                                description: descDesc,
+                                discountAmount: discountAmt
+                            });
+                            setCouponCode(matchedCoupon.code);
+
+                            setFormData(prev => ({
+                                ...prev,
+                                memberId: mem._id,
+                                membershipPlanId: matchedPlanId || prev.membershipPlanId,
+                                originalPrice: planPrice > 0 ? planPrice : prev.originalPrice,
+                                discount: discountAmt,
+                                bonusDays: bonus,
+                                amountPaid: planPrice > 0 ? Math.max(0, planPrice - discountAmt) : prev.amountPaid,
+                                notes: hasRealNegotiation && offerDetails ? `Negotiated Lead Offer: ${offerDetails}` : prev.notes,
+                                salesPersonId: initialSalesPersonId || prev.salesPersonId,
+                                reference: initialReference || prev.reference
+                            }));
+
+                            toast.success(`Coupon Offer "${matchedCoupon.title}" auto-applied!`);
+                        } else if (hasRealNegotiation) {
+                            const initialDiscount = offerAmount > 0 ? offerAmount : 0;
+                            setAppliedCoupon({
+                                code: 'LEAD_OFFER',
+                                description: offerDetails || 'Negotiated Lead Offer',
+                                discountAmount: initialDiscount
+                            });
+                            setCouponCode('LEAD_OFFER');
+
+                            setFormData(prev => ({
+                                ...prev,
+                                memberId: mem._id,
+                                membershipPlanId: matchedPlanId || prev.membershipPlanId,
+                                originalPrice: planPrice > 0 ? planPrice : prev.originalPrice,
+                                discount: initialDiscount,
+                                amountPaid: planPrice > 0 ? Math.max(0, planPrice - initialDiscount) : prev.amountPaid,
+                                notes: offerDetails ? `Negotiated Lead Offer: ${offerDetails}` : prev.notes,
+                                salesPersonId: initialSalesPersonId || prev.salesPersonId,
+                                reference: initialReference || prev.reference
+                            }));
+
+                            toast.success(`Negotiated Lead Offer of ₹${initialDiscount} (${offerDetails || 'Discount'}) loaded!`);
+                        } else {
+                            setAppliedCoupon(null);
+                            setCouponCode('');
+                            setFormData(prev => ({
+                                ...prev,
+                                memberId: mem._id,
+                                membershipPlanId: matchedPlanId || prev.membershipPlanId,
+                                originalPrice: planPrice > 0 ? planPrice : prev.originalPrice,
+                                amountPaid: planPrice > 0 ? planPrice : prev.amountPaid,
+                                salesPersonId: initialSalesPersonId || prev.salesPersonId,
+                                reference: initialReference || prev.reference
+                            }));
+                        }
                     }
                 }
             } catch (error) {
@@ -159,6 +325,13 @@ export default function AssignMembershipForm() {
         : (selectedPlan ? (selectedPlan.price || 0) : 0);
     const discountAmount = Number(formData.discount) || 0;
     const netPayable = Math.max(0, planPrice - discountAmount);
+
+    const planNameStr = String(selectedPlan?.name || '').toLowerCase();
+    const planTypeStr = Array.isArray(selectedPlan?.planType) 
+        ? selectedPlan.planType.join(' ').toLowerCase() 
+        : String(selectedPlan?.planType || '').toLowerCase();
+    const isPTPlan = planTypeStr.includes('personal training') || planTypeStr.includes('pt') || planNameStr.includes('personal training') || planNameStr.includes('pt package') || ((selectedPlan?.sessions || 0) > 0);
+    const showTrainerField = isPTPlan || Boolean(formData.isPTConversion);
 
     // Auto-calculate plan end date & default payment amount when plan or start date changes
     useEffect(() => {
@@ -188,24 +361,24 @@ export default function AssignMembershipForm() {
             }
 
             if (maxEndDate) {
-                const maxEndDateStr = maxEndDate.toISOString().split('T')[0];
+                const maxEndDateStr = toInputDateFormat(maxEndDate);
                 const currentPlanPrice = formData.originalPrice !== '' && formData.originalPrice !== null && formData.originalPrice !== undefined
                     ? Number(formData.originalPrice)
                     : (plan ? (plan.price || 0) : 0);
                 const net = Math.max(0, currentPlanPrice - discountAmount);
 
-                const planNameStr = String(plan?.name || '').toLowerCase();
-                const planTypeStr = Array.isArray(plan?.planType) 
+                const currentPlanName = String(plan?.name || '').toLowerCase();
+                const currentPlanType = Array.isArray(plan?.planType) 
                     ? plan.planType.join(' ').toLowerCase() 
                     : String(plan?.planType || '').toLowerCase();
-                const isExplicitPTPlan = planTypeStr.includes('personal training') || planTypeStr.includes('pt') || planNameStr.includes('personal training') || planNameStr.includes('pt package');
+                const isExplicitPTPlan = currentPlanType.includes('personal training') || currentPlanType.includes('pt') || currentPlanName.includes('personal training') || currentPlanName.includes('pt package') || ((plan?.sessions || 0) > 0);
 
                 setFormData(prev => ({ 
                     ...prev, 
                     planEndDate: maxEndDateStr,
                     amountPaid: editMode ? prev.amountPaid : net, 
                     totalSessions: totalSess,
-                    isPTConversion: isExplicitPTPlan ? true : false,
+                    isPTConversion: isExplicitPTPlan ? true : prev.isPTConversion,
                     paidUntilDate: '' 
                 }));
             }
@@ -240,31 +413,177 @@ export default function AssignMembershipForm() {
             setFormData(prev => {
                 const updated = { ...prev, [name]: val };
                 if (name === 'memberId') {
-                    const activeMem = activeMemberships.find(m => (m.memberId?._id || m.memberId) === val);
+                    const memIdStr = val?.toString() || '';
+                    const activeMem = activeMemberships.find(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr);
+                    const foundMem = members.find(m => (m._id || m.id)?.toString() === memIdStr);
                     const isFullyPaid = activeMem && (activeMem.paymentStatus === 'Paid' || (activeMem.balanceAmount || 0) <= 0);
 
+                    const rawEnd = activeMem?.paidUntilDate || activeMem?.endDate || foundMem?.paidUntilDate || foundMem?.planEndDate || foundMem?.endDate;
+                    const renewalStartDate = getRenewalStartDate(rawEnd);
+
                     if (activeMem && isFullyPaid) {
-                        const activeEnd = new Date(activeMem.paidUntilDate || activeMem.endDate);
-                        activeEnd.setDate(activeEnd.getDate() + 1);
-                        updated.planStartDate = activeEnd.toISOString().split('T')[0];
+                        updated.planStartDate = renewalStartDate;
                         setEditMode(false);
                         setMembershipId(null);
                     } else if (activeMem && !isFullyPaid) {
-                        updated.planStartDate = new Date(activeMem.startDate).toISOString().split('T')[0];
+                        updated.planStartDate = formatToYMD(activeMem.startDate) || renewalStartDate;
                         setEditMode(true);
                         setMembershipId(activeMem._id);
                     } else {
-                        updated.planStartDate = new Date().toISOString().split('T')[0];
+                        updated.planStartDate = renewalStartDate;
                         setEditMode(false);
                         setMembershipId(null);
+
+                        if (foundMem) {
+                            // Resolve staff & reference from found member
+                            let resolvedSalesPersonId = '';
+                            let resolvedReference = '';
+
+                            if (foundMem.referredByStaff) {
+                                const sId = typeof foundMem.referredByStaff === 'object' ? foundMem.referredByStaff._id : foundMem.referredByStaff;
+                                const found = staffList.find(s => s._id === sId);
+                                if (found) {
+                                    resolvedSalesPersonId = found._id;
+                                    resolvedReference = found.name;
+                                } else {
+                                    resolvedSalesPersonId = sId;
+                                    resolvedReference = typeof foundMem.referredByStaff === 'object' ? foundMem.referredByStaff.name : '';
+                                }
+                            }
+
+                            if (!resolvedSalesPersonId) {
+                                const rawRef = (
+                                    (typeof foundMem.referredBy === 'object' && foundMem.referredBy?.name ? foundMem.referredBy.name : foundMem.referredBy) ||
+                                    foundMem.enquiryId?.referredBy ||
+                                    ''
+                                ).toString().trim();
+
+                                if (rawRef) {
+                                    const foundStaff = staffList.find(s => 
+                                        s._id === rawRef || 
+                                        (s.name && rawRef.toLowerCase().includes(s.name.toLowerCase())) ||
+                                        `${s.name || ''} (${s.role === 'STAFF' ? 'Staff' : s.role === 'TRAINER' ? 'Trainer' : (s.role || 'Staff')})`.toLowerCase() === rawRef.toLowerCase()
+                                    );
+                                    if (foundStaff) {
+                                        resolvedSalesPersonId = foundStaff._id;
+                                        resolvedReference = foundStaff.name;
+                                    } else {
+                                        resolvedReference = rawRef;
+                                    }
+                                }
+                            }
+
+                            if (resolvedSalesPersonId) updated.salesPersonId = resolvedSalesPersonId;
+                            if (resolvedReference) updated.reference = resolvedReference;
+                            const offerAmount = Number(foundMem.offerAmount || foundMem.enquiryId?.offerAmount || 0);
+                            const offerDetails = (foundMem.offerDetails || foundMem.enquiryId?.offerDetails || '').trim();
+                            const hasRealNegotiation = offerAmount > 0 || (offerDetails !== '' && !['none', 'discount'].includes(offerDetails.toLowerCase()));
+                            const selectedOfferId = foundMem.selectedOffer || foundMem.enquiryId?.selectedOffer || '';
+                            const inquiryFor = foundMem.interest || foundMem.enquiryId?.inquiryFor || '';
+
+                            // If member has a target plan from inquiry, pre-select it
+                            let matchedPlanId = prev.membershipPlanId;
+                            let planPrice = prev.originalPrice;
+                            if (inquiryFor && memberships.length > 0) {
+                                const foundPlan = memberships.find(p => 
+                                    p.name?.toLowerCase() === inquiryFor.toLowerCase() || 
+                                    p.planName?.toLowerCase() === inquiryFor.toLowerCase() ||
+                                    (inquiryFor.toLowerCase().includes((p.name || '').toLowerCase()) && (p.name || '').length > 2)
+                                );
+                                if (foundPlan) {
+                                    matchedPlanId = foundPlan._id;
+                                    planPrice = foundPlan.price || 0;
+                                    updated.membershipPlanId = matchedPlanId;
+                                    updated.originalPrice = planPrice;
+                                }
+                            }
+
+                            const allCoupons = (gymSettings?.couponOffers || []).filter(c => c.isActive);
+                            const matchedCoupon = allCoupons.find(c => 
+                                (selectedOfferId && (c._id === selectedOfferId || c.code === selectedOfferId)) ||
+                                (c.title && offerDetails && c.title.toLowerCase() === offerDetails.toLowerCase()) ||
+                                (c.code && offerDetails && c.code.toLowerCase() === offerDetails.toLowerCase())
+                            );
+
+                            if (matchedCoupon) {
+                                let discountAmt = 0;
+                                const currentPrice = planPrice || (memberships.find(p => p._id === matchedPlanId)?.price || 0);
+                                if (matchedCoupon.discountValue > 0) {
+                                    if (matchedCoupon.discountType === 'Percentage') {
+                                        discountAmt = currentPrice > 0 ? Math.round((currentPrice * matchedCoupon.discountValue) / 100) : 0;
+                                    } else {
+                                        discountAmt = matchedCoupon.discountValue || 0;
+                                    }
+                                } else if (offerAmount > 0) {
+                                    discountAmt = offerAmount;
+                                }
+
+                                let descDesc = matchedCoupon.title;
+                                let parts = [];
+                                if (matchedCoupon.discountValue > 0) {
+                                    parts.push(matchedCoupon.discountType === 'Percentage' ? `${matchedCoupon.discountValue}% OFF` : `₹${matchedCoupon.discountValue} OFF`);
+                                }
+                                if (matchedCoupon.bonusDays > 0) parts.push(`+${matchedCoupon.bonusDays} Free Days`);
+                                if (parts.length > 0) descDesc += ` (${parts.join(' ')})`;
+
+                                setAppliedCoupon({
+                                    code: matchedCoupon.code,
+                                    description: descDesc,
+                                    discountAmount: discountAmt
+                                });
+                                setCouponCode(matchedCoupon.code);
+
+                                updated.discount = discountAmt;
+                                updated.bonusDays = matchedCoupon.bonusDays || 0;
+                                if (currentPrice > 0) {
+                                    updated.amountPaid = Math.max(0, currentPrice - discountAmt);
+                                }
+                                if (hasRealNegotiation && offerDetails && !prev.notes) {
+                                    updated.notes = `Negotiated Lead Offer: ${offerDetails}`;
+                                }
+                                toast.success(`Coupon Offer "${matchedCoupon.title}" auto-applied for ${foundMem.firstName}!`);
+                            } else if (hasRealNegotiation) {
+                                setAppliedCoupon({
+                                    code: 'LEAD_OFFER',
+                                    description: offerDetails || 'Negotiated Lead Offer',
+                                    discountAmount: offerAmount
+                                });
+                                setCouponCode('LEAD_OFFER');
+                                updated.discount = offerAmount;
+                                if (planPrice > 0) {
+                                    updated.amountPaid = Math.max(0, planPrice - offerAmount);
+                                }
+                                if (offerDetails && !prev.notes) {
+                                    updated.notes = `Negotiated Lead Offer: ${offerDetails}`;
+                                }
+                                toast.info(`Found negotiated offer for ${foundMem.firstName}: ₹${offerAmount} (${offerDetails || 'Discount'})`);
+                            } else {
+                                setAppliedCoupon(null);
+                                setCouponCode('');
+                                updated.discount = 0;
+                                if (planPrice > 0) {
+                                    updated.amountPaid = planPrice;
+                                }
+                            }
+                        }
                     }
                 } else if (name === 'membershipPlanId') {
                     const plan = memberships.find(p => p._id === val);
                     if (plan) {
                         const price = plan.price || 0;
-                        const disc = Number(prev.discount) || 0;
                         updated.originalPrice = price;
-                        updated.amountPaid = Math.max(0, price - disc);
+
+                        // Recalculate discount if coupon is percentage
+                        let discountAmt = Number(prev.discount) || 0;
+                        if (appliedCoupon && appliedCoupon.code !== 'LEAD_OFFER') {
+                            const currentCoupon = (gymSettings?.couponOffers || []).find(c => c.code === appliedCoupon.code);
+                            if (currentCoupon && currentCoupon.discountType === 'Percentage' && currentCoupon.discountValue > 0) {
+                                discountAmt = Math.round((price * currentCoupon.discountValue) / 100);
+                                updated.discount = discountAmt;
+                                setAppliedCoupon(ac => ac ? ({ ...ac, discountAmount: discountAmt }) : null);
+                            }
+                        }
+                        updated.amountPaid = Math.max(0, price - discountAmt);
                     }
                 }
                 return updated;
@@ -528,7 +847,7 @@ export default function AssignMembershipForm() {
                                             activeEnd.setDate(activeEnd.getDate() + 1);
                                             setFormData(prev => ({
                                                 ...prev,
-                                                planStartDate: activeEnd.toISOString().split('T')[0]
+                                                planStartDate: toInputDateFormat(activeEnd)
                                             }));
                                         } else {
                                             setEditMode(true);
@@ -536,8 +855,8 @@ export default function AssignMembershipForm() {
                                             setFormData(prev => ({
                                                 ...prev,
                                                 membershipPlanId: selectedMemberActiveMem.membershipPlanId?._id || selectedMemberActiveMem.membershipPlanId || '',
-                                                planStartDate: new Date(selectedMemberActiveMem.startDate).toISOString().split('T')[0],
-                                                planEndDate: new Date(selectedMemberActiveMem.endDate).toISOString().split('T')[0]
+                                                planStartDate: toInputDateFormat(selectedMemberActiveMem.startDate),
+                                                planEndDate: toInputDateFormat(selectedMemberActiveMem.endDate)
                                             }));
                                         }
                                     }}
@@ -547,6 +866,58 @@ export default function AssignMembershipForm() {
                                 </button>
                             </div>
                         )}
+
+                        {/* Negotiated Lead Offer Banner (Only shown if actually negotiated / offer exists) */}
+                        {(() => {
+                            const activeLeadOfferAmount = Number(selectedMember?.offerAmount || location.state?.leadOffer?.offerAmount || 0);
+                            const activeLeadOfferDetails = (selectedMember?.offerDetails || location.state?.leadOffer?.offerDetails || '').trim();
+                            const hasValidNegotiatedOffer = activeLeadOfferAmount > 0 || (activeLeadOfferDetails !== '' && !['none', 'discount'].includes(activeLeadOfferDetails.toLowerCase()));
+
+                            if (!hasValidNegotiatedOffer) return null;
+
+                            return (
+                                <div className="p-4 bg-emerald-50/95 border border-emerald-300/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0 font-bold">
+                                            <FiTag size={20} />
+                                        </div>
+                                        <div>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-[10.5px] font-black uppercase tracking-wider bg-emerald-200/90 text-emerald-900 px-2.5 py-0.5 rounded-md">
+                                                    Negotiated Lead Offer
+                                                </span>
+                                                <span className="text-xs font-bold text-slate-900">
+                                                    {activeLeadOfferDetails || 'Special Discount'}
+                                                </span>
+                                            </div>
+                                            <p className="text-[11.5px] text-slate-600 mt-1">
+                                                Discount Offered: <strong className="text-emerald-700 font-extrabold">₹{activeLeadOfferAmount}</strong>
+                                                {(selectedMember?.interest || location.state?.leadOffer?.inquiryFor) ? ` • Target: ${selectedMember?.interest || location.state?.leadOffer?.inquiryFor}` : ''}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const leadAmt = activeLeadOfferAmount;
+                                            const leadDesc = activeLeadOfferDetails || 'Negotiated Lead Offer';
+                                            const pPrice = selectedPlan ? (selectedPlan.price || 0) : (formData.originalPrice || 0);
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                discount: leadAmt,
+                                                amountPaid: Math.max(0, (prev.originalPrice || pPrice) - leadAmt),
+                                                notes: prev.notes ? (prev.notes.includes(leadDesc) ? prev.notes : `${prev.notes} | ${leadDesc}`) : leadDesc
+                                            }));
+                                            toast.success(`Applied Lead Offer discount of ₹${leadAmt}!`);
+                                        }}
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0 flex items-center gap-1.5"
+                                    >
+                                        <FiCheckCircle size={14} />
+                                        <span>Apply Lead Offer</span>
+                                    </button>
+                                </div>
+                            );
+                        })()}
 
                         {/* SECTION 1: MEMBERSHIP ASSIGNMENT DETAILS */}
                         <FormSection title="Assignment Details" icon={<FiActivity />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -610,51 +981,64 @@ export default function AssignMembershipForm() {
                                     )}
                                 </div>
 
-                                {!appliedCoupon ? (
-                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                                        {availableCoupons.length > 0 && (
-                                            <select
-                                                onChange={(e) => {
-                                                    if (e.target.value) handleApplyCoupon(e.target.value);
-                                                }}
-                                                className="h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410] cursor-pointer"
-                                            >
-                                                <option value="">-- Choose Gym Offer --</option>
-                                                {availableCoupons.map((c, i) => (
-                                                    <option key={i} value={c.code}>
-                                                        {c.code} - {c.title} 
-                                                        ({c.discountValue > 0 ? (c.discountType === 'Percentage' ? `${c.discountValue}% OFF ` : `₹${c.discountValue} OFF `) : ''}
-                                                        {c.bonusDays > 0 ? `+${c.bonusDays} Free Days` : ''})
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        )}
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                    {availableCoupons.length > 0 && (
+                                        <select
+                                            value={appliedCoupon ? appliedCoupon.code : (couponCode || '')}
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    handleApplyCoupon(e.target.value);
+                                                } else {
+                                                    handleRemoveCoupon();
+                                                }
+                                            }}
+                                            className="h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410] cursor-pointer"
+                                        >
+                                            <option value="">-- Choose Gym Offer --</option>
+                                            {availableCoupons.map((c, i) => (
+                                                <option key={i} value={c.code}>
+                                                    {c.code} - {c.title} 
+                                                    ({c.discountValue > 0 ? (c.discountType === 'Percentage' ? `${c.discountValue}% OFF ` : `₹${c.discountValue} OFF `) : ''}
+                                                    {c.bonusDays > 0 ? `+${c.bonusDays} Free Days` : ''})
+                                                </option>
+                                            ))}
+                                            {appliedCoupon && !availableCoupons.some(c => c.code === appliedCoupon.code) && (
+                                                <option value={appliedCoupon.code}>
+                                                    {appliedCoupon.code} - {appliedCoupon.description} (₹{appliedCoupon.discountAmount} OFF)
+                                                </option>
+                                            )}
+                                        </select>
+                                    )}
 
-                                        <div className="flex-1 flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                value={couponCode}
-                                                onChange={(e) => setCouponCode(e.target.value)}
-                                                placeholder="Enter Coupon / Referral (e.g. MEM-0001)"
-                                                className="flex-1 h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410] uppercase tracking-wider"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => handleApplyCoupon()}
-                                                className="px-4 h-10 bg-[#CA0410] hover:bg-[#a8030d] text-white font-extrabold text-xs rounded-xl transition-colors shadow-2xs cursor-pointer"
-                                            >
-                                                Apply
-                                            </button>
-                                        </div>
+                                    <div className="flex-1 flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={couponCode}
+                                            onChange={(e) => setCouponCode(e.target.value)}
+                                            placeholder="Enter Coupon / Referral (e.g. MEM-0001)"
+                                            className="flex-1 h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410] uppercase tracking-wider"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleApplyCoupon()}
+                                            className="px-4 h-10 bg-[#CA0410] hover:bg-[#a8030d] text-white font-extrabold text-xs rounded-xl transition-colors shadow-2xs cursor-pointer"
+                                        >
+                                            Apply
+                                        </button>
                                     </div>
-                                ) : (
-                                    <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-rose-200">
+                                </div>
+
+                                {appliedCoupon && (
+                                    <div className="flex items-center justify-between bg-emerald-50/80 p-3 rounded-xl border border-emerald-200">
                                         <div>
-                                            <div className="text-xs font-extrabold text-slate-900 font-mono">
-                                                {appliedCoupon.code} - <span className="text-[#CA0410]">{appliedCoupon.description}</span>
+                                            <div className="text-xs font-extrabold text-slate-900 font-mono flex items-center gap-2">
+                                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[10.5px] font-black uppercase">
+                                                    {appliedCoupon.code}
+                                                </span>
+                                                <span className="text-emerald-900 font-sans font-bold">{appliedCoupon.description}</span>
                                             </div>
-                                            <div className="text-[11px] text-slate-500">
-                                                Discount of ₹{appliedCoupon.discountAmount} applied.
+                                            <div className="text-[11px] text-slate-600 mt-0.5">
+                                                Discount of <strong className="text-emerald-700 font-extrabold">₹{appliedCoupon.discountAmount}</strong> applied to membership.
                                             </div>
                                         </div>
                                         <button
@@ -671,21 +1055,26 @@ export default function AssignMembershipForm() {
                         </FormSection>
 
                         {/* SECTION: TRAINER & SALES ATTRIBUTION */}
-                        <FormSection title="Trainer, Sales & Reference Attribution" icon={<FiAward />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="col-span-1">
-                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Assigned Trainer</label>
-                                <select
-                                    name="trainerId"
-                                    value={formData.trainerId}
-                                    onChange={handleChange}
-                                    className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410]"
-                                >
-                                    <option value="">-- Select Trainer --</option>
-                                    {staffList.map(s => (
-                                        <option key={s._id} value={s._id}>{s.name} ({s.role || 'Staff'})</option>
-                                    ))}
-                                </select>
-                            </div>
+                        <FormSection title="Trainer, Sales & Reference Attribution" icon={<FiAward />} className={`grid grid-cols-1 sm:grid-cols-2 ${showTrainerField ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
+                            {showTrainerField && (
+                                <div className="col-span-1">
+                                    <label className=" text-xs font-bold text-slate-600 mb-1.5 flex items-center justify-between">
+                                        <span>Assigned Trainer</span>
+                                        <span className="text-[10px] text-amber-600 font-extrabold uppercase bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">PT Required</span>
+                                    </label>
+                                    <select
+                                        name="trainerId"
+                                        value={formData.trainerId}
+                                        onChange={handleChange}
+                                        className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410]"
+                                    >
+                                        <option value="">-- Select Trainer --</option>
+                                        {staffList.map(s => (
+                                            <option key={s._id} value={s._id}>{s.name} ({s.role || 'Staff'})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             <div className="col-span-1">
                                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Referred By / Sales Person (Staff)</label>
@@ -719,7 +1108,11 @@ export default function AssignMembershipForm() {
                                         type="checkbox" 
                                         name="isPTConversion" 
                                         checked={formData.isPTConversion} 
-                                        onChange={(e) => setFormData(prev => ({ ...prev, isPTConversion: e.target.checked }))} 
+                                        onChange={(e) => setFormData(prev => ({ 
+                                            ...prev, 
+                                            isPTConversion: e.target.checked,
+                                            trainerId: (!e.target.checked && !isPTPlan) ? '' : prev.trainerId
+                                        }))} 
                                         className="w-4 h-4 text-[#CA0410] rounded focus:ring-[#CA0410]" 
                                     />
                                     <span className="text-xs font-extrabold text-slate-700">PT Conversion</span>

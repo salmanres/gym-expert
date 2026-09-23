@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Member = require('../models/Member');
 const Transaction = require('../models/Transaction');
 const Enquiry = require('../models/Enquiry');
@@ -28,6 +29,48 @@ const createMember = async (req, res) => {
         delete memberData.referralBonusGranted;
         delete memberData.otp;
         delete memberData.otpExpiry;
+
+        // Safely validate and resolve referredBy and referredByStaff
+        if (memberData.referredBy) {
+            const rawRef = memberData.referredBy.toString().trim();
+            if (mongoose.Types.ObjectId.isValid(rawRef)) {
+                memberData.referredBy = rawRef;
+            } else {
+                delete memberData.referredBy;
+                memberData.referredByName = rawRef;
+                const phoneMatch = rawRef.match(/\d{10}/);
+                const query = { gymId };
+                if (phoneMatch) {
+                    query.contactNumber = phoneMatch[0];
+                } else {
+                    query.$or = [
+                        { memberId: rawRef },
+                        { firstName: new RegExp('^' + rawRef.split(' ')[0], 'i') }
+                    ];
+                }
+                const foundMember = await Member.findOne(query);
+                if (foundMember) {
+                    memberData.referredBy = foundMember._id;
+                }
+            }
+        }
+
+        if (memberData.referredByStaff) {
+            const rawStaffRef = memberData.referredByStaff.toString().trim();
+            if (mongoose.Types.ObjectId.isValid(rawStaffRef)) {
+                memberData.referredByStaff = rawStaffRef;
+            } else {
+                delete memberData.referredByStaff;
+                memberData.referredByStaffName = rawStaffRef;
+                const foundStaff = await User.findOne({
+                    gymId,
+                    name: new RegExp(rawStaffRef.split(' ')[0], 'i')
+                });
+                if (foundStaff) {
+                    memberData.referredByStaff = foundStaff._id;
+                }
+            }
+        }
 
         // Mobile number validation
         if (!memberData.contactNumber || !/^[6-9]\d{9}$/.test(memberData.contactNumber)) {
@@ -161,7 +204,17 @@ const getMembers = async (req, res) => {
         const members = await Member.find({ gymId })
             .populate('referredBy', 'firstName lastName memberId contactNumber')
             .populate('referredByStaff', 'name email role')
+            .populate('enquiryId', 'offerAmount offerDetails selectedOffer inquiryFor source')
             .sort({ createdAt: -1 });
+
+        for (let mem of members) {
+            const txCount = await Transaction.countDocuments({ memberId: mem._id, gymId });
+            if (txCount === 0 && mem.walletBalance > 0 && !mem.referralBonusGranted) {
+                mem.walletBalance = 0;
+                await Member.updateOne({ _id: mem._id }, { $set: { walletBalance: 0 } });
+            }
+        }
+
         res.status(200).json(members);
     } catch (error) {
         console.error('Error fetching members:', error);
@@ -180,7 +233,8 @@ const getMemberById = async (req, res) => {
         })
             .populate('gymId')
             .populate('referredBy', 'firstName lastName memberId contactNumber')
-            .populate('referredByStaff', 'name email role');
+            .populate('referredByStaff', 'name email role')
+            .populate('enquiryId', 'offerAmount offerDetails selectedOffer inquiryFor source');
 
         if (!member) {
             return res.status(404).json({ message: 'Member not found' });
@@ -261,6 +315,111 @@ const getTransactions = async (req, res) => {
     }
 };
 
+// @desc    Update a transaction
+// @route   PUT /api/members/transactions/:id
+// @access  Private
+const updateTransaction = async (req, res) => {
+    try {
+        const transaction = await Transaction.findById(req.params.id);
+
+        if (!transaction) {
+            return res.status(404).json({ message: 'Transaction not found' });
+        }
+
+        // Ensure transaction belongs to logged-in gym
+        if (transaction.gymId.toString() !== req.user.gymId.toString()) {
+            return res.status(401).json({ message: 'Not authorized' });
+        }
+
+        const newAmountPaid = req.body.amountPaid !== undefined ? Number(req.body.amountPaid) : transaction.amountPaid;
+
+        transaction.amountPaid = newAmountPaid;
+        transaction.cashAmount = newAmountPaid;
+        if (req.body.paymentMode) transaction.paymentMode = req.body.paymentMode;
+        if (req.body.paymentDate) transaction.paymentDate = new Date(req.body.paymentDate);
+        if (req.body.notes !== undefined) transaction.notes = req.body.notes;
+        if (req.body.transactionId !== undefined) transaction.transactionId = req.body.transactionId;
+
+        await transaction.save();
+
+        // Find associated membership
+        let membership = null;
+        if (transaction.membershipId) {
+            membership = await MemberMembership.findOne({ _id: transaction.membershipId, gymId: req.user.gymId });
+        }
+        if (!membership) {
+            let membershipQuery = {
+                gymId: req.user.gymId,
+                memberId: transaction.memberId,
+                membershipStatus: { $in: ['Active', 'Scheduled', 'Expired', 'Frozen'] }
+            };
+            if (transaction.planId) {
+                membershipQuery.membershipPlanId = transaction.planId;
+            }
+            membership = await MemberMembership.findOne(membershipQuery).sort({ createdAt: -1 });
+        }
+
+        if (membership) {
+            const allTxns = await Transaction.find({
+                gymId: req.user.gymId,
+                $or: [
+                    { membershipId: membership._id },
+                    { memberId: membership.memberId, planId: membership.membershipPlanId }
+                ]
+            });
+
+            const totalPaidFromTxns = allTxns.reduce((sum, t) => sum + (Number(t.amountPaid) || 0), 0);
+            const realFinalPrice = Number(membership.finalPrice || membership.originalPrice || 0);
+
+            membership.paidAmount = totalPaidFromTxns;
+            membership.totalCollected = totalPaidFromTxns;
+            membership.balanceAmount = Math.max(0, realFinalPrice - totalPaidFromTxns);
+
+            let paymentStatus = "Pending";
+            if (totalPaidFromTxns >= realFinalPrice && realFinalPrice > 0) paymentStatus = "Paid";
+            else if (totalPaidFromTxns > 0) paymentStatus = "Partial";
+            if (realFinalPrice === 0) paymentStatus = "Paid";
+
+            membership.paymentStatus = paymentStatus;
+
+            if (paymentStatus === 'Paid') {
+                membership.paidUntilDate = membership.endDate;
+            } else if (paymentStatus === 'Partial' && realFinalPrice > 0 && membership.startDate && membership.endDate) {
+                const startMs = new Date(membership.startDate).getTime();
+                const endMs = new Date(membership.endDate).getTime();
+                const totalMs = endMs - startMs;
+                const paidRatio = totalPaidFromTxns / realFinalPrice;
+                membership.paidUntilDate = new Date(startMs + (totalMs * paidRatio));
+            } else if (paymentStatus === 'Pending') {
+                membership.paidUntilDate = membership.startDate;
+            }
+
+            await membership.save();
+
+            // Also update Member record
+            const member = await Member.findById(transaction.memberId);
+            if (member) {
+                member.paymentStatus = paymentStatus;
+                await member.save();
+            }
+        }
+
+        // Broadcast real-time Socket notification
+        notifyGym(req.user.gymId, {
+            title: 'Payment Transaction Updated',
+            description: `Payment transaction was updated to ₹${newAmountPaid} (${transaction.paymentMode}).`,
+            type: 'PAYMENT',
+            targetId: transaction.memberId,
+            link: '/dashboard/owner/finance'
+        });
+
+        res.status(200).json({ message: 'Transaction updated successfully', transaction });
+    } catch (error) {
+        console.error('Error updating transaction:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 // @desc    Delete a transaction
 // @route   DELETE /api/members/transactions/:id
 // @access  Private
@@ -279,54 +438,97 @@ const deleteTransaction = async (req, res) => {
 
         const amountPaid = transaction.amountPaid || 0;
         const walletAmount = transaction.walletAmount || transaction.walletAmountUsed || 0;
+        const memberId = transaction.memberId;
+        const membershipId = transaction.membershipId;
+        const planId = transaction.planId;
 
-        // Find the associated MemberMembership
-        let membershipQuery = {
-            memberId: transaction.memberId,
-            membershipStatus: { $in: ['Active', 'Scheduled', 'Expired'] }
-        };
-        if (transaction.planId) {
-            membershipQuery.membershipPlanId = transaction.planId;
+        // Delete the transaction record first
+        await transaction.deleteOne();
+
+        // Find associated MemberMembership
+        let membership = null;
+        if (membershipId) {
+            membership = await MemberMembership.findOne({ _id: membershipId, gymId: req.user.gymId });
+        }
+        if (!membership) {
+            let membershipQuery = {
+                gymId: req.user.gymId,
+                memberId: memberId,
+                membershipStatus: { $in: ['Active', 'Scheduled', 'Expired', 'Frozen'] }
+            };
+            if (planId) {
+                membershipQuery.membershipPlanId = planId;
+            }
+            membership = await MemberMembership.findOne(membershipQuery).sort({ createdAt: -1 });
         }
 
-        const membership = await MemberMembership.findOne(membershipQuery).sort({ createdAt: -1 });
-
         if (membership) {
-            membership.paidAmount = Math.max(0, (membership.paidAmount || 0) - amountPaid);
-            membership.balanceAmount = Math.max(0, membership.finalPrice - membership.paidAmount);
+            const remainingTxns = await Transaction.find({
+                gymId: req.user.gymId,
+                $or: [
+                    { membershipId: membership._id },
+                    { memberId: membership.memberId, planId: membership.membershipPlanId }
+                ]
+            });
+
+            const totalPaidFromTxns = remainingTxns.reduce((sum, t) => sum + (Number(t.amountPaid) || 0), 0);
+            const realFinalPrice = Number(membership.finalPrice || membership.originalPrice || 0);
+
+            membership.paidAmount = totalPaidFromTxns;
+            membership.totalCollected = totalPaidFromTxns;
+            membership.balanceAmount = Math.max(0, realFinalPrice - totalPaidFromTxns);
 
             let paymentStatus = "Pending";
-            if (membership.paidAmount >= membership.finalPrice && membership.finalPrice > 0) paymentStatus = "Paid";
-            else if (membership.paidAmount > 0) paymentStatus = "Partial";
-            if (membership.finalPrice === 0) paymentStatus = "Paid";
+            if (totalPaidFromTxns >= realFinalPrice && realFinalPrice > 0) paymentStatus = "Paid";
+            else if (totalPaidFromTxns > 0) paymentStatus = "Partial";
+            if (realFinalPrice === 0) paymentStatus = "Paid";
 
             membership.paymentStatus = paymentStatus;
 
-            if (paymentStatus === 'Paid') {
+            if (totalPaidFromTxns === 0 && membership.membershipStatus !== 'Frozen' && membership.membershipStatus !== 'Cancelled') {
+                membership.membershipStatus = 'Pending';
+                membership.paidUntilDate = membership.startDate;
+            } else if (paymentStatus === 'Paid') {
                 membership.paidUntilDate = membership.endDate;
-            } else if (paymentStatus === 'Partial' && membership.finalPrice > 0) {
+            } else if (paymentStatus === 'Partial' && realFinalPrice > 0 && membership.startDate && membership.endDate) {
                 const startMs = new Date(membership.startDate).getTime();
                 const endMs = new Date(membership.endDate).getTime();
                 const totalMs = endMs - startMs;
-                const paidRatio = membership.paidAmount / membership.finalPrice;
+                const paidRatio = totalPaidFromTxns / realFinalPrice;
                 membership.paidUntilDate = new Date(startMs + (totalMs * paidRatio));
             } else if (paymentStatus === 'Pending') {
-                membership.paidUntilDate = new Date(membership.startDate);
+                membership.paidUntilDate = membership.startDate;
             }
 
             await membership.save();
-        }
 
-        // Refund wallet balance if applicable
-        if (walletAmount > 0) {
-            const member = await Member.findById(transaction.memberId);
+            // Also update Member record
+            const member = await Member.findById(memberId);
             if (member) {
-                member.walletBalance = (member.walletBalance || 0) + walletAmount;
+                const otherTxnsCount = await Transaction.countDocuments({ memberId: member._id, gymId: req.user.gymId });
+                if (otherTxnsCount === 0) {
+                    member.walletBalance = 0;
+                    member.status = 'Inactive';
+                } else if (walletAmount > 0) {
+                    member.walletBalance = (member.walletBalance || 0) + walletAmount;
+                }
+                member.paymentStatus = paymentStatus;
+                if (totalPaidFromTxns === 0 && otherTxnsCount === 0) {
+                    member.status = 'Inactive';
+                }
                 await member.save();
             }
         }
 
-        await transaction.deleteOne();
+        // Broadcast real-time Socket notification
+        notifyGym(req.user.gymId, {
+            title: 'Payment Transaction Deleted',
+            description: `Payment transaction of ₹${amountPaid} was deleted and member balance was adjusted.`,
+            type: 'PAYMENT',
+            targetId: memberId,
+            link: '/dashboard/owner/finance'
+        });
+
         res.status(200).json({ message: 'Transaction deleted and payments reverted', id: req.params.id });
     } catch (error) {
         console.error('Error deleting transaction:', error);
@@ -365,10 +567,50 @@ const updateMember = async (req, res) => {
         delete updateData.enquiryId;
         delete updateData.createdAt;
         delete updateData.updatedAt;
-        delete updateData.walletBalance;
-        delete updateData.referralBonusGranted;
         delete updateData.otp;
         delete updateData.otpExpiry;
+
+        // Safely validate and resolve referredBy and referredByStaff
+        if (updateData.referredBy) {
+            const rawRef = updateData.referredBy.toString().trim();
+            if (mongoose.Types.ObjectId.isValid(rawRef)) {
+                updateData.referredBy = rawRef;
+            } else {
+                delete updateData.referredBy;
+                updateData.referredByName = rawRef;
+                const phoneMatch = rawRef.match(/\d{10}/);
+                const query = { gymId: req.user.gymId };
+                if (phoneMatch) {
+                    query.contactNumber = phoneMatch[0];
+                } else {
+                    query.$or = [
+                        { memberId: rawRef },
+                        { firstName: new RegExp('^' + rawRef.split(' ')[0], 'i') }
+                    ];
+                }
+                const foundMember = await Member.findOne(query);
+                if (foundMember) {
+                    updateData.referredBy = foundMember._id;
+                }
+            }
+        }
+
+        if (updateData.referredByStaff) {
+            const rawStaffRef = updateData.referredByStaff.toString().trim();
+            if (mongoose.Types.ObjectId.isValid(rawStaffRef)) {
+                updateData.referredByStaff = rawStaffRef;
+            } else {
+                delete updateData.referredByStaff;
+                updateData.referredByStaffName = rawStaffRef;
+                const foundStaff = await User.findOne({
+                    gymId: req.user.gymId,
+                    name: new RegExp(rawStaffRef.split(' ')[0], 'i')
+                });
+                if (foundStaff) {
+                    updateData.referredByStaff = foundStaff._id;
+                }
+            }
+        }
 
         if (updateData.contactNumber) {
             if (!/^[6-9]\d{9}$/.test(updateData.contactNumber)) {
@@ -509,6 +751,15 @@ const updateMember = async (req, res) => {
             }
         }
 
+        // Broadcast real-time Socket notification
+        notifyGym(req.user.gymId, {
+            title: `Member Updated: ${updatedMember.firstName} ${updatedMember.lastName || ''}`.trim(),
+            description: `Profile & membership information updated for ID: ${updatedMember.memberId || 'MEM'}.`,
+            type: 'MEMBER',
+            targetId: updatedMember._id,
+            link: `/dashboard/owner/members/view/${updatedMember._id}`
+        });
+
         res.status(200).json(updatedMember);
     } catch (error) {
         console.error("Error updating member:", error);
@@ -532,7 +783,21 @@ const deleteMember = async (req, res) => {
             return res.status(401).json({ message: 'Not authorized' });
         }
 
-        await member.remove();
+        const gymId = req.user.gymId;
+        const memberName = `${member.firstName} ${member.lastName || ''}`.trim();
+        const memberCustomId = member.memberId || 'MEM';
+
+        await member.deleteOne();
+
+        // Broadcast real-time Socket notification
+        notifyGym(gymId, {
+            title: `Member Removed: ${memberName}`,
+            description: `${memberName} (${memberCustomId}) was deleted from the gym directory.`,
+            type: 'MEMBER',
+            targetId: req.params.id,
+            link: '/dashboard/owner/members'
+        });
+
         res.status(200).json({ id: req.params.id });
     } catch (error) {
         console.error('Error deleting member:', error);
@@ -546,6 +811,7 @@ module.exports = {
     getMemberById,
     getTransactions,
     getTransactionById,
+    updateTransaction,
     deleteTransaction,
     updateMember,
     deleteMember

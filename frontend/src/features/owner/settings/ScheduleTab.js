@@ -1,6 +1,7 @@
 import React from 'react';
 import { FiCalendar, FiClock, FiInfo, FiPlus, FiTrash2 } from 'react-icons/fi';
 import Input from '../../../components/form/Input';
+import DatePicker from '../../../components/form/DatePicker';
 
 export default function ScheduleTab({ 
     settings, 
@@ -107,11 +108,9 @@ export default function ScheduleTab({
                             <div key={i} className="flex flex-col sm:flex-row items-start sm:items-end gap-3 p-4 bg-rose-50/20 rounded-xl border border-rose-200/60 relative">
                                 <div className="w-full sm:w-1/3">
                                     <label className="block text-xs font-bold text-slate-700 mb-1">Holiday Date</label>
-                                    <input 
-                                        type="date"
+                                    <DatePicker 
                                         value={h.date ? new Date(h.date).toISOString().split('T')[0] : ''}
                                         onChange={(e) => updateHoliday(i, 'date', e.target.value)}
-                                        className="w-full h-9 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-[#CA0410]/20"
                                     />
                                 </div>
                                 <div className="w-full sm:w-2/3 flex items-end gap-2.5">

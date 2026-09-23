@@ -21,6 +21,25 @@ exports.login = async (req, res) => {
             .populate('branchId');
 
         if (user && (await user.comparePassword(password))) {
+            if (user.status === 'Suspended') {
+                return res.status(403).json({ message: 'Your account has been suspended. Please contact the Gym Owner.' });
+            }
+            if (user.status === 'Inactive') {
+                return res.status(403).json({ message: 'Your account is inactive. Please contact the Gym Owner.' });
+            }
+
+            if (!user.gymId) {
+                const Gym = require('../models/Gym');
+                let existingGym = await Gym.findOne({ ownerId: user._id });
+                if (!existingGym) {
+                    existingGym = await Gym.findOne();
+                }
+                if (existingGym) {
+                    user.gymId = existingGym;
+                    await User.findByIdAndUpdate(user._id, { gymId: existingGym._id }).catch(() => {});
+                }
+            }
+
             res.json({
                 _id: user._id,
                 name: user.name,

@@ -4,6 +4,7 @@ const Attendance = require('../models/Attendance');
 const MemberMembership = require('../models/MemberMembership');
 const Member = require('../models/Member');
 const User = require('../models/User');
+const Transaction = require('../models/Transaction');
 
 // Utility to log activity
 exports.logActivity = async ({ gymId, title, description, type, targetId, link }) => {
@@ -33,57 +34,89 @@ exports.getActivityLogs = async (req, res) => {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        // 1. Fetch saved ActivityLog items from last 30 days
-        const savedLogs = await ActivityLog.find({ 
-            gymId,
-            createdAt: { $gte: thirtyDaysAgo }
-        })
-            .sort({ createdAt: -1 })
-            .limit(100)
-            .lean();
+        // Parallel Fetch for complete 30-day activity aggregation
+        const [
+            savedLogs,
+            recentMembers,
+            recentEnquiries,
+            recentAttendance,
+            recentMemberships,
+            recentTransactions,
+            recentStaff
+        ] = await Promise.all([
+            // 1. Fetch saved ActivityLog items from last 30 days
+            ActivityLog.find({ 
+                gymId,
+                createdAt: { $gte: thirtyDaysAgo }
+            }).sort({ createdAt: -1 }).limit(300).lean(),
 
-        // 2. Fetch recent Enquiries from last 30 days
-        const recentEnquiries = await Enquiry.find({ 
-            gymId,
-            updatedAt: { $gte: thirtyDaysAgo }
-        })
-            .sort({ updatedAt: -1 })
-            .limit(20)
-            .lean();
+            // 2. Fetch recent Member registrations / updates
+            Member.find({
+                gymId,
+                createdAt: { $gte: thirtyDaysAgo }
+            }).sort({ createdAt: -1 }).limit(30).lean(),
 
-        // 3. Fetch recent Attendance from last 30 days
-        const recentAttendance = await Attendance.find({ 
-            gymId,
-            createdAt: { $gte: thirtyDaysAgo }
-        })
-            .sort({ checkInTime: -1, createdAt: -1 })
-            .limit(30)
-            .lean();
+            // 3. Fetch recent Enquiries / Leads
+            Enquiry.find({ 
+                gymId,
+                updatedAt: { $gte: thirtyDaysAgo }
+            }).sort({ updatedAt: -1 }).limit(30).lean(),
+
+            // 4. Fetch recent Attendance
+            Attendance.find({ 
+                gymId,
+                createdAt: { $gte: thirtyDaysAgo }
+            }).sort({ checkInTime: -1, createdAt: -1 }).limit(40).lean(),
+
+            // 5. Fetch recent Memberships / Subscriptions
+            MemberMembership.find({ 
+                gymId,
+                createdAt: { $gte: thirtyDaysAgo }
+            }).sort({ createdAt: -1 }).limit(30)
+              .populate({ path: 'memberId', select: 'firstName lastName memberId', strictPopulate: false })
+              .populate({ path: 'membershipPlanId', select: 'name', strictPopulate: false })
+              .lean(),
+
+            // 6. Fetch recent Fee Transactions
+            Transaction.find({
+                gymId,
+                createdAt: { $gte: thirtyDaysAgo }
+            }).sort({ createdAt: -1 }).limit(30)
+              .populate({ path: 'memberId', select: 'firstName lastName memberId', strictPopulate: false })
+              .lean(),
+
+            // 7. Fetch recent Staff / Trainers
+            User.find({
+                gymId,
+                role: { $in: ['STAFF', 'TRAINER', 'ADMIN', 'BRANCH_MANAGER'] },
+                createdAt: { $gte: thirtyDaysAgo }
+            }).sort({ createdAt: -1 }).limit(20).lean()
+        ]);
 
         // Populate attendance user names dynamically from Member / User / Enquiry collections
         const attUserIds = recentAttendance.map(att => att.userId).filter(Boolean);
-        const [membersList, usersList, enquiriesList] = await Promise.all([
+        const [attMembers, attUsers, attEnquiries] = await Promise.all([
             Member.find({ _id: { $in: attUserIds } }).select('firstName lastName memberId').lean(),
             User.find({ _id: { $in: attUserIds } }).select('name firstName lastName role').lean(),
             Enquiry.find({ _id: { $in: attUserIds } }).select('firstName lastName').lean()
         ]);
 
         const personMap = {};
-        membersList.forEach(m => {
+        attMembers.forEach(m => {
             personMap[m._id.toString()] = {
                 name: `${m.firstName} ${m.lastName || ''}`.trim(),
                 code: m.memberId ? `#${m.memberId}` : '',
                 roleType: 'Member'
             };
         });
-        usersList.forEach(u => {
+        attUsers.forEach(u => {
             personMap[u._id.toString()] = {
                 name: u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
                 code: u.role ? u.role.replace('_', ' ') : 'Staff',
                 roleType: 'Staff'
             };
         });
-        enquiriesList.forEach(e => {
+        attEnquiries.forEach(e => {
             personMap[e._id.toString()] = {
                 name: `${e.firstName} ${e.lastName || ''}`.trim(),
                 code: 'Trial',
@@ -91,39 +124,39 @@ exports.getActivityLogs = async (req, res) => {
             };
         });
 
-        // 4. Fetch recent Memberships / Payments from last 30 days
-        const recentMemberships = await MemberMembership.find({ 
-            gymId,
-            createdAt: { $gte: thirtyDaysAgo }
-        })
-            .sort({ createdAt: -1 })
-            .limit(20)
-            .populate({ path: 'memberId', select: 'firstName lastName memberId', strictPopulate: false })
-            .populate({ path: 'membershipPlanId', select: 'name', strictPopulate: false })
-            .lean();
-
         // Synthesize dynamic activity items
         const dynamicLogs = [];
 
-        // Synthesize Attendance with Exact Member / Staff / Trial Labels
+        // 1. Members
+        recentMembers.forEach(m => {
+            dynamicLogs.push({
+                _id: `mem_reg_${m._id}`,
+                gymId,
+                title: `Member Registered: ${m.firstName} ${m.lastName || ''}`.trim(),
+                description: `ID: ${m.memberId || 'MEM'} • Contact: ${m.contactNumber || 'N/A'} (Status: ${m.status || 'Active'})`,
+                type: 'MEMBER',
+                targetId: m._id,
+                link: `/dashboard/owner/members/view/${m._id}`,
+                isRead: false,
+                createdAt: m.createdAt
+            });
+        });
+
+        // 2. Attendance
         recentAttendance.forEach(att => {
             if (att.checkInTime) {
                 const uIdStr = att.userId ? att.userId.toString() : '';
-                const person = personMap[uIdStr] || { name: 'Person', code: '', roleType: 'Member' };
+                const person = personMap[uIdStr] || { name: 'Gym User', code: '', roleType: 'Member' };
                 const codeSuffix = person.code ? ` (${person.code})` : '';
-
-                // Determine exact title based on type (Staff vs Trial vs Member)
                 const categoryType = att.attendanceType === 'Trial' 
                     ? 'Trial' 
                     : (person.roleType === 'Staff' || att.attendanceType === 'Staff' ? 'Staff' : 'Member');
-
                 const action = att.checkOutTime ? 'Checked Out' : 'Checked In';
-                const dynamicTitle = `${categoryType} ${action}`;
 
                 dynamicLogs.push({
                     _id: `att_${att._id}`,
                     gymId,
-                    title: dynamicTitle,
+                    title: `${categoryType} ${action}`,
                     description: `${person.name}${codeSuffix} marked attendance at ${new Date(att.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
                     type: 'ATTENDANCE',
                     targetId: att._id,
@@ -134,12 +167,12 @@ exports.getActivityLogs = async (req, res) => {
             }
         });
 
-        // Synthesize Enquiries
+        // 3. Enquiries / Leads
         recentEnquiries.forEach(enq => {
             dynamicLogs.push({
                 _id: `enq_${enq._id}`,
                 gymId,
-                title: enq.status === 'Trial' ? 'New Trial Registered' : `Lead ${enq.status || 'Updated'}`,
+                title: enq.status === 'Trial' ? 'New Trial Registered' : `Lead ${enq.status || 'Active'}`,
                 description: `${enq.firstName} ${enq.lastName || ''} — Status: ${enq.status} (Source: ${enq.source || 'Walk-in'})`,
                 type: 'LEAD',
                 targetId: enq._id,
@@ -149,15 +182,15 @@ exports.getActivityLogs = async (req, res) => {
             });
         });
 
-        // Synthesize Memberships
+        // 4. Memberships
         recentMemberships.forEach(mm => {
             const mName = mm.memberId?.firstName ? `${mm.memberId.firstName} ${mm.memberId.lastName || ''}`.trim() : 'Member';
-            const planName = mm.membershipPlanId?.name || 'Membership Plan';
+            const planName = mm.membershipPlanId?.name || mm.planName || 'Membership Plan';
             dynamicLogs.push({
-                _id: `mem_${mm._id}`,
+                _id: `mem_plan_${mm._id}`,
                 gymId,
-                title: 'Membership Payment & Plan Assigned',
-                description: `${mName} subscribed to ${planName} — Paid: ₹${mm.paidAmount || 0}`,
+                title: `Membership Plan Assigned: ${mName}`,
+                description: `${mName} subscribed to ${planName} — Paid: ₹${mm.paidAmount || 0} (${mm.paymentStatus || 'Active'})`,
                 type: 'MEMBERSHIP',
                 targetId: mm._id,
                 link: '/dashboard/owner/membership',
@@ -166,13 +199,46 @@ exports.getActivityLogs = async (req, res) => {
             });
         });
 
-        // Merge saved and dynamic logs, deduplicating if needed
+        // 5. Fee Payments / Transactions
+        recentTransactions.forEach(tx => {
+            const mName = tx.memberId?.firstName ? `${tx.memberId.firstName} ${tx.memberId.lastName || ''}`.trim() : 'Member';
+            dynamicLogs.push({
+                _id: `tx_${tx._id}`,
+                gymId,
+                title: `Fee Collected: ₹${tx.amountPaid}`,
+                description: `Payment of ₹${tx.amountPaid} via ${tx.paymentMode || 'Cash'} for ${mName}.`,
+                type: 'PAYMENT',
+                targetId: tx._id,
+                link: '/dashboard/owner/finance',
+                isRead: false,
+                createdAt: tx.paymentDate || tx.createdAt
+            });
+        });
+
+        // 6. Staff / Trainers
+        recentStaff.forEach(st => {
+            dynamicLogs.push({
+                _id: `staff_${st._id}`,
+                gymId,
+                title: `Staff Member: ${st.name}`,
+                description: `Role: ${st.role} • Shift: ${st.shiftStart || '09:00'} - ${st.shiftEnd || '18:00'}`,
+                type: 'MEMBER',
+                targetId: st._id,
+                link: '/dashboard/owner/staff',
+                isRead: false,
+                createdAt: st.createdAt
+            });
+        });
+
+        // Merge saved and dynamic logs, deduplicating
         const combined = [...savedLogs];
-        const existingIds = new Set(savedLogs.map(l => l.targetId?.toString()));
+        const existingIds = new Set(savedLogs.map(l => (l.targetId ? l.targetId.toString() : l._id.toString())));
 
         dynamicLogs.forEach(dLog => {
-            if (!existingIds.has(dLog.targetId?.toString())) {
+            const key = dLog.targetId ? dLog.targetId.toString() : dLog._id.toString();
+            if (!existingIds.has(key)) {
                 combined.push(dLog);
+                existingIds.add(key);
             }
         });
 

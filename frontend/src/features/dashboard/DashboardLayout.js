@@ -151,6 +151,7 @@ function DashboardLayout() {
                 return <FiCheckSquare size={15} className="text-emerald-500 shrink-0 mt-0.5" />;
             case 'MEMBERSHIP':
             case 'PAYMENT':
+            case 'FINANCE':
                 return <FiCreditCard size={15} className="text-indigo-500 shrink-0 mt-0.5" />;
             default:
                 return <FiActivity size={15} className="text-blue-500 shrink-0 mt-0.5" />;
@@ -176,12 +177,12 @@ function DashboardLayout() {
         MEMBER: logs.filter(l => l.type === 'MEMBER' && !l.isRead).length,
         LEAD: logs.filter(l => l.type === 'LEAD' && !l.isRead).length,
         ATTENDANCE: logs.filter(l => l.type === 'ATTENDANCE' && !l.isRead).length,
-        MEMBERSHIP: logs.filter(l => (l.type === 'MEMBERSHIP' || l.type === 'PAYMENT') && !l.isRead).length
+        MEMBERSHIP: logs.filter(l => (l.type === 'MEMBERSHIP' || l.type === 'PAYMENT' || l.type === 'FINANCE') && !l.isRead).length
     };
 
     const filteredLogsList = logs.filter(l => {
         if (activeFilter === 'ALL') return true;
-        if (activeFilter === 'MEMBERSHIP') return l.type === 'MEMBERSHIP' || l.type === 'PAYMENT';
+        if (activeFilter === 'MEMBERSHIP') return l.type === 'MEMBERSHIP' || l.type === 'PAYMENT' || l.type === 'FINANCE';
         return l.type === activeFilter;
     });
 
@@ -189,7 +190,7 @@ function DashboardLayout() {
     const modalFilteredLogs = logs.filter(l => {
         const matchesCategory = modalCategory === 'ALL' 
             ? true 
-            : modalCategory === 'MEMBERSHIP' ? (l.type === 'MEMBERSHIP' || l.type === 'PAYMENT') : l.type === modalCategory;
+            : modalCategory === 'MEMBERSHIP' ? (l.type === 'MEMBERSHIP' || l.type === 'PAYMENT' || l.type === 'FINANCE') : l.type === modalCategory;
         const matchesSearch = !modalSearch.trim() || 
             l.title.toLowerCase().includes(modalSearch.toLowerCase()) || 
             l.description.toLowerCase().includes(modalSearch.toLowerCase());

@@ -15,7 +15,8 @@ import { FaWhatsapp } from 'react-icons/fa';
 import StaffCheckIn from './StaffCheckIn';
 import FeePaymentLineChart from './FeePaymentLineChart';
 import FollowUpCalendar from './FollowUpCalendar';
-import { formatDate } from '../../utils/dateUtils';
+import SummaryCards from '../../components/page/SummaryCards';
+import { formatDate, toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
 
 export default function OwnerDashboard() {
     const navigate = useNavigate();
@@ -53,8 +54,8 @@ export default function OwnerDashboard() {
         try {
             const res = await apiClient.get('/attendance/my');
             const logs = res.data || [];
-            const todayStr = new Date().toISOString().split('T')[0];
-            const logToday = logs.find(l => new Date(l.date).toISOString().split('T')[0] === todayStr);
+            const todayStr = getTodayInputDate();
+            const logToday = logs.find(l => toInputDateFormat(l.date) === todayStr);
             setTodayAttendance(logToday || null);
         } catch (err) {
             console.error("Failed to fetch my attendance:", err);
@@ -86,9 +87,9 @@ export default function OwnerDashboard() {
 
                 // Calculate Stats
                 const activeMembers = members.filter(m => m.status === 'Active');
-                const newEnquiries = leads.filter(l => !l.status || ['Pending', 'New', 'Open', 'Lead'].includes(l.status)).length;
-                const trials = leads.filter(l => l.status === 'Trial' || Boolean(l.trialDate) || l.convertibility === 'Hot').length;
-                const followUps = leads.filter(l => (Boolean(l.followUpDate) || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up') && !['Converted', 'Lost'].includes(l.status)).length;
+                const newEnquiries = leads.filter(l => l.status === 'Pending' || (!l.followUpDate && ['New', 'Lead', 'Pending', 'Open'].includes(l.status))).length;
+                const trials = leads.filter(l => l.status === 'Trial' || Boolean(l.trialDate)).length;
+                const followUps = leads.filter(l => (Boolean(l.followUpDate) || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up') && !['Converted', 'Lost'].includes(l.status) && (l.status !== 'Pending' || Boolean(l.followUpDate))).length;
                 const converted = leads.filter(l => l.status === 'Converted').length;
                 const lost = leads.filter(l => ['Lost', 'Closed', 'Cancelled', 'Dropped'].includes(l.status)).length;
                 
@@ -164,6 +165,7 @@ export default function OwnerDashboard() {
     // Filter leads by selected calendar date for modal
     const calendarSelectedLeads = selectedCalendarDate ? allLeads.filter(lead => {
         if (!lead.followUpDate) return false;
+        if (['Converted', 'Lost'].includes(lead.status)) return false;
         const selStr = `${selectedCalendarDate.getFullYear()}-${String(selectedCalendarDate.getMonth() + 1).padStart(2, '0')}-${String(selectedCalendarDate.getDate()).padStart(2, '0')}`;
         const leadDateStr = typeof lead.followUpDate === 'string' && lead.followUpDate.includes('T')
             ? lead.followUpDate.split('T')[0]
@@ -202,8 +204,9 @@ export default function OwnerDashboard() {
             }
             const diff = currentCount - lastCount;
             const pct = Math.round((diff / lastCount) * 100);
+            const displayPct = Math.abs(pct) > 999 ? (pct > 0 ? '+999%' : '-999%') : `${pct >= 0 ? '+' : ''}${pct}%`;
             return {
-                percentage: `${pct >= 0 ? '+' : ''}${pct}%`,
+                percentage: displayPct,
                 isPositive: pct >= 0
             };
         };
@@ -229,11 +232,10 @@ export default function OwnerDashboard() {
         const dueMembersCount = allActivePlans.filter(p => (p.balanceAmount || 0) > 0).length;
 
         // 4. Today's Attendance Check-ins
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getTodayInputDate();
         const todayAttendanceLogs = (allAttendance || []).filter(a => {
             if (!a.date && !a.checkInTime) return false;
-            const aDate = new Date(a.date || a.checkInTime);
-            return !isNaN(aDate.getTime()) && aDate.toISOString().split('T')[0] === todayStr;
+            return toInputDateFormat(a.date || a.checkInTime) === todayStr;
         });
         const todayUniqueCheckins = new Set(
             todayAttendanceLogs.map(a => (a.memberId?._id || a.memberId || a._id).toString())
@@ -244,7 +246,7 @@ export default function OwnerDashboard() {
         const curMonthLeads = allLeads.filter(l => isCurrentMonth(l.createdAt || l.date || l.enquiryDate)).length;
         const prevMonthLeads = allLeads.filter(l => isPreviousMonth(l.createdAt || l.date || l.enquiryDate)).length;
         const leadsGrowth = getGrowthStats(curMonthLeads, prevMonthLeads);
-        const newEnquiriesCount = allLeads.filter(l => !l.status || ['Pending', 'New', 'Open', 'Lead'].includes(l.status)).length;
+        const newEnquiriesCount = allLeads.filter(l => l.status === 'Pending' || (!l.followUpDate && ['New', 'Lead', 'Pending', 'Open'].includes(l.status))).length;
 
         // 6. Expiring Memberships (Within next 15 days or today)
         const today = new Date();
@@ -300,16 +302,6 @@ export default function OwnerDashboard() {
                 link: '/dashboard/owner/attendance/daily'
             },
             {
-                title: 'Total Leads',
-                value: allLeads.length,
-                percentage: leadsGrowth.percentage,
-                isPositive: leadsGrowth.isPositive,
-                subtitle: `${newEnquiriesCount} fresh inquiries`,
-                icon: <FiUserPlus className="text-[#7E22CE] text-lg" />,
-                iconBg: 'bg-[#F3E8FF]',
-                link: '/dashboard/owner/leads'
-            },
-            {
                 title: 'Expiring Soon',
                 value: expiringSoonCount,
                 percentage: `${expiringSoonCount} Due`,
@@ -321,8 +313,6 @@ export default function OwnerDashboard() {
             }
         ];
     }, [allMembers, allTransactions, allActivePlans, allAttendance, allLeads]);
-
-    if (loading) return <Loader text="Loading your dashboard..." />;
 
     return (
         <PageLayout>
@@ -365,36 +355,8 @@ export default function OwnerDashboard() {
 
                 {showQRScanner && <StaffCheckIn onClose={() => setShowQRScanner(false)} onSuccess={fetchMyAttendance} />}
 
-                {/* 6 Main Gym Overview KPI Cards Grid with Real Backend Data */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4">
-                    {mainStatsCards.map((card, idx) => (
-                        <div 
-                            key={idx} 
-                            onClick={() => card.link && navigate(card.link)}
-                            className="bg-white p-3.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-rose-300 hover:-translate-y-0.5 transition-all flex items-center gap-3 cursor-pointer group"
-                        >
-                            <div className={`w-11 h-11 rounded-xl ${card.iconBg} flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform`}>
-                                {card.icon}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <p className="text-[11.5px] font-bold text-slate-700 truncate group-hover:text-slate-900 transition-colors">{card.title}</p>
-                                <div className="flex items-baseline gap-1.5 mt-0.5">
-                                    <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-none truncate">
-                                        {card.value}
-                                    </span>
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${
-                                        card.isPositive 
-                                            ? 'text-emerald-700 bg-emerald-50 border-emerald-200' 
-                                            : 'text-rose-700 bg-rose-50 border-rose-200'
-                                    }`}>
-                                        {card.percentage}
-                                    </span>
-                                </div>
-                                <span className="text-[9.5px] font-medium text-slate-400 block mt-0.5 truncate">{card.subtitle}</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                {/* 5 Main Gym Overview KPI Cards Grid with Real Backend Data */}
+                <SummaryCards cards={mainStatsCards} loading={loading} />
 
                 {/* FEE COLLECTION ANALYTICS & FOLLOW UP CALENDAR */}
                 {isOwnerOrAdmin && (
@@ -402,7 +364,7 @@ export default function OwnerDashboard() {
                         
                         {/* Fee Collection Analytics (7 Columns) */}
                         <div className="lg:col-span-7 h-full">
-                            <FeePaymentLineChart transactions={allTransactions} />
+                            <FeePaymentLineChart transactions={allTransactions} loading={loading} />
                         </div>
 
                         {/* Leads Follow-Up Calendar (5 Columns) */}
@@ -422,61 +384,61 @@ export default function OwnerDashboard() {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch">
                         
                         {/* 4 Quick Actions (7 Columns) */}
-                        <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
                             
                             {/* Add Member */}
                             <div 
                                 onClick={() => navigate('/dashboard/owner/members/add')}
-                                className="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
+                                className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group min-h-[80px]"
                             >
-                                <div className="w-10 h-10 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                                    <FiUsers size={18} />
+                                <div className="w-11 h-11 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                    <FiUsers size={20} />
                                 </div>
-                                <div>
-                                    <h4 className="text-xs font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight">Add Member</h4>
-                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Register member</p>
+                                <div className="min-w-0">
+                                    <h4 className="text-[13px] font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight truncate">Add Member</h4>
+                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">Register member</p>
                                 </div>
                             </div>
 
                             {/* Add Leads */}
                             <div 
                                 onClick={() => navigate('/dashboard/owner/leads/add')}
-                                className="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
+                                className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group min-h-[80px]"
                             >
-                                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                                    <FiUserPlus size={18} />
+                                <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                    <FiUserPlus size={20} />
                                 </div>
-                                <div>
-                                    <h4 className="text-xs font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight">Add Leads</h4>
-                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Capture new leads</p>
+                                <div className="min-w-0">
+                                    <h4 className="text-[13px] font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight truncate">Add Leads</h4>
+                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">Capture new leads</p>
                                 </div>
                             </div>
 
                             {/* New Plan */}
                             <div 
                                 onClick={() => navigate('/dashboard/owner/membership')}
-                                className="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
+                                className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group min-h-[80px]"
                             >
-                                <div className="w-10 h-10 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                                    <FiCalendar size={18} />
+                                <div className="w-11 h-11 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                    <FiCalendar size={20} />
                                 </div>
-                                <div>
-                                    <h4 className="text-xs font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight">New Plan</h4>
-                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Membership plan</p>
+                                <div className="min-w-0">
+                                    <h4 className="text-[13px] font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight truncate">New Plan</h4>
+                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">Membership plan</p>
                                 </div>
                             </div>
 
                             {/* View Reports */}
                             <div 
                                 onClick={() => navigate('/dashboard/owner/reports')}
-                                className="bg-white p-3.5 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
+                                className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group min-h-[80px]"
                             >
-                                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
-                                    <FiFileText size={18} />
+                                <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                    <FiFileText size={20} />
                                 </div>
-                                <div>
-                                    <h4 className="text-xs font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight">View Reports</h4>
-                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Check detailed</p>
+                                <div className="min-w-0">
+                                    <h4 className="text-[13px] font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight truncate">View Reports</h4>
+                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">Check detailed</p>
                                 </div>
                             </div>
 

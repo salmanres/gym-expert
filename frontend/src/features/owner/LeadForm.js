@@ -12,21 +12,8 @@ import Textarea from '../../components/form/Textarea';
 import Checkbox from '../../components/form/Checkbox';
 import Button from '../../components/form/Button';
 import Loader from '../../components/page/Loader';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
 import { useRef } from 'react';
-
-const toInputDateFormat = (dateVal) => {
-    if (!dateVal) return '';
-    if (typeof dateVal === 'string' && dateVal.includes('T')) {
-        return dateVal.split('T')[0];
-    }
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return '';
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-};
 
 export default function LeadForm() {
     const { id } = useParams();
@@ -42,11 +29,15 @@ export default function LeadForm() {
     const [staffMembers, setStaffMembers] = useState([]);
     const [logNewFollowUp, setLogNewFollowUp] = useState(false);
     
+    const loggedUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const defaultRole = loggedUser.role === 'GYM_OWNER' ? 'Owner' : (loggedUser.role === 'ADMIN' || loggedUser.role === 'SUPERADMIN' ? 'Admin' : (loggedUser.role === 'TRAINER' ? 'Trainer' : 'Staff'));
+    const defaultName = loggedUser.name || defaultRole;
+
     const [formData, setFormData] = useState({
         firstName: '', lastName: '', gender: 'Male', dob: '', contactNumber: '', altContact: '', email: '',
         address: '', source: '', referredBy: '', inquiryFor: '', followUpDate: '', followUpTime: '', trialDate: '', trialEndDate: '',
-        trialFeeType: 'Unpaid', trialFee: '', trialPaymentStatus: 'Unpaid', trialPaymentMode: 'Cash',
-        convertibility: 'Warm', status: 'Pending', attendedBy: 'Admin',
+        trialFeeType: 'Unpaid', trialFee: '', trialPaymentStatus: 'Unpaid', trialPaymentMode: 'Cash', securityAmount: '',
+        convertibility: 'Warm', status: 'Pending', attendedBy: defaultName, addedByName: defaultName, addedByRole: defaultRole,
         response: '', offerAmount: '', offerDetails: '', selectedOffer: '', lostReason: '', sendTextAndEmail: false, sendWhatsApp: false,
         followUpHistory: []
     });
@@ -55,6 +46,8 @@ export default function LeadForm() {
     const lostReasonRef = useRef(null);
     const followUpDateRef = useRef(null);
     const trialDateRef = useRef(null);
+    const responseRef = useRef(null);
+    const statusRef = useRef(null);
 
     useEffect(() => {
         if (!loading && location.state?.autoFocusStatus) {
@@ -97,8 +90,39 @@ export default function LeadForm() {
                         leadData = leadRes.data;
                     }
                     if (leadData) {
-                        const matchedOffer = gymRes?.data?.couponOffers?.find(o => o.title === leadData.offerDetails);
-                        const matchedOfferId = matchedOffer ? matchedOffer._id : (leadData.offerDetails ? 'Custom' : '');
+                        const allCoupons = gymRes?.data?.couponOffers || [];
+                        let matchedOfferId = '';
+                        let matchedOfferDetails = leadData.offerDetails || leadData.offer || '';
+                        let matchedOfferAmount = (leadData.offerAmount !== undefined && leadData.offerAmount !== null) ? leadData.offerAmount : '';
+
+                        if (allCoupons.length > 0) {
+                            const rawOfferId = (leadData.selectedOffer || '').toString().trim();
+                            const rawDetails = (leadData.offerDetails || leadData.offer || '').toString().trim();
+
+                            const matchedOffer = allCoupons.find(o => 
+                                (rawOfferId && (o._id?.toString() === rawOfferId || o.code?.toLowerCase() === rawOfferId.toLowerCase())) ||
+                                (rawDetails && o.title?.toLowerCase() === rawDetails.toLowerCase()) ||
+                                (rawDetails && o.code?.toLowerCase() === rawDetails.toLowerCase()) ||
+                                (rawDetails && (rawDetails.toLowerCase().includes(o.title?.toLowerCase()) || (o.code && rawDetails.toLowerCase().includes(o.code.toLowerCase())))) ||
+                                (rawDetails && o.title && o.title.toLowerCase().includes(rawDetails.toLowerCase())) ||
+                                (matchedOfferAmount !== '' && Number(matchedOfferAmount) === Number(o.discountValue) && o.isActive)
+                            );
+
+                            if (matchedOffer) {
+                                matchedOfferId = matchedOffer._id;
+                                if (!matchedOfferDetails) {
+                                    matchedOfferDetails = matchedOffer.title;
+                                }
+                                if (matchedOfferAmount === '' && matchedOffer.discountValue !== undefined) {
+                                    matchedOfferAmount = matchedOffer.discountValue;
+                                }
+                            } else if (rawOfferId === 'Custom' || rawDetails || (matchedOfferAmount !== '' && Number(matchedOfferAmount) > 0)) {
+                                matchedOfferId = 'Custom';
+                            }
+                        } else if (leadData.selectedOffer === 'Custom' || leadData.offerDetails || (matchedOfferAmount !== '' && Number(matchedOfferAmount) > 0)) {
+                            matchedOfferId = 'Custom';
+                        }
+
                         setFormData({ 
                             ...leadData, 
                             dob: toInputDateFormat(leadData.dob),
@@ -110,7 +134,9 @@ export default function LeadForm() {
                             trialPaymentStatus: leadData.trialPaymentStatus || 'Unpaid',
                             trialPaymentMode: leadData.trialPaymentMode || 'Cash',
                             referredBy: leadData.referredBy || '',
-                            selectedOffer: matchedOfferId, 
+                            selectedOffer: matchedOfferId,
+                            offerAmount: matchedOfferAmount,
+                            offerDetails: matchedOfferDetails,
                             sendTextAndEmail: false, 
                             sendWhatsApp: false,
                             response: '',
@@ -132,10 +158,15 @@ export default function LeadForm() {
         let finalValue = value;
         
         if (name === 'selectedOffer') {
-            if (finalValue === 'Custom' || finalValue === '') {
+            if (finalValue === 'Custom') {
                 setFormData({
                     ...formData,
-                    selectedOffer: finalValue,
+                    selectedOffer: 'Custom'
+                });
+            } else if (finalValue === '') {
+                setFormData({
+                    ...formData,
+                    selectedOffer: '',
                     offerDetails: '',
                     offerAmount: ''
                 });
@@ -146,7 +177,7 @@ export default function LeadForm() {
                         ...formData,
                         selectedOffer: finalValue,
                         offerDetails: selectedOffer.title,
-                        offerAmount: selectedOffer.discountType === 'Flat' ? selectedOffer.discountValue : '' 
+                        offerAmount: selectedOffer.discountValue !== undefined ? selectedOffer.discountValue : '' 
                     });
                 }
             }
@@ -172,7 +203,27 @@ export default function LeadForm() {
             const updatedHistory = [...prev.followUpHistory];
             const originalIndex = updatedHistory.length - 1 - index;
             updatedHistory.splice(originalIndex, 1);
-            return { ...prev, followUpHistory: updatedHistory };
+            
+            if (updatedHistory.length > 0) {
+                const latest = updatedHistory[updatedHistory.length - 1];
+                return { 
+                    ...prev, 
+                    followUpHistory: updatedHistory,
+                    status: latest.status || 'Pending',
+                    response: latest.response || '',
+                    followUpDate: latest.nextFollowUpDate ? toInputDateFormat(latest.nextFollowUpDate) : '',
+                    followUpTime: latest.nextFollowUpTime || ''
+                };
+            } else {
+                return {
+                    ...prev,
+                    followUpHistory: updatedHistory,
+                    status: 'Pending',
+                    response: '',
+                    followUpDate: '',
+                    followUpTime: ''
+                };
+            }
         });
     };
 
@@ -187,12 +238,33 @@ export default function LeadForm() {
             return {
                 ...prev,
                 followUpHistory: updatedHistory,
-                response: item.response,
-                followUpDate: item.nextFollowUpDate ? new Date(item.nextFollowUpDate).toISOString().split('T')[0] : '',
+                response: item.response || '',
+                followUpDate: item.nextFollowUpDate ? toInputDateFormat(item.nextFollowUpDate) : '',
                 followUpTime: item.nextFollowUpTime || '',
                 status: item.status || prev.status
             };
         });
+
+        // Focus & smooth scroll directly to the corresponding fields
+        setTimeout(() => {
+            const targetStatus = item.status || formData.status;
+            if (targetStatus === 'Trial' && trialDateRef.current) {
+                trialDateRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                trialDateRef.current.focus?.();
+            } else if (targetStatus === 'Negotiation' && negotiationRef.current) {
+                negotiationRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                negotiationRef.current.focus?.();
+            } else if (targetStatus === 'Lost' && lostReasonRef.current) {
+                lostReasonRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                lostReasonRef.current.focus?.();
+            } else if (responseRef.current) {
+                responseRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                responseRef.current.focus?.();
+            } else if (followUpDateRef.current) {
+                followUpDateRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                followUpDateRef.current.focus?.();
+            }
+        }, 150);
     };
 
     const handleSubmit = async (e) => {
@@ -233,19 +305,29 @@ export default function LeadForm() {
 
         setSubmitting(true);
         try {
-            const todayStr = toInputDateFormat(new Date());
             let submitData = { 
                 ...formData,
-                followUpDate: formData.followUpDate || todayStr
+                followUpDate: formData.followUpDate || null
             };
+
+            // Persist trial dates and fees if set or if status is Trial, Negotiation, or Converted
+            if (!['Trial', 'Negotiation', 'Converted'].includes(formData.status) && !formData.trialDate) {
+                submitData.trialDate = null;
+                submitData.trialEndDate = null;
+                submitData.trialFee = 0;
+                submitData.securityAmount = 0;
+            } else if (formData.trialFeeType !== 'Paid') {
+                submitData.trialFee = 0;
+                submitData.securityAmount = 0;
+            }
             
             // Check if current form inputs are different from the latest history item
             let isDifferent = true;
             let statusChanged = false;
             if (submitData.followUpHistory && submitData.followUpHistory.length > 0) {
                 const latest = submitData.followUpHistory[submitData.followUpHistory.length - 1];
-                const latestNextDate = latest.nextFollowUpDate ? new Date(latest.nextFollowUpDate).toISOString().split('T')[0] : '';
-                const currentNextDate = submitData.followUpDate ? new Date(submitData.followUpDate).toISOString().split('T')[0] : '';
+                const latestNextDate = toInputDateFormat(latest.nextFollowUpDate);
+                const currentNextDate = toInputDateFormat(submitData.followUpDate);
                 
                 if (latest.response === submitData.response && latestNextDate === currentNextDate && latest.nextFollowUpTime === submitData.followUpTime) {
                     isDifferent = false; // They didn't change the response or date
@@ -264,7 +346,7 @@ export default function LeadForm() {
                 const autoAddedItem = {
                     contactDate: new Date().toISOString(),
                     response: hasResponse ? submitData.response : `Status updated to ${submitData.status}`,
-                    nextFollowUpDate: submitData.followUpDate || '',
+                    nextFollowUpDate: submitData.followUpDate || null,
                     nextFollowUpTime: submitData.followUpTime || '',
                     status: submitData.status
                 };
@@ -399,7 +481,7 @@ export default function LeadForm() {
                                     <option value="Crossfit">Crossfit</option>
                                 </optgroup>
                             </Select>
-                            {['Trial', 'Converted'].includes(formData.status) && (
+                            {(['Trial', 'Negotiation', 'Converted'].includes(formData.status) || formData.trialDate) && (
                                 <>
                                     <Input type="date" label="Trial Start Date" name="trialDate" value={formData.trialDate || ''} onChange={handleChange} error={errors.trialDate} inputRef={trialDateRef} />
                                     <Input type="date" label="Trial End Date" name="trialEndDate" value={formData.trialEndDate || ''} onChange={handleChange} min={formData.trialDate || ''} error={errors.trialEndDate} />
@@ -408,12 +490,12 @@ export default function LeadForm() {
                                         <>
                                             <Input 
                                                 type="number" 
-                                                label="Trial Amount (₹)" 
-                                                name="trialFee" 
-                                                value={formData.trialFee || ''} 
+                                                label="Security Amount (₹)" 
+                                                name="securityAmount" 
+                                                value={formData.securityAmount || ''} 
                                                 onChange={handleChange} 
-                                                placeholder="e.g. 500" 
-                                                error={errors.trialFee} 
+                                                placeholder="e.g. 500 (Refundable deposit)" 
+                                                error={errors.securityAmount} 
                                             />
                                             <Select 
                                                 label="Trial Payment Mode" 
@@ -431,7 +513,7 @@ export default function LeadForm() {
                         </FormSection>
 
                         <FormSection title="Feedback & Action" icon={<FiMessageSquare />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            <Select label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Contacted', 'Trial', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
+                            <Select inputRef={statusRef} label="Status" name="status" value={formData.status || ''} onChange={handleChange} required options={['Pending', 'Contacted', 'Trial', 'Negotiation', 'Converted', 'Lost']} error={errors.status}>
                             </Select>
                             
                             {['Pending', 'Contacted', 'Trial', 'Negotiation'].includes(formData.status) && (
@@ -450,8 +532,8 @@ export default function LeadForm() {
                                         onChange={handleChange}
                                     >
                                         <option value="">-- Choose an Offer --</option>
-                                        {gymSettings?.couponOffers?.filter(o => o.isActive).map(offer => (
-                                            <option key={offer._id} value={offer._id}>{offer.title} ({offer.discountType === 'Percentage' ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} OFF`})</option>
+                                        {gymSettings?.couponOffers?.filter(o => o.isActive || o._id === formData.selectedOffer).map(offer => (
+                                            <option key={offer._id} value={offer._id}>{offer.title} ({offer.discountType === 'Percentage' ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} OFF`}){!offer.isActive ? ' (Inactive)' : ''}</option>
                                         ))}
                                         <option value="Custom">Custom Offer</option>
                                     </Select>
@@ -495,7 +577,7 @@ export default function LeadForm() {
                             )}
                             
                             <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 flex flex-col gap-2">
-                                <Textarea label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
+                                <Textarea inputRef={responseRef} label="Response / Feedback" name="response" value={formData.response || ''} onChange={handleChange} className="h-[104px]" placeholder="Enter discussion notes or client requirements..." error={errors.response} />
                             </div>
                         </FormSection>
 
@@ -571,9 +653,14 @@ export default function LeadForm() {
                                 <button 
                                     type="submit" 
                                     disabled={submitting}
-                                    className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-50"
+                                    className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
                                 >
-                                    {submitting ? 'Saving Enquiry...' : (formData.status === 'Converted' ? 'Save & Convert to Member' : (isEdit ? 'Update Enquiry' : 'Save Enquiry'))}
+                                    {submitting ? (
+                                        <>
+                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
+                                            <span>Saving Enquiry...</span>
+                                        </>
+                                    ) : (formData.status === 'Converted' ? 'Save & Convert to Member' : (isEdit ? 'Update Enquiry' : 'Save Enquiry'))}
                                 </button>
                             </div>
                         </div>

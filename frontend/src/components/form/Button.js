@@ -29,7 +29,7 @@ export default function Button({
             className={`${baseStyle} ${variants[variant] || variants.primary} ${fullWidth ? 'w-full' : 'w-full sm:w-auto'} ${(disabled || loading) ? 'opacity-60 cursor-not-allowed !active:scale-100' : ''} ${className}`}
         >
             {loading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-current border-t-transparent"></div>
+                <div className={`animate-spin rounded-full h-4 w-4 border-2 shrink-0 ${variant === 'secondary' || variant === 'ghost' ? 'border-slate-300 border-t-slate-700' : 'border-white/40 border-t-white'}`}></div>
             ) : icon ? (
                 <span className="text-base shrink-0">{icon}</span>
             ) : null}

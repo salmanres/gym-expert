@@ -16,7 +16,7 @@ const activityLogSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['LEAD', 'MEMBER', 'ATTENDANCE', 'PAYMENT', 'MEMBERSHIP', 'SYSTEM'],
+        enum: ['LEAD', 'MEMBER', 'ATTENDANCE', 'PAYMENT', 'MEMBERSHIP', 'SYSTEM', 'FINANCE', 'PLAN'],
         default: 'SYSTEM'
     },
     targetId: {

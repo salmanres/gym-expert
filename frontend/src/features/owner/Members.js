@@ -12,7 +12,8 @@ import SummaryCards from '../../components/page/SummaryCards';
 import { FiUsers, FiPhone, FiMail, FiEdit2, FiTrash2, FiPlus, FiCreditCard, FiPauseCircle, FiPlayCircle, FiEye, FiUserCheck, FiUserX, FiUserPlus } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, toInputDateFormat } from '../../utils/dateUtils';
+import DatePicker from '../../components/form/DatePicker';
 
 export default function Members() {
     const navigate = useNavigate();
@@ -41,11 +42,16 @@ export default function Members() {
             ]);
 
             const latestMemberships = latestMembershipsRes.data || [];
-            const membersWithPlans = membersRes.data.map(member => {
-                const memberActiveList = latestMemberships.filter(m => (m.memberId?._id || m.memberId) === member._id && (m.membershipStatus === 'Active' || m.membershipStatus === 'Frozen'));
+            const membersWithPlans = (membersRes.data || []).map(member => {
+                const memberIdStr = member._id?.toString() || '';
+                const memberActiveList = latestMemberships.filter(m => 
+                    (m.memberId?._id || m.memberId)?.toString() === memberIdStr && 
+                    (m.membershipStatus === 'Active' || m.membershipStatus === 'Frozen') &&
+                    (m.paidAmount > 0 || m.paymentStatus === 'Paid')
+                );
                 member.allActiveMemberships = memberActiveList;
 
-                const membership = latestMemberships.find(m => (m.memberId?._id || m.memberId) === member._id);
+                const membership = latestMemberships.find(m => (m.memberId?._id || m.memberId)?.toString() === memberIdStr);
                 let computedStatus = member.status || 'Inactive';
 
                 if (computedStatus !== 'Frozen') {
@@ -128,8 +134,8 @@ export default function Members() {
     };
 
     const handleEdit = (member) => {
-        const formattedDate = member.dob ? new Date(member.dob).toISOString().split('T')[0] : '';
-        const formattedJoining = member.joiningDate ? new Date(member.joiningDate).toISOString().split('T')[0] : '';
+        const formattedDate = toInputDateFormat(member.dob);
+        const formattedJoining = toInputDateFormat(member.joiningDate);
         const formattedMember = {
             ...member,
             dob: formattedDate,
@@ -283,16 +289,16 @@ export default function Members() {
                                         );
                                     })
                                 ) : (
-                                    member.membershipPlan && (
+                                    member.membershipPlan && member.paymentStatus !== 'Pending' && Number(member.amountPaid) > 0 && (
                                         <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border border-slate-200 text-slate-700 bg-slate-50 shrink-0">
                                             {member.membershipPlan.name}
                                         </span>
                                     )
                                 )}
 
-                                {member.walletBalance > 0 && (
+                                {Number(member.walletBalance) >= 1 && (
                                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border border-indigo-200 text-indigo-700 bg-indigo-50 shrink-0">
-                                        Wallet: ₹{member.walletBalance}
+                                        Wallet: ₹{Number(member.walletBalance).toFixed(0)}
                                     </span>
                                 )}
                             </div>
@@ -497,8 +503,6 @@ export default function Members() {
         }
     ];
 
-    if (loading) return <Loader text="Loading members..." />;
-
     return (
         <PageLayout>
             <PageHeader
@@ -509,7 +513,7 @@ export default function Members() {
             />
 
             <div className="px-6 md:px-8 pb-2 pt-0 bg-[#FAEEEF] shrink-0">
-                <SummaryCards cards={summaryCardsData} />
+                <SummaryCards cards={summaryCardsData} loading={loading} />
             </div>
 
             <Tabs
@@ -533,27 +537,25 @@ export default function Members() {
                 }}
                 searchPlaceholder="Search by name, phone or ID..."
             >
-                <div className="flex items-center bg-white/90 backdrop-blur-md border border-rose-200/80 rounded-xl shadow-2xs h-9 px-2.5 transition-all focus-within:border-[#CA0410] focus-within:ring-2 focus-within:ring-[#CA0410]/20 w-full sm:w-auto">
-                    <input
-                        type="date"
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                    <DatePicker
+                        compact={true}
                         value={filterStartDate}
                         onChange={(e) => {
                             setFilterStartDate(e.target.value);
                             setCurrentPage(1);
                         }}
-                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
-                        title="Joining Date From"
+                        placeholder="From Date"
                     />
-                    <span className="text-slate-300 mx-2 font-medium text-[10px]">TO</span>
-                    <input
-                        type="date"
+                    <span className="text-slate-400 font-bold text-[10px]">TO</span>
+                    <DatePicker
+                        compact={true}
                         value={filterEndDate}
                         onChange={(e) => {
                             setFilterEndDate(e.target.value);
                             setCurrentPage(1);
                         }}
-                        className="text-xs font-medium focus:outline-none text-slate-600 bg-transparent w-full sm:w-auto"
-                        title="Joining Date To"
+                        placeholder="To Date"
                     />
                 </div>
 

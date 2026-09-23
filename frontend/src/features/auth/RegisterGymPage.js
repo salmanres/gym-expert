@@ -204,9 +204,14 @@ function RegisterGymPage() {
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full md:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded shadow-sm transition-all active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-50 text-xs"
+                                className="w-full md:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm transition-all active:scale-[0.98] flex justify-center items-center gap-2 disabled:opacity-60 text-xs cursor-pointer"
                             >
-                                {loading ? 'Registering...' : 'Complete Registration'}
+                                {loading ? (
+                                    <>
+                                        <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
+                                        <span>Registering...</span>
+                                    </>
+                                ) : 'Complete Registration'}
                             </button>
                         </div>
                     </form>
