@@ -73,7 +73,7 @@ function DashboardLayout() {
     // Socket.io Real-time Event Listener
     useEffect(() => {
         const gymId = user?.gym?._id || user?.gymId;
-        if (!gymId) return;
+        if (!gymId && user?.role !== 'SUPERADMIN') return;
 
         const socket = io('http://localhost:5000', {
             transports: ['websocket', 'polling']
@@ -81,7 +81,11 @@ function DashboardLayout() {
 
         socket.on('connect', () => {
             console.log('⚡ Socket connected to notification hub');
-            socket.emit('join_gym', gymId);
+            if (user?.role === 'SUPERADMIN') {
+                socket.emit('join_superadmin');
+            } else if (gymId) {
+                socket.emit('join_gym', gymId);
+            }
         });
 
         socket.on('new_notification', (newNotif) => {

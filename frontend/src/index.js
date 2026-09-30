@@ -14,6 +14,7 @@ import GymsList from './features/admin/GymsList';
 import OwnerDashboard from './features/owner/OwnerDashboard';
 import Leads from './features/owner/Leads';
 import LeadForm from './features/owner/LeadForm';
+import LeadProfilePage from './features/owner/LeadProfilePage';
 import Members from './features/owner/Members';
 import MemberForm from './features/owner/MemberForm';
 import MemberProfilePage from './features/owner/MemberProfilePage';
@@ -84,6 +85,7 @@ root.render(
             <Route path="owner/leads" element={<Leads />} />
             <Route path="owner/leads/add" element={<LeadForm />} />
             <Route path="owner/leads/edit/:id" element={<LeadForm />} />
+            <Route path="owner/leads/view/:id" element={<LeadProfilePage />} />
             <Route path="owner/members" element={<Members />} />
             <Route path="owner/members/add" element={<MemberForm />} />
             <Route path="owner/members/edit/:id" element={<MemberForm />} />

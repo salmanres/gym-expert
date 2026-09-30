@@ -11,7 +11,7 @@ export default function Button({
     fullWidth = false,
     loading = false
 }) {
-    const baseStyle = "flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all duration-150 text-[13px] outline-none select-none";
+    const baseStyle = "flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-bold transition-all duration-150 text-base outline-none select-none";
     
     const variants = {
         primary: "text-white bg-[#CA0410] hover:bg-[#a8030d] active:scale-[0.98] shadow-xs hover:shadow-md hover:shadow-rose-900/15 focus:ring-4 focus:ring-rose-500/20 cursor-pointer",

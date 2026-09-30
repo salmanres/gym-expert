@@ -2,16 +2,29 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { 
     FiUser, FiPhone, FiMail, FiMapPin, FiCalendar, FiActivity, FiAward, 
-    FiEdit2, FiUsers, FiCreditCard, FiClock, FiCheckCircle, FiXCircle, 
-    FiShield, FiHeart, FiZap, FiPlusCircle, FiArrowLeft, FiTag, FiFileText, FiShare2,
-    FiEye, FiTrash2, FiDollarSign
+    FiEdit2, FiUsers, FiCreditCard, FiClock, 
+    FiShield, FiPlusCircle, FiTag,
+    FiEye, FiTrash2
 } from 'react-icons/fi';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
 import Loader from '../../components/page/Loader';
+import ConfirmModal from '../../components/modal/ConfirmModal';
 import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 import { formatDate, toInputDateFormat } from '../../utils/dateUtils';
+
+const isPTMembership = (membership) => {
+    const plan = membership?.membershipPlanId && typeof membership.membershipPlanId === 'object'
+        ? membership.membershipPlanId
+        : membership;
+    const name = String(plan?.name || membership?.planName || '').toLowerCase();
+    const type = Array.isArray(plan?.planType)
+        ? plan.planType.join(' ').toLowerCase()
+        : String(plan?.planType || membership?.planType || '').toLowerCase();
+
+    return Boolean(membership?.isPTConversion) || type.includes('personal training') || type.includes('pt') || name.includes('personal training') || name.includes('pt package') || (plan?.sessions || 0) > 0;
+};
 
 export default function MemberProfilePage() {
     const { id } = useParams();
@@ -20,6 +33,7 @@ export default function MemberProfilePage() {
 
     const [fetchedMember, setFetchedMember] = useState(null);
     const [loadingMember, setLoadingMember] = useState(!location.state?.member && !!id);
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDestructive: false });
 
     const rawMember = fetchedMember || location.state?.member;
 
@@ -95,6 +109,7 @@ export default function MemberProfilePage() {
                 })
                 .catch(err => console.error("Failed to fetch transactions", err));
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [memberIdVal]);
 
     const handleLogPTSession = async (membershipId) => {
@@ -152,27 +167,55 @@ export default function MemberProfilePage() {
     };
 
     const handleDeleteTx = async (txId, amount) => {
-        if (!window.confirm(`Are you sure you want to delete this payment transaction of ₹${amount}? The member's remaining balance will be adjusted automatically.`)) {
-            return;
-        }
-        try {
-            await apiClient.delete(`/members/transactions/${txId}`);
-            toast.success("Payment transaction deleted and balance updated");
-            fetchMembershipData();
-            if (memberIdVal) {
-                apiClient.get('/members/transactions/all')
-                    .then(res => {
-                        const memberTxs = (res.data || []).filter(t => (t.memberId?._id || t.memberId) === memberIdVal);
-                        setTransactions(memberTxs);
-                    })
-                    .catch(console.error);
-                if (id) {
-                    apiClient.get(`/members/${id}`).then(r => setFetchedMember(r.data)).catch(console.error);
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Payment Transaction',
+            message: `Are you sure you want to delete this payment transaction of ₹${amount}? The member's remaining balance will be adjusted automatically.`,
+            isDestructive: true,
+            confirmText: 'Delete Transaction',
+            onConfirm: async () => {
+                try {
+                    await apiClient.delete(`/members/transactions/${txId}`);
+                    toast.success("Payment transaction deleted and balance updated");
+                    fetchMembershipData();
+                    if (memberIdVal) {
+                        apiClient.get('/members/transactions/all')
+                            .then(res => {
+                                const memberTxs = (res.data || []).filter(t => (t.memberId?._id || t.memberId) === memberIdVal);
+                                setTransactions(memberTxs);
+                            })
+                            .catch(console.error);
+                        if (id) {
+                            apiClient.get(`/members/${id}`).then(r => setFetchedMember(r.data)).catch(console.error);
+                        }
+                    }
+                } catch (err) {
+                    toast.error(err.response?.data?.message || "Failed to delete transaction");
                 }
             }
-        } catch (err) {
-            toast.error(err.response?.data?.message || "Failed to delete transaction");
-        }
+        });
+    };
+
+    const handleDeleteScheduledMembership = (membershipId) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Cancel Scheduled Membership',
+            message: 'Are you sure you want to cancel and remove this upcoming scheduled membership? This will remove the future plan from the member profile.',
+            isDestructive: true,
+            confirmText: 'Cancel Scheduled Plan',
+            onConfirm: async () => {
+                try {
+                    await apiClient.delete(`/member-memberships/${membershipId}`);
+                    toast.success("Scheduled membership removed successfully");
+                    fetchMembershipData();
+                    if (id) {
+                        apiClient.get(`/members/${id}`).then(r => setFetchedMember(r.data)).catch(console.error);
+                    }
+                } catch (err) {
+                    toast.error(err.response?.data?.message || "Failed to remove scheduled membership");
+                }
+            }
+        });
     };
 
     const openEditTxModal = (tx) => {
@@ -309,7 +352,8 @@ export default function MemberProfilePage() {
         // Any package where today falls between startDate and endDate is ACTIVE
         return start <= todayEnd && end >= today;
     });
-    const activeMem = activeList[0];
+    const activeRegularMembership = activeList.find(m => !isPTMembership(m));
+    const activeMem = activeRegularMembership || activeList[0];
     const activeMembership = activeMem || (allMemberships.length === 0 ? (rawMember?.activeMembership || (rawMember?.membershipPlanId ? rawMember : null)) : null);
 
     const scheduledMembership = allMemberships.find(m => {
@@ -320,7 +364,8 @@ export default function MemberProfilePage() {
         return Boolean(start && start > todayEnd);
     });
 
-    const planEnd = activeMembership?.paidUntilDate ? parseLocalDateEnd(activeMembership.paidUntilDate) : activeMembership?.endDate ? parseLocalDateEnd(activeMembership.endDate) : (scheduledMembership?.endDate ? parseLocalDateEnd(scheduledMembership.endDate) : null);
+    const planEnd = activeMembership?.endDate ? parseLocalDateEnd(activeMembership.endDate) : (scheduledMembership?.endDate ? parseLocalDateEnd(scheduledMembership.endDate) : null);
+    const paidUntil = activeMembership?.paidUntilDate ? parseLocalDateEnd(activeMembership.paidUntilDate) : null;
     const isPlanExpired = planEnd && planEnd < today;
     const daysLeft = planEnd ? Math.max(0, Math.ceil((planEnd - today) / (1000 * 60 * 60 * 24))) : null;
 
@@ -392,6 +437,14 @@ export default function MemberProfilePage() {
                         >
                             <FiPlusCircle size={14} /> Assign / Renew Plan
                         </button>
+                        {activeRegularMembership && (
+                            <button
+                                onClick={() => navigate('/dashboard/owner/membership/assign', { state: { member, activeMembership: activeRegularMembership, isPTConversion: true } })}
+                                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 cursor-pointer"
+                            >
+                                <FiActivity size={14} /> Convert to PT
+                            </button>
+                        )}
                         <button 
                             onClick={() => navigate(`/dashboard/owner/members/edit/${member._id || memberIdVal}`, { state: { member } })}
                             className="px-4 py-2 bg-white hover:bg-rose-50 text-slate-900 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
@@ -424,6 +477,11 @@ export default function MemberProfilePage() {
                                     {planEnd ? formatDate(planEnd) : 'No Active Expiry'}
                                 </p>
                             </div>
+                            {paidUntil && activeMembership?.paymentStatus === 'Partial' && (
+                                <p className="text-[10px] font-bold text-amber-600 mt-0.5 truncate" title={`Paid till ${formatDate(paidUntil)}`}>
+                                    Paid till {formatDate(paidUntil)}
+                                </p>
+                            )}
                         </div>
 
                         {/* 3. DAYS REMAINING */}
@@ -443,7 +501,7 @@ export default function MemberProfilePage() {
                             <div className="flex items-center gap-1.5 mt-1 min-w-0">
                                 <FiTag className="text-amber-600 text-sm shrink-0" />
                                 <p className="text-[13.5px] sm:text-[14px] font-black text-emerald-600">
-                                    ₹{walletBalance}
+                                    ₹{Number(walletBalance || 0).toFixed(2)}
                                 </p>
                             </div>
                         </div>
@@ -666,8 +724,20 @@ export default function MemberProfilePage() {
                                                             </p>
                                                         </div>
 
-                                                        {/* Freeze & Unfreeze Toggle Button */}
+                                                        {/* Actions: Edit Plan & Freeze Toggle Button */}
                                                         <div className="flex items-center gap-2 self-start sm:self-center">
+                                                            <button 
+                                                                onClick={() => navigate('/dashboard/owner/membership/assign', {
+                                                                    state: {
+                                                                        member,
+                                                                        targetMembership: m,
+                                                                        isEdit: true
+                                                                    }
+                                                                })}
+                                                                className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm bg-white/15 hover:bg-white/25 text-white border border-white/20 cursor-pointer"
+                                                            >
+                                                                <FiEdit2 size={12} /> Edit Plan
+                                                            </button>
                                                             <button 
                                                                 onClick={() => handleToggleFreeze(m._id, m.membershipStatus)}
                                                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm ${
@@ -815,8 +885,27 @@ export default function MemberProfilePage() {
                                             </div>
                                         </div>
 
-                                        {scheduledMembership.balanceAmount > 0 && (
-                                            <div className="pt-2 flex justify-end">
+                                        <div className="pt-2 flex items-center justify-end gap-2 flex-wrap">
+                                            <button 
+                                                onClick={() => navigate('/dashboard/owner/membership/assign', {
+                                                    state: {
+                                                        member,
+                                                        targetMembership: scheduledMembership,
+                                                        isEdit: true
+                                                    }
+                                                })}
+                                                className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/20 font-bold text-xs rounded-lg shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                                            >
+                                                <FiEdit2 size={12} /> Edit Scheduled Plan
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteScheduledMembership(scheduledMembership._id)}
+                                                className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-200 border border-rose-400/30 font-bold text-xs rounded-lg shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                                                title="Cancel Scheduled Plan"
+                                            >
+                                                <FiTrash2 size={12} /> Cancel Scheduled Plan
+                                            </button>
+                                            {scheduledMembership.balanceAmount > 0 && (
                                                 <button 
                                                     onClick={() => navigate('/dashboard/owner/finance/collect', {
                                                         state: {
@@ -828,8 +917,8 @@ export default function MemberProfilePage() {
                                                 >
                                                     <FiCreditCard className="text-xs" /> Collect Remaining Due (₹{scheduledMembership.balanceAmount})
                                                 </button>
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -902,9 +991,9 @@ export default function MemberProfilePage() {
                             </div>
 
                             {transactions.length > 0 ? (
-                                <div className="overflow-x-auto rounded-xl border border-slate-100">
-                                    <table className="w-full text-left text-xs">
-                                        <thead className="bg-slate-50 text-[11px] font-bold uppercase text-slate-500 border-b border-slate-100">
+                                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-[#CA0410] text-[12px] font-bold uppercase text-white tracking-wider">
                                             <tr>
                                                 <th className="px-4 py-3">Date</th>
                                                 <th className="px-4 py-3">Plan</th>
@@ -916,46 +1005,46 @@ export default function MemberProfilePage() {
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 bg-white font-medium text-slate-700">
                                             {transactions.map(tx => (
-                                                <tr key={tx._id} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="px-4 py-3 font-bold text-slate-800">
+                                                <tr key={tx._id} className="hover:bg-slate-50/80 transition-colors">
+                                                    <td className="px-4 py-3.5 font-bold text-slate-800 text-[13.5px]">
                                                         {formatDate(tx.paymentDate || tx.createdAt)}
                                                     </td>
-                                                    <td className="px-4 py-3 text-indigo-600 font-bold">
+                                                    <td className="px-4 py-3.5 text-indigo-700 font-bold text-[13.5px]">
                                                         {tx.planName || tx.planId?.name || 'Membership Plan'}
                                                     </td>
-                                                    <td className="px-4 py-3 font-black text-emerald-600">
+                                                    <td className="px-4 py-3.5 font-black text-emerald-600 text-[14px]">
                                                         ₹{tx.amountPaid}
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                                    <td className="px-4 py-3.5">
+                                                        <span className="px-2.5 py-1 rounded-md text-[11.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200 uppercase">
                                                             {tx.paymentMode || 'Cash'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-3 text-[10px] text-slate-400 font-mono">
+                                                    <td className="px-4 py-3.5 text-[12px] text-slate-500 font-mono font-medium">
                                                         {tx.transactionId || tx._id?.toString().slice(-6)}
                                                     </td>
-                                                    <td className="px-4 py-3 text-center">
+                                                    <td className="px-4 py-3.5 text-center">
                                                         <div className="flex items-center justify-center gap-1.5">
                                                             <button 
                                                                 onClick={() => navigate(`/dashboard/owner/finance/receipt/${member._id}`)} 
-                                                                className="w-7 h-7 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
                                                                 title="View Receipt"
                                                             >
-                                                                <FiEye size={13} />
+                                                                <FiEye size={15} />
                                                             </button>
                                                             <button 
                                                                 onClick={() => openEditTxModal(tx)} 
-                                                                className="w-7 h-7 rounded-lg border border-indigo-200 text-indigo-600 bg-indigo-50/60 hover:border-indigo-300 hover:bg-indigo-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                                                className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-indigo-50/60 hover:border-indigo-300 hover:bg-indigo-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
                                                                 title="Edit Payment"
                                                             >
-                                                                <FiEdit2 size={13} />
+                                                                <FiEdit2 size={14} />
                                                             </button>
                                                             <button 
                                                                 onClick={() => handleDeleteTx(tx._id, tx.amountPaid)} 
-                                                                className="w-7 h-7 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
+                                                                className="w-8 h-8 rounded-lg border border-rose-200 text-[#CA0410] bg-rose-50/60 hover:border-rose-300 hover:bg-rose-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95" 
                                                                 title="Delete Payment"
                                                             >
-                                                                <FiTrash2 size={13} />
+                                                                <FiTrash2 size={14} />
                                                             </button>
                                                         </div>
                                                     </td>
@@ -1073,11 +1162,11 @@ export default function MemberProfilePage() {
                                             onChange={(e) => setCollectModal(prev => ({ 
                                                 ...prev, 
                                                 useWallet: e.target.checked, 
-                                                walletUsed: e.target.checked ? Math.min(member.walletBalance, collectModal.membership.balanceAmount) : 0 
+                                                walletUsed: e.target.checked ? Number(Math.min(member.walletBalance || 0, collectModal.membership.balanceAmount || 0).toFixed(2)) : 0 
                                             }))} 
                                             className="w-4 h-4 text-[#CA0410] rounded focus:ring-[#CA0410]"
                                         />
-                                        Use Wallet (Available: <span className="text-[#CA0410] font-bold">₹{member.walletBalance}</span>)
+                                        Use Wallet (Available: <span className="text-[#CA0410] font-bold">₹{Number(member.walletBalance || 0).toFixed(2)}</span>)
                                     </label>
                                 </div>
                             )}
@@ -1189,6 +1278,16 @@ export default function MemberProfilePage() {
                     </div>
                 </div>
             )}
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText}
+                isDestructive={confirmModal.isDestructive}
+            />
         </PageLayout>
     );
 }

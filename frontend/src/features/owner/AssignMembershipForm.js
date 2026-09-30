@@ -7,12 +7,12 @@ import Input from '../../components/form/Input';
 import Button from '../../components/form/Button';
 import { 
     FiActivity, FiTag, FiCheckCircle, FiCreditCard, 
-    FiDollarSign, FiPercent, FiCheck, FiInfo, FiFileText, FiAward, FiCalendar
+    FiInfo, FiAward, FiCalendar
 } from 'react-icons/fi';
 import apiClient from '../../api/apiClient';
 import { toast } from '../../utils/toast';
 import Loader from '../../components/page/Loader';
-import { formatDate, toInputDateFormat, getTodayInputDate } from '../../utils/dateUtils';
+import { formatDate, toInputDateFormat } from '../../utils/dateUtils';
 import ReactSelect from 'react-select';
 
 const formatToYMD = (date) => {
@@ -38,9 +38,33 @@ const getRenewalStartDate = (rawEndDate) => {
     return todayStr;
 };
 
+const isPTPlan = (plan) => {
+    const name = String(plan?.name || '').toLowerCase();
+    const type = Array.isArray(plan?.planType)
+        ? plan.planType.join(' ').toLowerCase()
+        : String(plan?.planType || '').toLowerCase();
+
+    return type.includes('personal training') || type.includes('pt') || name.includes('personal training') || name.includes('pt package') || (plan?.sessions || 0) > 0;
+};
+
+const isPTMembership = (membership) => Boolean(membership?.isPTConversion) || isPTPlan(membership?.membershipPlanId || membership);
+
+const normalizeReference = (reference) => {
+    if (!reference) return '';
+    if (typeof reference === 'string' || typeof reference === 'number') return String(reference).trim();
+    if (typeof reference !== 'object') return '';
+
+    const fullName = [reference.firstName, reference.lastName].filter(Boolean).join(' ');
+    const readableValue = reference.name || fullName || reference.label || reference.reference || reference.title || reference.code;
+    return readableValue ? normalizeReference(readableValue) : '';
+};
+
+const round2 = (num) => Math.round(((Number(num) || 0) + Number.EPSILON) * 100) / 100;
+
 export default function AssignMembershipForm() {
     const navigate = useNavigate();
     const location = useLocation();
+    const [isPTConversionMode, setIsPTConversionMode] = useState(Boolean(location.state?.isPTConversion));
 
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -50,11 +74,19 @@ export default function AssignMembershipForm() {
     const [activeMemberships, setActiveMemberships] = useState([]);
     const [editMode, setEditMode] = useState(false);
     const [membershipId, setMembershipId] = useState(null);
+    const [existingPaidAmount, setExistingPaidAmount] = useState(0);
+    const [ptAddonEnabled, setPtAddonEnabled] = useState(Boolean(location.state?.isPTConversion));
+    const [ptAddonPlanId, setPtAddonPlanId] = useState('');
+    const [ptAddonFee, setPtAddonFee] = useState('');
+    const [ptAddonSessions, setPtAddonSessions] = useState('');
+    const [ptAddonTrainerId, setPtAddonTrainerId] = useState('');
+    const [ptAddonEndDate, setPtAddonEndDate] = useState('');
 
     const [couponCode, setCouponCode] = useState('');
     const [appliedCoupon, setAppliedCoupon] = useState(null);
 
     const [staffList, setStaffList] = useState([]);
+    const skipAutoEndDateRef = React.useRef(false);
 
     const [formData, setFormData] = useState({
         memberId: '',
@@ -64,7 +96,7 @@ export default function AssignMembershipForm() {
         totalSessions: '',
         originalPrice: '',
         discount: 0,
-        amountPaid: 0,
+        amountPaid: '',
         paymentMode: 'Cash',
         transactionId: '',
         notes: '',
@@ -75,8 +107,128 @@ export default function AssignMembershipForm() {
         trainerId: '',
         salesPersonId: '',
         reference: '',
-        isPTConversion: false
+        isPTConversion: Boolean(location.state?.isPTConversion)
     });
+
+    const loadMembershipForEdit = (targetMem) => {
+        if (!targetMem) return;
+        skipAutoEndDateRef.current = true;
+        setEditMode(true);
+        setIsPTConversionMode(false);
+        setMembershipId(targetMem._id);
+        setExistingPaidAmount(Number(targetMem.paidAmount) || 0);
+        setPtAddonEnabled(false);
+        setAppliedCoupon(null);
+        setCouponCode('');
+
+        const planId = targetMem.membershipPlanId?._id || targetMem.membershipPlanId || '';
+        const startStr = toInputDateFormat(targetMem.startDate);
+        const endStr = toInputDateFormat(targetMem.endDate);
+        const origPrice = targetMem.originalPrice !== undefined && targetMem.originalPrice !== null && targetMem.originalPrice !== ''
+            ? targetMem.originalPrice
+            : (targetMem.finalPrice !== undefined ? targetMem.finalPrice : '');
+        const disc = targetMem.discount !== undefined ? targetMem.discount : 0;
+        const sess = targetMem.totalSessions !== undefined ? targetMem.totalSessions : '';
+        const bDays = targetMem.bonusDays || 0;
+        const tId = targetMem.trainerId?._id || targetMem.trainerId || '';
+        const sId = targetMem.salesPersonId?._id || targetMem.salesPersonId || '';
+        const ref = normalizeReference(targetMem.reference) || '';
+        const nts = targetMem.notes || '';
+        const pUntil = targetMem.paidUntilDate ? toInputDateFormat(targetMem.paidUntilDate) : '';
+
+        setFormData(prev => ({
+            ...prev,
+            memberId: (targetMem.memberId?._id || targetMem.memberId || prev.memberId),
+            membershipPlanId: planId,
+            planStartDate: startStr,
+            planEndDate: endStr,
+            totalSessions: sess,
+            originalPrice: origPrice,
+            discount: disc,
+            amountPaid: '',
+            paymentMode: 'Cash',
+            transactionId: '',
+            notes: nts,
+            paidUntilDate: pUntil,
+            useWallet: false,
+            walletUsed: 0,
+            bonusDays: bDays,
+            trainerId: tId,
+            salesPersonId: sId,
+            reference: ref,
+            isPTConversion: Boolean(targetMem.isPTConversion)
+        }));
+    };
+
+    const switchToScheduleMode = (targetMember, currentActiveMems = activeMemberships) => {
+        setEditMode(false);
+        setIsPTConversionMode(false);
+        setMembershipId(null);
+        setExistingPaidAmount(0);
+
+        const mId = targetMember?._id || targetMember?.id || formData.memberId;
+        const memMems = currentActiveMems.filter(m => (m.memberId?._id || m.memberId)?.toString() === mId?.toString());
+        
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const nowEnd = new Date();
+        nowEnd.setHours(23, 59, 59, 999);
+
+        const sched = memMems.find(m => {
+            if (isPTMembership(m) || m.membershipStatus === 'Cancelled') return false;
+            const s = new Date(m.startDate);
+            return (s && s > nowEnd) || m.membershipStatus === 'Scheduled';
+        });
+        const act = memMems.find(m => {
+            if (isPTMembership(m) || m.membershipStatus === 'Cancelled') return false;
+            const s = new Date(m.startDate);
+            const e = new Date(m.endDate);
+            return s && e && s <= nowEnd && e >= now;
+        }) || memMems.find(m => !isPTMembership(m) && m.membershipStatus === 'Active');
+
+        const latestMem = sched || act;
+        const rawEnd = latestMem?.endDate || targetMember?.planEndDate || targetMember?.endDate || latestMem?.paidUntilDate || targetMember?.paidUntilDate;
+        const renewalStartDate = getRenewalStartDate(rawEnd);
+
+        setFormData(prev => ({
+            ...prev,
+            planStartDate: renewalStartDate,
+            planEndDate: '',
+            amountPaid: '0',
+            discount: 0,
+            bonusDays: 0,
+            notes: ''
+        }));
+    };
+
+    const switchToPTConversionMode = (targetMember) => {
+        const mem = targetMember || selectedMember;
+        if (!mem) return;
+        setIsPTConversionMode(true);
+        setEditMode(false);
+        setMembershipId(null);
+        setExistingPaidAmount(0);
+        setPtAddonEnabled(true);
+        setPtAddonPlanId('');
+        setPtAddonFee('');
+        setPtAddonSessions('');
+        setPtAddonTrainerId('');
+        setCouponCode('');
+        setAppliedCoupon(null);
+        setFormData(prev => ({
+            ...prev,
+            memberId: mem._id || mem.id,
+            membershipPlanId: '',
+            planStartDate: formatToYMD(new Date()),
+            planEndDate: '',
+            totalSessions: '',
+            originalPrice: '',
+            discount: 0,
+            amountPaid: '',
+            trainerId: '',
+            isPTConversion: false
+        }));
+    };
 
     useEffect(() => {
         const fetchData = async () => {
@@ -99,8 +251,29 @@ export default function AssignMembershipForm() {
                 if (location.state?.member) {
                     const mem = location.state.member;
                     const memIdStr = (mem._id || mem.id || '').toString();
-                    const activeMem = activeMems.find(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr) || location.state?.activeMembership || mem.activeMembership;
-                    const isFullyPaid = activeMem && (activeMem.paymentStatus === 'Paid' || (activeMem.balanceAmount || 0) <= 0);
+                    const memberMems = activeMems.filter(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr);
+                    
+                    const now = new Date();
+                    now.setHours(0, 0, 0, 0);
+                    const nowEnd = new Date();
+                    nowEnd.setHours(23, 59, 59, 999);
+
+                    const actMem = memberMems.find(m => {
+                        if (isPTMembership(m) || m.membershipStatus === 'Cancelled') return false;
+                        const s = new Date(m.startDate);
+                        const e = new Date(m.endDate);
+                        return s && e && s <= nowEnd && e >= now;
+                    }) || memberMems.find(m => !isPTMembership(m) && m.membershipStatus === 'Active');
+
+                    const schedMem = memberMems.find(m => {
+                        if (isPTMembership(m) || m.membershipStatus === 'Cancelled') return false;
+                        const s = new Date(m.startDate);
+                        return (s && s > nowEnd) || m.membershipStatus === 'Scheduled';
+                    });
+
+                    const targetMem = location.state?.targetMembership || 
+                        location.state?.membership || 
+                        (location.state?.isEdit ? (location.state?.activeMembership || location.state?.scheduledMembership || actMem || schedMem) : null);
 
                     // Resolve initial staff & reference
                     let initialSalesPersonId = '';
@@ -116,18 +289,15 @@ export default function AssignMembershipForm() {
                             initialReference = found.name;
                         } else {
                             initialSalesPersonId = sId;
-                            initialReference = typeof mem.referredByStaff === 'object' ? mem.referredByStaff.name : '';
+                            initialReference = normalizeReference(mem.referredByStaff);
                         }
                     }
 
                     if (!initialSalesPersonId) {
-                        const rawRef = (
-                            (typeof mem.referredBy === 'object' && mem.referredBy?.name ? mem.referredBy.name : mem.referredBy) ||
-                            mem.enquiryId?.referredBy ||
-                            location.state?.convertedLead?.referredBy ||
-                            location.state?.leadOffer?.referredBy ||
-                            ''
-                        ).toString().trim();
+                        const rawRef = normalizeReference(mem.referredBy) ||
+                            normalizeReference(mem.enquiryId?.referredBy) ||
+                            normalizeReference(location.state?.convertedLead?.referredBy) ||
+                            normalizeReference(location.state?.leadOffer?.referredBy);
 
                         if (rawRef) {
                             const foundStaff = allStaff.find(s => 
@@ -144,50 +314,57 @@ export default function AssignMembershipForm() {
                         }
                     }
 
-                    const rawEnd = activeMem?.paidUntilDate || activeMem?.endDate || mem.paidUntilDate || mem.planEndDate || mem.endDate || location.state?.activeMembership?.endDate;
+                    const rawEnd = (schedMem || actMem)?.endDate || mem.planEndDate || mem.endDate || (schedMem || actMem)?.paidUntilDate || mem.paidUntilDate || location.state?.activeMembership?.endDate;
                     const renewalStartDate = getRenewalStartDate(rawEnd);
 
-                    if (location.state.isRenew) {
-                        const prevPlan = activeMem?.membershipPlanId?._id || activeMem?.membershipPlanId || (mem.membershipPlan?._id || mem.membershipPlan);
+                    if (location.state.isPTConversion) {
                         setEditMode(false);
                         setMembershipId(null);
+                        setExistingPaidAmount(0);
+                        setPtAddonEnabled(true);
+                        setPtAddonPlanId('');
+                        setPtAddonFee('');
+                        setPtAddonSessions('');
+                        setPtAddonTrainerId('');
+                        setCouponCode('');
+                        setAppliedCoupon(null);
+                        setFormData(prev => ({
+                            ...prev,
+                            memberId: mem._id,
+                            membershipPlanId: '',
+                            planStartDate: formatToYMD(new Date()),
+                            planEndDate: '',
+                            totalSessions: '',
+                            originalPrice: '',
+                            discount: 0,
+                            amountPaid: '',
+                            trainerId: '',
+                            isPTConversion: false,
+                            salesPersonId: initialSalesPersonId || prev.salesPersonId,
+                            reference: initialReference || prev.reference
+                        }));
+                    } else if (targetMem && location.state.isEdit) {
+                        loadMembershipForEdit(targetMem);
+                    } else if (location.state.isRenew) {
+                        const prevPlan = actMem?.membershipPlanId?._id || actMem?.membershipPlanId || (mem.membershipPlan?._id || mem.membershipPlan);
+                        setEditMode(false);
+                        setMembershipId(null);
+                        setExistingPaidAmount(0);
+                        setPtAddonEnabled(false);
                         setFormData(prev => ({
                             ...prev,
                             memberId: mem._id,
                             membershipPlanId: prevPlan || '',
                             planStartDate: renewalStartDate,
+                            isPTConversion: Boolean(actMem?.isPTConversion),
                             salesPersonId: initialSalesPersonId || prev.salesPersonId,
                             reference: initialReference || prev.reference
                         }));
-                    } else if (activeMem && (location.state.isEdit || !isFullyPaid)) {
-                        setEditMode(true);
-                        setMembershipId(activeMem._id);
-                        setFormData(prev => ({
-                            ...prev,
-                            memberId: mem._id,
-                            membershipPlanId: activeMem.membershipPlanId ? (activeMem.membershipPlanId._id || activeMem.membershipPlanId) : '',
-                            planStartDate: formatToYMD(activeMem.startDate) || renewalStartDate,
-                            planEndDate: formatToYMD(activeMem.endDate),
-                            totalSessions: activeMem.totalSessions || '',
-                            originalPrice: activeMem.originalPrice !== undefined ? activeMem.originalPrice : '',
-                            discount: activeMem.discount || 0,
-                            amountPaid: 0,
-                            paymentMode: 'Cash',
-                            transactionId: '',
-                            notes: '',
-                            paidUntilDate: activeMem.paidUntilDate ? formatToYMD(activeMem.paidUntilDate) : '',
-                            useWallet: false,
-                            walletUsed: 0,
-                            bonusDays: activeMem.bonusDays || 0,
-                            trainerId: activeMem.trainerId ? (activeMem.trainerId._id || activeMem.trainerId) : prev.trainerId,
-                            salesPersonId: activeMem.salesPersonId ? (activeMem.salesPersonId._id || activeMem.salesPersonId) : (initialSalesPersonId || prev.salesPersonId),
-                            reference: activeMem.reference || initialReference || prev.reference,
-                            isPTConversion: activeMem.isPTConversion !== undefined ? activeMem.isPTConversion : prev.isPTConversion
-                        }));
-                    } else if (activeMem && isFullyPaid) {
-                        // Member has fully paid active plan: default to Future/Scheduled plan starting day after current plan ends
+                    } else if (actMem || schedMem) {
+                        // Member has active or scheduled plan: default to Schedule Future plan
                         setEditMode(false);
                         setMembershipId(null);
+                        setExistingPaidAmount(0);
                         setFormData(prev => ({
                             ...prev,
                             memberId: mem._id,
@@ -198,6 +375,7 @@ export default function AssignMembershipForm() {
                     } else {
                         setEditMode(false);
                         setMembershipId(null);
+                        setExistingPaidAmount(0);
 
                         const leadOffer = location.state.leadOffer;
                         const offerAmount = Number(leadOffer?.offerAmount || mem.offerAmount || 0);
@@ -319,23 +497,88 @@ export default function AssignMembershipForm() {
 
     // Selected plan and member objects
     const selectedMember = members.find(m => m._id === formData.memberId);
+
+    const now = new Date();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+    const selectedMemberMemberships = activeMemberships.filter(m => (m.memberId?._id || m.memberId)?.toString() === formData.memberId?.toString());
+    const activeRegularMem = selectedMemberMemberships.find(m => {
+        if (isPTMembership(m) || m.membershipStatus === 'Cancelled') return false;
+        const st = new Date(m.startDate);
+        const en = new Date(m.paidUntilDate || m.endDate);
+        return m.membershipStatus === 'Active' || (!m.membershipStatus && st <= todayEnd && en >= todayStart);
+    }) || selectedMemberMemberships.find(m => !isPTMembership(m) && m.membershipStatus !== 'Scheduled');
+
+    const scheduledRegularMem = selectedMemberMemberships.find(m => {
+        if (isPTMembership(m) || m.membershipStatus === 'Cancelled') return false;
+        if (activeRegularMem && m._id?.toString() === activeRegularMem._id?.toString()) return false;
+        const st = new Date(m.startDate);
+        return m.membershipStatus === 'Scheduled' || (st && st > todayEnd);
+    });
+
+    const isEditingScheduled = editMode && scheduledRegularMem && membershipId === scheduledRegularMem._id;
+    const isEditingActive = editMode && activeRegularMem && membershipId === activeRegularMem._id;
+
+    const activeMemAlreadyPaid = Boolean(
+        activeRegularMem && (
+            activeRegularMem.paymentStatus === 'Paid' ||
+            (Number(activeRegularMem.balanceAmount) <= 0 && Number(activeRegularMem.paidAmount) > 0) ||
+            (Number(activeRegularMem.paidAmount) >= Number(activeRegularMem.finalPrice || activeRegularMem.originalPrice || 0))
+        )
+    );
+
     const selectedPlan = memberships.find(p => p._id === formData.membershipPlanId);
+    const ptAddonPlan = memberships.find(p => p._id === ptAddonPlanId);
+    const ptAddonStartDate = isPTConversionMode ? formatToYMD(new Date()) : formData.planStartDate;
+    const showPTAddon = isPTConversionMode || ptAddonEnabled;
     const planPrice = formData.originalPrice !== '' && formData.originalPrice !== null && formData.originalPrice !== undefined
         ? Number(formData.originalPrice)
         : (selectedPlan ? (selectedPlan.price || 0) : 0);
     const discountAmount = Number(formData.discount) || 0;
     const netPayable = Math.max(0, planPrice - discountAmount);
 
-    const planNameStr = String(selectedPlan?.name || '').toLowerCase();
-    const planTypeStr = Array.isArray(selectedPlan?.planType) 
-        ? selectedPlan.planType.join(' ').toLowerCase() 
-        : String(selectedPlan?.planType || '').toLowerCase();
-    const isPTPlan = planTypeStr.includes('personal training') || planTypeStr.includes('pt') || planNameStr.includes('personal training') || planNameStr.includes('pt package') || ((selectedPlan?.sessions || 0) > 0);
-    const showTrainerField = isPTPlan || Boolean(formData.isPTConversion);
+    const isPTPackageOnlyMode = Boolean(
+        isPTConversionMode ||
+        (showPTAddon && activeRegularMem && (editMode ? existingPaidAmount >= (netPayable || 0) : activeMemAlreadyPaid))
+    );
+
+    const selectedPlanIsPT = isPTPlan(selectedPlan);
+    const showTrainerField = !isPTConversionMode && !isPTPackageOnlyMode && (selectedPlanIsPT || Boolean(formData.isPTConversion));
+    const baseDueNow = isPTPackageOnlyMode ? 0 : Math.max(0, netPayable - (editMode ? existingPaidAmount : 0));
+    const ptAddonFeeAmount = showPTAddon ? Math.max(0, Number(ptAddonFee) || 0) : 0;
+    const overallPayableNow = isPTPackageOnlyMode ? ptAddonFeeAmount : (baseDueNow + ptAddonFeeAmount);
+
+    const todayEndForSched = new Date();
+    todayEndForSched.setHours(23, 59, 59, 999);
+    const isFuturePlan = Boolean(formData.planStartDate && new Date(formData.planStartDate) > todayEndForSched);
+
+    useEffect(() => {
+        if (!ptAddonEnabled || !ptAddonPlan || !ptAddonStartDate) {
+            setPtAddonEndDate('');
+            return;
+        }
+
+        const endDate = new Date(ptAddonStartDate);
+        const duration = parseInt(ptAddonPlan.duration, 10) || 0;
+        const unit = String(ptAddonPlan.durationUnit || 'months').toLowerCase();
+
+        if (unit.includes('month')) endDate.setMonth(endDate.getMonth() + duration);
+        else if (unit.includes('day')) endDate.setDate(endDate.getDate() + duration);
+        else if (unit.includes('year')) endDate.setFullYear(endDate.getFullYear() + duration);
+        else if (unit.includes('week')) endDate.setDate(endDate.getDate() + (duration * 7));
+
+        setPtAddonEndDate(toInputDateFormat(endDate));
+    }, [ptAddonEnabled, ptAddonPlan, ptAddonStartDate]);
 
     // Auto-calculate plan end date & default payment amount when plan or start date changes
     useEffect(() => {
         if (formData.membershipPlanId && formData.planStartDate && memberships.length > 0) {
+            if (skipAutoEndDateRef.current) {
+                skipAutoEndDateRef.current = false;
+                return;
+            }
+
             let maxEndDate = null;
             let totalSess = 0;
             
@@ -367,23 +610,24 @@ export default function AssignMembershipForm() {
                     : (plan ? (plan.price || 0) : 0);
                 const net = Math.max(0, currentPlanPrice - discountAmount);
 
-                const currentPlanName = String(plan?.name || '').toLowerCase();
-                const currentPlanType = Array.isArray(plan?.planType) 
-                    ? plan.planType.join(' ').toLowerCase() 
-                    : String(plan?.planType || '').toLowerCase();
-                const isExplicitPTPlan = currentPlanType.includes('personal training') || currentPlanType.includes('pt') || currentPlanName.includes('personal training') || currentPlanName.includes('pt package') || ((plan?.sessions || 0) > 0);
+                const isExplicitPTPlan = isPTPlan(plan);
 
-                setFormData(prev => ({ 
-                    ...prev, 
-                    planEndDate: maxEndDateStr,
-                    amountPaid: editMode ? prev.amountPaid : net, 
-                    totalSessions: totalSess,
-                    isPTConversion: isExplicitPTPlan ? true : prev.isPTConversion,
-                    paidUntilDate: '' 
-                }));
+                setFormData(prev => {
+                    const defaultAmount = editMode 
+                        ? prev.amountPaid 
+                        : (prev.amountPaid === '' || prev.amountPaid === null ? (isFuturePlan ? '0' : net) : prev.amountPaid);
+                    return { 
+                        ...prev, 
+                        planEndDate: maxEndDateStr,
+                        amountPaid: defaultAmount, 
+                        totalSessions: prev.totalSessions || totalSess,
+                        isPTConversion: isExplicitPTPlan ? true : prev.isPTConversion,
+                        paidUntilDate: '' 
+                    };
+                });
             }
         }
-    }, [formData.membershipPlanId, formData.planStartDate, formData.discount, memberships, editMode]);
+    }, [formData.membershipPlanId, formData.planStartDate, memberships]);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -414,27 +658,19 @@ export default function AssignMembershipForm() {
                 const updated = { ...prev, [name]: val };
                 if (name === 'memberId') {
                     const memIdStr = val?.toString() || '';
-                    const activeMem = activeMemberships.find(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr);
+                    const memberMems = activeMemberships.filter(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr);
+                    const activeMem = memberMems.find(m => !isPTMembership(m)) || memberMems[0];
                     const foundMem = members.find(m => (m._id || m.id)?.toString() === memIdStr);
-                    const isFullyPaid = activeMem && (activeMem.paymentStatus === 'Paid' || (activeMem.balanceAmount || 0) <= 0);
 
                     const rawEnd = activeMem?.paidUntilDate || activeMem?.endDate || foundMem?.paidUntilDate || foundMem?.planEndDate || foundMem?.endDate;
                     const renewalStartDate = getRenewalStartDate(rawEnd);
 
-                    if (activeMem && isFullyPaid) {
-                        updated.planStartDate = renewalStartDate;
-                        setEditMode(false);
-                        setMembershipId(null);
-                    } else if (activeMem && !isFullyPaid) {
-                        updated.planStartDate = formatToYMD(activeMem.startDate) || renewalStartDate;
-                        setEditMode(true);
-                        setMembershipId(activeMem._id);
-                    } else {
-                        updated.planStartDate = renewalStartDate;
-                        setEditMode(false);
-                        setMembershipId(null);
+                    updated.planStartDate = renewalStartDate;
+                    setEditMode(false);
+                    setMembershipId(null);
+                    setExistingPaidAmount(0);
 
-                        if (foundMem) {
+                    if (foundMem) {
                             // Resolve staff & reference from found member
                             let resolvedSalesPersonId = '';
                             let resolvedReference = '';
@@ -447,16 +683,12 @@ export default function AssignMembershipForm() {
                                     resolvedReference = found.name;
                                 } else {
                                     resolvedSalesPersonId = sId;
-                                    resolvedReference = typeof foundMem.referredByStaff === 'object' ? foundMem.referredByStaff.name : '';
+                                    resolvedReference = normalizeReference(foundMem.referredByStaff);
                                 }
                             }
 
                             if (!resolvedSalesPersonId) {
-                                const rawRef = (
-                                    (typeof foundMem.referredBy === 'object' && foundMem.referredBy?.name ? foundMem.referredBy.name : foundMem.referredBy) ||
-                                    foundMem.enquiryId?.referredBy ||
-                                    ''
-                                ).toString().trim();
+                                const rawRef = normalizeReference(foundMem.referredBy) || normalizeReference(foundMem.enquiryId?.referredBy);
 
                                 if (rawRef) {
                                     const foundStaff = staffList.find(s => 
@@ -566,11 +798,17 @@ export default function AssignMembershipForm() {
                                 }
                             }
                         }
-                    }
                 } else if (name === 'membershipPlanId') {
                     const plan = memberships.find(p => p._id === val);
                     if (plan) {
+                        if (isPTPlan(plan)) setPtAddonEnabled(false);
                         const price = plan.price || 0;
+                        const planName = String(plan.name || '').toLowerCase();
+                        const planType = Array.isArray(plan.planType)
+                            ? plan.planType.join(' ').toLowerCase()
+                            : String(plan.planType || '').toLowerCase();
+                        updated.isPTConversion = planType.includes('personal training') || planType.includes('pt') || planName.includes('personal training') || planName.includes('pt package') || (plan.sessions || 0) > 0;
+                        if (!updated.isPTConversion) updated.trainerId = '';
                         updated.originalPrice = price;
 
                         // Recalculate discount if coupon is percentage
@@ -583,7 +821,9 @@ export default function AssignMembershipForm() {
                                 setAppliedCoupon(ac => ac ? ({ ...ac, discountAmount: discountAmt }) : null);
                             }
                         }
-                        updated.amountPaid = Math.max(0, price - discountAmt);
+                        updated.amountPaid = editMode
+                            ? prev.amountPaid
+                            : Math.max(0, price - discountAmt);
                     }
                 }
                 return updated;
@@ -716,48 +956,115 @@ export default function AssignMembershipForm() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!formData.memberId || !formData.membershipPlanId) {
+        if (!formData.memberId || (!isPTConversionMode && !isPTPackageOnlyMode && !formData.membershipPlanId)) {
             toast.error("Please select a member and a membership plan.");
             return;
         }
 
-        const paid = Number(formData.amountPaid) || 0;
-        const walletBalanceAvailable = selectedMember?.walletBalance || 0;
-        let walletVal = 0;
-
-        if (formData.useWallet && walletBalanceAvailable > 0) {
-            walletVal = Math.min(walletBalanceAvailable, netPayable);
+        if (showPTAddon && (!ptAddonPlanId || !ptAddonTrainerId)) {
+            toast.error("Select a PT package and trainer for the PT add-on.");
+            return;
         }
 
-        setSubmitting(true);
-        try {
-            const payload = {
-                memberId: formData.memberId,
-                membershipPlans: [formData.membershipPlanId],
-                planStartDate: formData.planStartDate,
-                planEndDate: formData.planEndDate,
-                totalSessions: formData.totalSessions,
-                originalPrice: formData.originalPrice !== '' ? Number(formData.originalPrice) : undefined,
-                amountPaid: paid,
-                paymentMode: formData.paymentMode || 'Cash',
-                transactionId: formData.transactionId || undefined,
-                notes: formData.notes || undefined,
-                paidUntilDate: formData.paidUntilDate || undefined,
-                discount: formData.discount,
-                couponCode: appliedCoupon ? appliedCoupon.code : undefined,
-                walletUsed: walletVal,
-                bonusDays: formData.bonusDays,
-                trainerId: formData.trainerId || undefined,
-                salesPersonId: formData.salesPersonId || undefined,
-                reference: formData.reference || undefined,
-                isPTConversion: formData.isPTConversion
-            };
+        if (showTrainerField && !formData.trainerId) {
+            toast.error("Please select a trainer for the PT membership.");
+            return;
+        }
 
-            if (editMode && membershipId) {
-                await apiClient.put(`/member-memberships/${membershipId}`, payload);
-                toast.success("Membership updated & payment details saved!");
+        const paid = round2(Number(formData.amountPaid) || 0);
+        const walletBalanceAvailable = round2(selectedMember?.walletBalance || 0);
+        const baseAmountPaid = (isPTConversionMode || isPTPackageOnlyMode) ? 0 : round2(Math.min(paid, baseDueNow));
+        const ptAddonAmountPaid = showPTAddon
+            ? round2(Math.min(Math.max(0, paid - baseAmountPaid), ptAddonFeeAmount))
+            : 0;
+        const walletAvailableForPayment = !editMode && formData.useWallet ? walletBalanceAvailable : 0;
+        const baseWalletUsed = round2(Math.min(
+            walletAvailableForPayment,
+            Math.max(0, baseDueNow - baseAmountPaid),
+            Math.max(0, overallPayableNow - paid)
+        ));
+        const ptAddonWalletUsed = round2(Math.min(
+            Math.max(0, walletAvailableForPayment - baseWalletUsed),
+            Math.max(0, ptAddonFeeAmount - ptAddonAmountPaid),
+            Math.max(0, overallPayableNow - paid - baseWalletUsed)
+        ));
+        const walletVal = round2(baseWalletUsed + ptAddonWalletUsed);
+
+        setSubmitting(true);
+        let baseMembershipSaved = false;
+        let parentMembershipId = editMode ? membershipId : (activeRegularMem?._id || null);
+        try {
+            if (!isPTConversionMode && !isPTPackageOnlyMode) {
+                const payload = {
+                    memberId: formData.memberId,
+                    membershipPlans: [formData.membershipPlanId],
+                    planStartDate: formData.planStartDate,
+                    planEndDate: formData.planEndDate,
+                    totalSessions: formData.totalSessions,
+                    originalPrice: formData.originalPrice !== '' ? Number(formData.originalPrice) : undefined,
+                    amountPaid: baseAmountPaid,
+                    paymentMode: formData.paymentMode || 'Cash',
+                    transactionId: formData.transactionId || undefined,
+                    notes: formData.notes || undefined,
+                    paidUntilDate: formData.paidUntilDate || undefined,
+                    discount: formData.discount,
+                    couponCode: appliedCoupon ? appliedCoupon.code : undefined,
+                    walletUsed: baseWalletUsed,
+                    bonusDays: formData.bonusDays,
+                    trainerId: formData.trainerId || undefined,
+                    salesPersonId: formData.salesPersonId || undefined,
+                    reference: formData.reference || undefined,
+                    isPTConversion: formData.isPTConversion
+                };
+
+                const baseResponse = editMode && membershipId
+                    ? await apiClient.put(`/member-memberships/${membershipId}`, payload)
+                    : await apiClient.post('/member-memberships', payload);
+                baseMembershipSaved = true;
+                parentMembershipId = baseResponse.data?.membership?._id || parentMembershipId;
+            }
+
+            if (showPTAddon) {
+                const resolvedParentId = parentMembershipId || activeRegularMem?._id || location.state?.activeMembership?._id || undefined;
+                try {
+                    await apiClient.post('/member-memberships', {
+                        memberId: formData.memberId,
+                        membershipPlans: [ptAddonPlanId],
+                        planStartDate: ptAddonStartDate,
+                        planEndDate: ptAddonEndDate,
+                        totalSessions: ptAddonSessions,
+                        originalPrice: Number(ptAddonFee) || 0,
+                        amountPaid: ptAddonAmountPaid,
+                        paymentMode: formData.paymentMode || 'Cash',
+                        transactionId: formData.transactionId || undefined,
+                        notes: formData.notes || undefined,
+                        discount: 0,
+                        walletUsed: ptAddonWalletUsed,
+                        trainerId: ptAddonTrainerId,
+                        salesPersonId: formData.salesPersonId || undefined,
+                        reference: formData.reference || undefined,
+                        isPTConversion: true,
+                        parentMembershipId: resolvedParentId
+                    });
+                } catch (addonError) {
+                    if (baseMembershipSaved) {
+                        toast.error(`Gym plan saved, but PT add-on failed: ${addonError.response?.data?.message || 'Please add the PT package from the member profile.'}`);
+                        navigate(`/dashboard/owner/members/view/${formData.memberId}`);
+                        return;
+                    }
+                    throw addonError;
+                }
+            }
+
+            if (isPTPackageOnlyMode || isPTConversionMode) {
+                toast.success(`PT package assigned successfully! Payment of ₹${ptAddonAmountPaid} recorded (Gym plan retained).`);
+            } else if (editMode) {
+                toast.success(paid > 0
+                    ? `Membership updated & additional payment of ₹${paid} recorded!`
+                    : `Membership details updated successfully!`);
+            } else if (showPTAddon) {
+                toast.success(`Membership and PT add-on assigned; total payment of ₹${paid + walletVal} recorded.`);
             } else {
-                await apiClient.post('/member-memberships', payload);
                 toast.success(`Membership assigned & payment of ₹${paid + walletVal} recorded successfully!`);
             }
             
@@ -802,19 +1109,33 @@ export default function AssignMembershipForm() {
     if (loading) return <Loader text="Loading subscription details..." />;
 
     const availableCoupons = (gymSettings?.couponOffers || []).filter(c => c.isActive);
-    const amountPaidNum = Number(formData.amountPaid) || 0;
-    const walletBalanceAvailable = selectedMember?.walletBalance || 0;
-    const calculatedWalletUsed = formData.useWallet ? Math.min(walletBalanceAvailable, netPayable) : 0;
-    const totalCollected = amountPaidNum + calculatedWalletUsed;
-    const remainingBalance = Math.max(0, netPayable - totalCollected);
-
-    const selectedMemberActiveMem = activeMemberships.find(m => (m.memberId?._id || m.memberId) === formData.memberId);
+    const amountPaidNum = round2(Number(formData.amountPaid) || 0);
+    const walletBalanceAvailable = round2(selectedMember?.walletBalance || 0);
+    const baseAmountPaidNow = isPTPackageOnlyMode ? 0 : round2(Math.min(amountPaidNum, baseDueNow));
+    const ptAddonAmountPaidNow = showPTAddon
+        ? round2(Math.min(Math.max(0, amountPaidNum - baseAmountPaidNow), ptAddonFeeAmount))
+        : 0;
+    const walletAvailableForPayment = !editMode && formData.useWallet ? walletBalanceAvailable : 0;
+    const baseWalletUsed = round2(Math.min(
+        walletAvailableForPayment,
+        Math.max(0, baseDueNow - baseAmountPaidNow),
+        Math.max(0, overallPayableNow - amountPaidNum)
+    ));
+    const ptAddonWalletUsed = round2(Math.min(
+        Math.max(0, walletAvailableForPayment - baseWalletUsed),
+        Math.max(0, ptAddonFeeAmount - ptAddonAmountPaidNow),
+        Math.max(0, overallPayableNow - amountPaidNum - baseWalletUsed)
+    ));
+    const calculatedWalletUsed = round2(baseWalletUsed + ptAddonWalletUsed);
+    const totalCollectedToday = round2(amountPaidNum + calculatedWalletUsed);
+    const totalCollectedOverall = totalCollectedToday;
+    const remainingBalance = round2(Math.max(0, overallPayableNow - totalCollectedToday));
 
     return (
         <PageLayout>
             <PageHeader 
-                title={location.state?.isRenew ? "Renew Membership & Payment" : (editMode ? "Update Membership & Payment" : "Assign Membership & Process Payment")} 
-                subtitle={location.state?.isRenew ? "Start a new subscription cycle and record payment" : (editMode ? "Edit subscription plan and process payment details" : "Assign a subscription plan and process payment on the same screen")} 
+                title={isPTPackageOnlyMode || isPTConversionMode ? "Convert Member to PT / Add PT Package" : location.state?.isRenew ? "Renew Membership & Payment" : (editMode ? (isEditingScheduled ? "Update Scheduled Membership" : "Update Active Membership") : "Assign Membership & Process Payment")} 
+                subtitle={isPTPackageOnlyMode || isPTConversionMode ? "Add a PT package alongside the member's active gym plan without re-billing the existing plan" : location.state?.isRenew ? "Start a new subscription cycle and record payment" : (editMode ? "Edit plan dates, price, trainer attribution and record payments" : "Assign a subscription plan and process payment on the same screen")} 
                 showBack={true}
             />
 
@@ -822,48 +1143,122 @@ export default function AssignMembershipForm() {
                 <div className="max-w-7xl mx-auto">
                     <form onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
                         
-                        {selectedMemberActiveMem && (
+                        {(isPTPackageOnlyMode || isPTConversionMode) && activeRegularMem && (
+                            <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-950 shadow-2xs">
+                                <div className="flex items-start gap-3">
+                                    <FiActivity className="text-amber-600 text-lg shrink-0 mt-0.5" />
+                                    <div className="text-xs">
+                                        <p className="font-extrabold text-sm text-slate-900">
+                                            PT Conversion Mode Active: Current Gym Plan Retained
+                                        </p>
+                                        <p className="mt-0.5 text-slate-700 font-medium">
+                                            Active gym plan ({activeRegularMem?.planName || activeRegularMem?.membershipPlanId?.name || 'Active Plan'} - ₹{(activeRegularMem?.paidAmount || activeRegularMem?.finalPrice || 10000).toLocaleString()} already submitted) is retained and active. That ₹10,000 is not billed again. Only the PT package fee is payable today.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsPTConversionMode(false);
+                                            setPtAddonEnabled(false);
+                                            if (activeRegularMem) loadMembershipForEdit(activeRegularMem);
+                                        }}
+                                        className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                    >
+                                        Switch to Regular Plan
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {!(isPTPackageOnlyMode || isPTConversionMode) && (activeRegularMem || scheduledRegularMem) && (
                             <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-950 shadow-2xs">
                                 <div className="flex items-start gap-3">
                                     <FiCalendar className="text-[#CA0410] text-lg shrink-0 mt-0.5" />
                                     <div className="text-xs">
                                         <p className="font-extrabold text-sm text-slate-900">
-                                            {editMode ? `Editing Active Plan: ${selectedMemberActiveMem.planName || 'Current Plan'}` : `Member Active Till ${formatDate(selectedMemberActiveMem.paidUntilDate || selectedMemberActiveMem.endDate)}`}
+                                            {editMode 
+                                                ? (isEditingScheduled 
+                                                    ? `Editing Scheduled Plan: ${scheduledRegularMem?.planName || scheduledRegularMem?.membershipPlanId?.name || 'Scheduled Plan'}` 
+                                                    : `Editing Active Plan: ${activeRegularMem?.planName || activeRegularMem?.membershipPlanId?.name || 'Active Plan'}`)
+                                                : (activeRegularMem 
+                                                    ? `Member Active Till ${formatDate(activeRegularMem.paidUntilDate || activeRegularMem.endDate)}` 
+                                                    : `Member has Scheduled Plan Starting ${formatDate(scheduledRegularMem?.startDate)}`)}
                                         </p>
                                         <p className="mt-0.5 text-slate-600 font-medium">
                                             {editMode 
-                                                ? `You are modifying details for the active membership.`
-                                                : `This new plan will be saved as a Scheduled (Future) Plan starting on ${formData.planStartDate ? formatDate(formData.planStartDate) : 'future date'}.`}
+                                                ? (isEditingScheduled
+                                                    ? `Scheduled to start on ${formatDate(scheduledRegularMem?.startDate)} and end on ${formatDate(scheduledRegularMem?.endDate)}.`
+                                                    : `Currently active. Changes will update the member's active subscription.`)
+                                                : (activeRegularMem
+                                                    ? `This new plan will be saved as a Scheduled (Future) Plan starting on ${formData.planStartDate ? formatDate(formData.planStartDate) : 'future date'}.`
+                                                    : `Starts on ${formData.planStartDate ? formatDate(formData.planStartDate) : 'selected date'}.`)}
                                         </p>
                                     </div>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (editMode) {
-                                            setEditMode(false);
-                                            setMembershipId(null);
-                                            const activeEnd = new Date(selectedMemberActiveMem.paidUntilDate || selectedMemberActiveMem.endDate);
-                                            activeEnd.setDate(activeEnd.getDate() + 1);
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                planStartDate: toInputDateFormat(activeEnd)
-                                            }));
-                                        } else {
-                                            setEditMode(true);
-                                            setMembershipId(selectedMemberActiveMem._id);
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                membershipPlanId: selectedMemberActiveMem.membershipPlanId?._id || selectedMemberActiveMem.membershipPlanId || '',
-                                                planStartDate: toInputDateFormat(selectedMemberActiveMem.startDate),
-                                                planEndDate: toInputDateFormat(selectedMemberActiveMem.endDate)
-                                            }));
-                                        }
-                                    }}
-                                    className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold shrink-0 transition-colors shadow-2xs cursor-pointer"
-                                >
-                                    {editMode ? 'Switch to Schedule Future Plan' : 'Edit Active Plan Instead'}
-                                </button>
+                                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                                    {activeRegularMem && (
+                                        <button
+                                            type="button"
+                                            onClick={() => switchToPTConversionMode(selectedMember)}
+                                            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
+                                        >
+                                            <FiActivity size={13} />
+                                            Convert to PT
+                                        </button>
+                                    )}
+                                    {editMode ? (
+                                        <>
+                                            {isEditingScheduled && activeRegularMem && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => loadMembershipForEdit(activeRegularMem)}
+                                                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                                                >
+                                                    Edit Active Plan Instead
+                                                </button>
+                                            )}
+                                            {isEditingActive && scheduledRegularMem && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => loadMembershipForEdit(scheduledRegularMem)}
+                                                    className="px-3.5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                                                >
+                                                    Edit Scheduled Plan Instead
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => switchToScheduleMode(selectedMember)}
+                                                className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                                            >
+                                                Switch to Schedule / Assign Mode
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {activeRegularMem && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => loadMembershipForEdit(activeRegularMem)}
+                                                    className="px-3.5 py-2 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                                                >
+                                                    Edit Active Plan
+                                                </button>
+                                            )}
+                                            {scheduledRegularMem && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => loadMembershipForEdit(scheduledRegularMem)}
+                                                    className="px-3.5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+                                                >
+                                                    Edit Scheduled Plan
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         )}
 
@@ -927,7 +1322,7 @@ export default function AssignMembershipForm() {
                                     <label className="block text-xs font-bold text-slate-600">Select Member <span className="text-rose-500">*</span></label>
                                     {selectedMember && walletBalanceAvailable > 0 && (
                                         <span className="inline-flex items-center gap-1 text-[10px] font-extrabold bg-rose-50 text-[#CA0410] border border-rose-200 px-2 py-0.5 rounded-md">
-                                            <FiAward size={12} /> Wallet: ₹{walletBalanceAvailable}
+                                            <FiAward size={12} /> Wallet: ₹{Number(walletBalanceAvailable).toFixed(2)}
                                         </span>
                                     )}
                                 </div>
@@ -946,29 +1341,63 @@ export default function AssignMembershipForm() {
                                 />
                             </div>
 
-                            <div className="col-span-1">
-                                <label className="block text-xs font-bold text-slate-600 mb-1.5">Membership Plan <span className="text-rose-500">*</span></label>
-                                <ReactSelect
-                                    options={memberships.map(m => ({
-                                        value: m._id,
-                                        label: `${m.name} (₹${m.price} - ${m.duration} ${m.durationUnit})`
-                                    }))}
-                                    value={formData.membershipPlanId ? { 
-                                        value: formData.membershipPlanId, 
-                                        label: selectedPlan ? `${selectedPlan.name} (₹${selectedPlan.price} - ${selectedPlan.duration} ${selectedPlan.durationUnit})` : 'Select plan...' 
-                                    } : null}
-                                    onChange={(val) => handleSelectChange('membershipPlanId', val)}
-                                    styles={customStyles}
-                                    placeholder="Search and select a plan..."
-                                />
-                            </div>
-                            
-                            <Input type="date" label="Plan Start Date" name="planStartDate" value={formData.planStartDate} onChange={handleChange} required />
-                            <Input type="date" label="Plan End Date" name="planEndDate" value={formData.planEndDate} onChange={handleChange} required />
-                            <Input type="number" label="Total PT / Sessions Limit" name="totalSessions" value={formData.totalSessions} onChange={handleChange} placeholder="e.g. 12 or 24 sessions (0 for unlimited)" />
-                            <Input type="number" label="Bonus Days (Optional)" name="bonusDays" value={formData.bonusDays} onChange={handleChange} placeholder="e.g. 5" />
+                            {isPTConversionMode ? (
+                                <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-900">
+                                    PT will be added as a separate package. The member's current gym plan and its fee will not change.
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="col-span-1">
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">Membership Plan <span className="text-rose-500">*</span></label>
+                                        <ReactSelect
+                                            options={memberships.map(m => ({
+                                                value: m._id,
+                                                label: `${m.name} (₹${m.price} - ${m.duration} ${m.durationUnit})`
+                                            }))}
+                                            value={formData.membershipPlanId ? {
+                                                value: formData.membershipPlanId,
+                                                label: selectedPlan ? `${selectedPlan.name} (₹${selectedPlan.price} - ${selectedPlan.duration} ${selectedPlan.durationUnit})` : 'Select plan...'
+                                            } : null}
+                                            onChange={(val) => handleSelectChange('membershipPlanId', val)}
+                                            styles={customStyles}
+                                            placeholder="Search and select a plan..."
+                                        />
+                                    </div>
+
+                                    <Input type="date" label="Plan Start Date" name="planStartDate" value={formData.planStartDate} onChange={handleChange} required />
+                                    <Input type="date" label="Plan End Date" name="planEndDate" value={formData.planEndDate} onChange={handleChange} required />
+                                    {showTrainerField && (
+                                        <Input type="number" label="Total PT Sessions" name="totalSessions" value={formData.totalSessions} onChange={handleChange} placeholder="e.g. 12 or 24 sessions (0 for unlimited)" />
+                                    )}
+                                    <Input type="number" label="Bonus Days (Optional)" name="bonusDays" value={formData.bonusDays} onChange={handleChange} placeholder="e.g. 5" />
+
+                                    {formData.membershipPlanId && !selectedPlanIsPT && (
+                                        <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 flex flex-col gap-2 p-3.5 bg-amber-50 border border-amber-200 rounded-xl">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={ptAddonEnabled}
+                                                    onChange={(event) => setPtAddonEnabled(event.target.checked)}
+                                                    className="w-4 h-4 text-[#CA0410] rounded focus:ring-[#CA0410] cursor-pointer"
+                                                />
+                                                <span className="text-xs font-extrabold text-amber-900">Add PT package separately</span>
+                                                <span className="text-xs text-amber-800">Gym plan and PT package keep separate fees and sessions.</span>
+                                            </label>
+                                            {ptAddonEnabled && activeRegularMem && (activeMemAlreadyPaid || (editMode && existingPaidAmount >= netPayable)) && (
+                                                <div className="text-[11.5px] font-bold text-emerald-800 bg-emerald-100/90 p-2.5 rounded-lg border border-emerald-300 flex items-center gap-2">
+                                                    <FiCheckCircle className="text-emerald-700 shrink-0 text-base" />
+                                                    <span>
+                                                        Current Gym Plan ({activeRegularMem?.planName || 'Active Plan'} - ₹{(activeRegularMem?.paidAmount || activeRegularMem?.finalPrice || 10000).toLocaleString()} already submitted) is retained. That ₹10,000 will NOT be charged again. Only the PT package fee below is payable.
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </>
+                            )}
                             
                             {/* Referral / Discount Coupon Box */}
+                            {!isPTConversionMode && !isPTPackageOnlyMode && (
                             <div className="sm:col-span-2 lg:col-span-3 xl:col-span-4 p-4 bg-rose-50/50 border border-rose-200/80 rounded-2xl space-y-3">
                                 <div className="flex items-center justify-between">
                                     <span className="text-xs font-extrabold text-slate-800 flex items-center gap-2">
@@ -1051,8 +1480,75 @@ export default function AssignMembershipForm() {
                                     </div>
                                 )}
                             </div>
+                            )}
 
                         </FormSection>
+
+                        {showPTAddon && (
+                            <FormSection title="PT Add-on" icon={<FiActivity />} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1.5">PT Package <span className="text-rose-500">*</span></label>
+                                    <select
+                                        value={ptAddonPlanId}
+                                        onChange={(event) => {
+                                            const planId = event.target.value;
+                                            const plan = memberships.find(item => item._id === planId);
+                                            const planFee = plan ? (plan.price || 0) : '';
+                                            setPtAddonPlanId(planId);
+                                            setPtAddonFee(planFee);
+                                            setPtAddonSessions(plan ? plan.sessions || 0 : '');
+                                            setPtAddonTrainerId('');
+                                            if (isPTPackageOnlyMode || isPTConversionMode) {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    amountPaid: planFee
+                                                }));
+                                            }
+                                        }}
+                                        className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410]"
+                                    >
+                                        <option value="">-- Select PT package --</option>
+                                        {memberships.filter(isPTPlan).map(plan => (
+                                            <option key={plan._id} value={plan._id}>{plan.name} (₹{plan.price})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {ptAddonPlanId && (
+                                    <>
+                                        <Input type="date" label="PT Start Date" value={ptAddonStartDate} disabled />
+                                        <Input type="date" label="PT End Date" value={ptAddonEndDate} disabled />
+                                        <Input type="number" label="PT Sessions" value={ptAddonSessions} onChange={(event) => setPtAddonSessions(event.target.value)} min="0" />
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1.5">PT Trainer <span className="text-rose-500">*</span></label>
+                                            <select
+                                                value={ptAddonTrainerId}
+                                                onChange={(event) => setPtAddonTrainerId(event.target.value)}
+                                                className="w-full h-10 px-3 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#CA0410]"
+                                            >
+                                                <option value="">-- Select Trainer --</option>
+                                                {staffList.map(staff => <option key={staff._id} value={staff._id}>{staff.name} ({staff.role || 'Staff'})</option>)}
+                                            </select>
+                                        </div>
+                                        <Input 
+                                            type="number" 
+                                            label="PT Fee (₹)" 
+                                            value={ptAddonFee} 
+                                            onChange={(event) => {
+                                                const val = event.target.value;
+                                                setPtAddonFee(val);
+                                                if (isPTPackageOnlyMode || isPTConversionMode) {
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        amountPaid: val
+                                                    }));
+                                                }
+                                            }} 
+                                            min="0" 
+                                        />
+                                    </>
+                                )}
+                            </FormSection>
+                        )}
 
                         {/* SECTION: TRAINER & SALES ATTRIBUTION */}
                         <FormSection title="Trainer, Sales & Reference Attribution" icon={<FiAward />} className={`grid grid-cols-1 sm:grid-cols-2 ${showTrainerField ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
@@ -1102,80 +1598,81 @@ export default function AssignMembershipForm() {
                                 />
                             </div>
 
-                            <div className="col-span-1 flex flex-col justify-end">
-                                <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors h-10">
-                                    <input 
-                                        type="checkbox" 
-                                        name="isPTConversion" 
-                                        checked={formData.isPTConversion} 
-                                        onChange={(e) => setFormData(prev => ({ 
-                                            ...prev, 
-                                            isPTConversion: e.target.checked,
-                                            trainerId: (!e.target.checked && !isPTPlan) ? '' : prev.trainerId
-                                        }))} 
-                                        className="w-4 h-4 text-[#CA0410] rounded focus:ring-[#CA0410]" 
-                                    />
-                                    <span className="text-xs font-extrabold text-slate-700">PT Conversion</span>
-                                </label>
-                            </div>
                         </FormSection>
 
                         {/* SECTION 2: PAYMENT & FINANCIAL SUMMARY */}
                         <FormSection title="Payment Collection & Receipt Details" icon={<FiCreditCard />} className="space-y-5">
                             
                             {/* Dynamic Price Summary Header Cards */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80">
+                            <div className={`grid grid-cols-1 sm:grid-cols-2 ${editMode || isPTPackageOnlyMode ? 'lg:grid-cols-4' : 'lg:grid-cols-4'} gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80`}>
                                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                                    <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Plan Fee (₹)</p>
-                                    <input 
-                                        type="number"
-                                        name="originalPrice"
-                                        value={formData.originalPrice}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            setFormData(prev => {
-                                                const priceNum = val !== '' ? Number(val) : (selectedPlan ? selectedPlan.price || 0 : 0);
-                                                const disc = Number(prev.discount) || 0;
-                                                return {
-                                                    ...prev,
-                                                    originalPrice: val,
-                                                    amountPaid: editMode ? prev.amountPaid : Math.max(0, priceNum - disc)
-                                                };
-                                            });
-                                        }}
-                                        className="w-full h-9 text-sm font-black text-slate-800 bg-slate-50 border border-slate-200 px-3 rounded-lg focus:bg-white focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
-                                        placeholder={selectedPlan ? String(selectedPlan.price || 0) : "0"}
-                                    />
+                                    <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">
+                                        {isPTPackageOnlyMode ? "PT Package Fee (₹)" : (editMode ? "Net Plan Price (₹)" : "Overall Amount Due (₹)")}
+                                    </p>
+                                    <p className="text-lg font-black text-slate-800 mt-1">
+                                        ₹{(isPTPackageOnlyMode ? ptAddonFeeAmount : (editMode ? netPayable : overallPayableNow)).toLocaleString()}
+                                    </p>
+                                    {isPTPackageOnlyMode && (
+                                        <p className="text-[10px] font-bold text-emerald-600 mt-0.5">
+                                            Gym plan ₹{(activeRegularMem?.paidAmount || activeRegularMem?.finalPrice || 10000).toLocaleString()} already submitted
+                                        </p>
+                                    )}
                                 </div>
+                                {isPTPackageOnlyMode ? (
+                                    <div className="bg-white p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-2xs">
+                                        <p className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider mb-1">Current Gym Plan</p>
+                                        <p className="text-sm font-black text-emerald-900 mt-1 truncate">
+                                            {activeRegularMem?.planName || activeRegularMem?.membershipPlanId?.name || 'Active Gym Plan'}
+                                        </p>
+                                        <p className="text-[10.5px] text-emerald-700 font-semibold mt-0.5">
+                                            ₹{(activeRegularMem?.paidAmount || activeRegularMem?.finalPrice || 10000).toLocaleString()} Paid & Retained
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Discount (₹)</p>
+                                        <input 
+                                            type="number"
+                                            name="discount"
+                                            value={formData.discount}
+                                            onChange={handleChange}
+                                            className="w-full h-9 text-sm font-black text-[#CA0410] bg-rose-50/50 border border-rose-200 px-3 rounded-lg focus:bg-white focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                )}
+                                {isPTPackageOnlyMode ? (
+                                    <div className="bg-white p-3.5 rounded-xl border border-rose-200/80 bg-rose-50/20 shadow-2xs">
+                                        <p className="text-[10px] font-extrabold text-[#CA0410] uppercase tracking-wider">Remaining PT Balance</p>
+                                        <p className="text-lg font-black text-[#CA0410] mt-0.5">₹{Number(remainingBalance).toFixed(2)}</p>
+                                    </div>
+                                ) : editMode ? (
+                                    <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                                        <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Previously Paid (₹)</p>
+                                        <p className="text-lg font-black text-emerald-600 mt-1">₹{Number(existingPaidAmount).toFixed(2)}</p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white p-3.5 rounded-xl border border-rose-200/80 bg-rose-50/20 shadow-2xs">
+                                        <p className="text-[10px] font-extrabold text-[#CA0410] uppercase tracking-wider">Remaining After Payment</p>
+                                        <p className="text-lg font-black text-[#CA0410] mt-0.5">₹{Number(remainingBalance).toFixed(2)}</p>
+                                    </div>
+                                )}
                                 <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                                    <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Discount (₹)</p>
-                                    <input 
-                                        type="number"
-                                        name="discount"
-                                        value={formData.discount}
-                                        onChange={handleChange}
-                                        className="w-full h-9 text-sm font-black text-[#CA0410] bg-rose-50/50 border border-rose-200 px-3 rounded-lg focus:bg-white focus:outline-none focus:border-[#CA0410] focus:ring-2 focus:ring-rose-500/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none transition-all"
-                                        placeholder="0"
-                                    />
-                                </div>
-                                <div className="bg-white p-3.5 rounded-xl border border-rose-200/80 bg-rose-50/20 shadow-2xs">
-                                    <p className="text-[10px] font-extrabold text-[#CA0410] uppercase tracking-wider">Net Payable</p>
-                                    <p className="text-lg font-black text-[#CA0410] mt-0.5">₹{netPayable.toLocaleString()}</p>
-                                </div>
-                                <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Payment Status</p>
+                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                                        {isPTPackageOnlyMode ? 'PT Payment Status' : (editMode ? `Balance Due: ₹${Number(remainingBalance).toFixed(2)}` : 'Payment Status')}
+                                    </p>
                                     <div className="mt-1">
-                                        {remainingBalance === 0 && netPayable > 0 ? (
+                                        {remainingBalance === 0 && (isPTPackageOnlyMode ? ptAddonFeeAmount > 0 : true) ? (
                                             <span className="inline-flex items-center gap-1 text-xs font-black text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-md">
                                                 <FiCheckCircle /> Full Paid
                                             </span>
-                                        ) : totalCollected > 0 ? (
+                                        ) : (totalCollectedOverall > 0 || (!isPTPackageOnlyMode && editMode && existingPaidAmount > 0)) ? (
                                             <span className="inline-flex items-center gap-1 text-xs font-black text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-md">
-                                                <FiInfo /> Partial (Due: ₹{remainingBalance})
+                                                <FiInfo /> Partial (Due: ₹{Number(remainingBalance).toFixed(2)})
                                             </span>
                                         ) : (
                                             <span className="inline-flex items-center gap-1 text-xs font-black text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-md">
-                                                Unpaid (Due: ₹{netPayable})
+                                                Unpaid (Due: ₹{Number(overallPayableNow).toFixed(2)})
                                             </span>
                                         )}
                                     </div>
@@ -1183,24 +1680,34 @@ export default function AssignMembershipForm() {
                             </div>
 
                             {/* Wallet Usage Toggle */}
-                            {selectedMember && walletBalanceAvailable > 0 && (
+                            {!editMode && selectedMember && walletBalanceAvailable > 0 && (
                                 <div className="p-3.5 bg-rose-50/80 border border-rose-200/80 rounded-xl flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <input 
-                                            type="checkbox"
+                                            type="checkbox" 
                                             id="useWallet"
                                             name="useWallet"
                                             checked={formData.useWallet}
-                                            onChange={handleChange}
+                                            onChange={(event) => {
+                                                const useWallet = event.target.checked;
+                                                const walletContribution = useWallet
+                                                    ? round2(Math.min(walletBalanceAvailable, overallPayableNow))
+                                                    : 0;
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    useWallet,
+                                                    amountPaid: round2(Math.max(0, overallPayableNow - walletContribution))
+                                                }));
+                                            }}
                                             className="w-4 h-4 text-[#CA0410] rounded-md focus:ring-[#CA0410] cursor-pointer"
                                         />
                                         <label htmlFor="useWallet" className="text-xs font-bold text-slate-800 cursor-pointer">
-                                            Use Member Wallet Balance (Available: <span className="font-black text-[#CA0410]">₹{walletBalanceAvailable}</span>)
+                                            Use Member Wallet Balance (Available: <span className="font-black text-[#CA0410]">₹{Number(walletBalanceAvailable).toFixed(2)}</span>)
                                         </label>
                                     </div>
                                     {formData.useWallet && (
                                         <span className="text-xs font-extrabold text-[#CA0410] bg-white px-3 py-1 rounded-lg border border-rose-200 shadow-2xs">
-                                            Deducting ₹{calculatedWalletUsed} from wallet
+                                            Deducting ₹{Number(calculatedWalletUsed).toFixed(2)} from wallet
                                         </span>
                                     )}
                                 </div>
@@ -1210,12 +1717,12 @@ export default function AssignMembershipForm() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 <Input 
                                     type="number" 
-                                    label="Amount Received Today (₹)" 
+                                    label={isPTPackageOnlyMode ? "PT Amount Received Today (₹)" : (editMode ? "Additional Amount Received Today (₹)" : (isFuturePlan ? "Advance Received Today (₹, optional)" : "Overall Amount Received Today (₹)"))} 
                                     name="amountPaid" 
                                     value={formData.amountPaid} 
                                     onChange={handleChange} 
-                                    placeholder="Enter paid amount" 
-                                    required 
+                                    placeholder={isPTPackageOnlyMode ? "Enter PT paid amount" : (editMode ? "0 (or enter additional amount)" : (isFuturePlan ? "0 (Advance, optional)" : "Enter paid amount"))} 
+                                    required={!editMode && !isFuturePlan && !isPTPackageOnlyMode} 
                                 />
 
                                 <div>
@@ -1241,6 +1748,7 @@ export default function AssignMembershipForm() {
                                     value={formData.transactionId} 
                                     onChange={handleChange} 
                                     placeholder="e.g. UPI Ref / UTR" 
+                                
                                 />
 
                                 <Input 
@@ -1261,9 +1769,11 @@ export default function AssignMembershipForm() {
                                 Cancel
                             </Button>
                             <Button type="submit" loading={submitting} className="w-full sm:w-auto px-8 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold">
-                                {editMode 
-                                    ? `Update Plan & Process Payment (₹${totalCollected})` 
-                                    : `Assign Membership & Collect Payment (₹${totalCollected})`}
+                                {isPTPackageOnlyMode || isPTConversionMode
+                                    ? `Assign PT Package & Collect Payment (₹${Number(totalCollectedOverall).toFixed(2)})`
+                                    : editMode 
+                                    ? (totalCollectedOverall > 0 ? `Update Plan & Record Payment (₹${Number(totalCollectedOverall).toFixed(2)})` : 'Save Plan Changes')
+                                    : `Assign Membership & Collect Payment (₹${Number(totalCollectedOverall).toFixed(2)})`}
                             </Button>
                         </div>
                     </form>

@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const memberController = require('../controllers/memberController');
-const { protect, gymOwnerOnly } = require('../middleware/authMiddleware');
+const { protect, gymOwnerOrAdmin } = require('../middleware/authMiddleware');
 
 router.use(protect);
 
 router.route('/')
-    .post(gymOwnerOnly, memberController.createMember)
+    .post(gymOwnerOrAdmin, memberController.createMember)
     .get(protect, memberController.getMembers);
 
 router.route('/transactions/all')
@@ -16,12 +16,12 @@ router.route('/transactions/single/:id')
     .get(protect, memberController.getTransactionById);
 
 router.route('/transactions/:id')
-    .put(gymOwnerOnly, memberController.updateTransaction)
-    .delete(gymOwnerOnly, memberController.deleteTransaction);
+    .put(gymOwnerOrAdmin, memberController.updateTransaction)
+    .delete(gymOwnerOrAdmin, memberController.deleteTransaction);
 
 router.route('/:id')
     .get(protect, memberController.getMemberById)
-    .put(gymOwnerOnly, memberController.updateMember)
-    .delete(gymOwnerOnly, memberController.deleteMember);
+    .put(gymOwnerOrAdmin, memberController.updateMember)
+    .delete(gymOwnerOrAdmin, memberController.deleteMember);
 
 module.exports = router;

@@ -225,41 +225,41 @@ export default function MemberAttendanceReport({
         }
 
         return (
-            <tr key={item._id} className="bg-white hover:bg-slate-50/70 transition-colors duration-150 group">
+            <tr key={item._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
                 {/* MEMBER */}
-                <td className="py-2.5 pl-6 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
-                        <div className={`w-9 h-9 rounded-full ${avatarStyle.bg} ${avatarStyle.text} font-bold text-sm flex items-center justify-center shrink-0`}>
+                <td className="py-3.5 pl-6 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full ${avatarStyle.bg} ${avatarStyle.text} font-bold text-sm flex items-center justify-center shrink-0 border border-slate-200/80 shadow-2xs`}>
                             {(memberName || 'M').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex flex-col min-w-0">
-                            <span className="font-bold text-[#111827] text-[13px] leading-tight truncate">
+                            <span className="font-bold text-slate-900 text-[14.5px] leading-tight truncate">
                                 {memberName}
                             </span>
-                            <span className="text-[11px] text-slate-500 font-medium mt-0.5">
-                                ID: {memberCustomId}
+                            <span className="text-[12.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                                ID: <span className="font-bold text-slate-700">{memberCustomId}</span>
                             </span>
                         </div>
                     </div>
                 </td>
 
                 {/* PLAN */}
-                <td className="py-2.5 px-3 align-middle">
-                    <span className="font-bold text-[#111827] text-[13px]">
+                <td className="py-3.5 px-3 align-middle">
+                    <span className="font-bold text-slate-900 text-[13.5px]">
                         {planName}
                     </span>
                 </td>
 
                 {/* VALIDITY DATES */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[12px] leading-tight">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12.5px] leading-tight">
                         <span className="font-medium text-slate-700">{startDateStr} to {endDateStr}</span>
                     </div>
                 </td>
 
                 {/* PLAN STATUS */}
-                <td className="py-2.5 pl-1 pr-3 text-left align-middle">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-0.5 border leading-none shadow-2xs ${
+                <td className="py-3.5 pl-1 pr-3 text-left align-middle">
+                    <span className={`inline-flex items-center gap-1 text-[12px] font-bold rounded-lg px-3 py-1 border leading-none shadow-2xs ${
                         info.status === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
                         info.status === 'Upcoming' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                         info.status === 'Expired' ? 'bg-rose-50 text-rose-700 border-rose-200' :
@@ -270,8 +270,8 @@ export default function MemberAttendanceReport({
                 </td>
 
                 {/* TODAY ATTENDANCE */}
-                <td className="py-2.5 pl-1 pr-3 text-left align-middle">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-0.5 border leading-none shadow-2xs ${
+                <td className="py-3.5 pl-1 pr-3 text-left align-middle">
+                    <span className={`inline-flex items-center gap-1 text-[12px] font-bold rounded-lg px-3 py-1 border leading-none shadow-2xs ${
                         attendanceStatus === 'Present' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
                         attendanceStatus === 'Absent' ? 'bg-rose-50 text-rose-700 border-rose-200' :
                         'bg-slate-50 text-slate-600 border border-slate-200'
@@ -281,21 +281,21 @@ export default function MemberAttendanceReport({
                 </td>
 
                 {/* TOTAL ATTENDANCE */}
-                <td className="py-2.5 px-3 align-middle">
-                    <span className="inline-flex px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full text-[11px] font-bold">
+                <td className="py-3.5 px-3 align-middle">
+                    <span className="inline-flex px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-[12px] font-bold">
                         {totalDaysPresent} Days
                     </span>
                 </td>
 
                 {/* ACTIONS */}
-                <td className="py-2.5 pl-2 pr-6 text-center align-middle">
+                <td className="py-3.5 pl-2 pr-6 text-center align-middle">
                     <div className="flex items-center justify-center">
                         <button 
                             onClick={() => handleOpenModal(item)}
-                            className="w-7 h-7 rounded-md border border-slate-200 text-slate-500 bg-white hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer"
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-emerald-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                             title="View Attendance History"
                         >
-                            <FiEye size={14} />
+                            <FiEye size={15} />
                         </button>
                     </div>
                 </td>

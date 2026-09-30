@@ -166,7 +166,7 @@ export default function Select({ label, required, error, options = [], children,
     return (
         <div className={`flex flex-col ${containerClassName}`}>
             {label && (
-                <label className={`block text-[12px] font-bold mb-1.5 tracking-tight ${error ? 'text-rose-600' : 'text-slate-700'}`}>
+                <label className={`block text-[13px] font-bold mb-1.5 tracking-tight ${error ? 'text-rose-600' : 'text-slate-700'}`}>
                     {label} {required && <span className="text-[#CA0410] ml-0.5">*</span>}
                 </label>
             )}

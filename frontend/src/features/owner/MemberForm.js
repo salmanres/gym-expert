@@ -437,7 +437,7 @@ export default function MemberForm() {
                             <Input label="First Name" name="firstName" value={formData.firstName || ''} onChange={handleChange} required placeholder="First Name" error={errors.firstName} />
                             <Input label="Last Name" name="lastName" value={formData.lastName || ''} onChange={handleChange} placeholder="Last Name" error={errors.lastName} />
                             <Select label="Gender" name="gender" value={formData.gender || ''} onChange={handleChange} required error={errors.gender} options={['Male', 'Female', 'Other']} />
-                            <Input type="date" label="Date of Birth" name="dob" value={formData.dob || ''} onChange={handleChange} error={errors.dob} />
+                            <Input type="dob" label="Date of Birth" name="dob" value={formData.dob || ''} onChange={handleChange} error={errors.dob} />
                             <Input type="date" label="Joining Date" name="joiningDate" value={formData.joiningDate || ''} onChange={handleChange} required error={errors.joiningDate} />
                             <Input type="tel" label="Phone Number" name="contactNumber" value={formData.contactNumber || ''} onChange={handleChange} required placeholder="10-digit mobile" error={errors.contactNumber} maxLength={10} />
                             <Input type="tel" label="Alt. Phone" name="altContact" value={formData.altContact || ''} onChange={handleChange} placeholder="Secondary Phone" error={errors.altContact} maxLength={10} />
@@ -512,25 +512,19 @@ export default function MemberForm() {
                         </FormSection>
 
                         <div className="flex flex-col sm:flex-row justify-end items-center w-full gap-3 mt-4 pt-4 border-t border-rose-200/60">
-                            <button 
-                                type="button" 
+                            <Button 
                                 onClick={() => navigate('/dashboard/owner/members')} 
-                                className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer active:scale-95"
+                                variant="secondary"
                             >
                                 Cancel
-                            </button>
-                            <button 
+                            </Button>
+                            <Button 
                                 type="submit" 
                                 disabled={submitting}
-                                className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                                loading={submitting}
                             >
-                                {submitting ? (
-                                    <>
-                                        <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
-                                        <span>Saving Member...</span>
-                                    </>
-                                ) : (isEdit ? 'Update Member' : 'Register Member')}
-                            </button>
+                                {isEdit ? 'Update Member' : 'Register Member'}
+                            </Button>
                         </div>
                     </form>
                 </div>

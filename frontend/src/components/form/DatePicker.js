@@ -81,7 +81,7 @@ export default function DatePicker({
                         {prefix}
                     </span>
                 )}
-                <span className={`${compact ? 'text-xs' : 'text-[13px]'} tracking-wide truncate ${
+                <span className={`block text-[13px] tracking-wide truncate ${
                     displayValue ? 'text-slate-800 font-semibold' : 'text-slate-400 font-medium'
                 }`}>
                     {displayValue || placeholder}

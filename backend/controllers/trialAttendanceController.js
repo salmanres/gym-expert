@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Attendance = require('../models/Attendance');
 const Gym = require('../models/Gym');
 const Enquiry = require('../models/Enquiry');
@@ -23,21 +24,17 @@ const getTrialDates = (enquiry) => {
     let trialEnd = null;
 
     if (enquiry.trialDate) {
-        const startDateStr = typeof enquiry.trialDate === 'string' 
-            ? enquiry.trialDate.split('T')[0] 
-            : new Date(enquiry.trialDate).toISOString().split('T')[0];
-        
-        const [sy, sm, sd] = startDateStr.split('-').map(Number);
-        trialStart = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+        const d = new Date(enquiry.trialDate);
+        if (!isNaN(d.getTime())) {
+            trialStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+        }
     }
 
     if (enquiry.trialEndDate) {
-        const endDateStr = typeof enquiry.trialEndDate === 'string' 
-            ? enquiry.trialEndDate.split('T')[0] 
-            : new Date(enquiry.trialEndDate).toISOString().split('T')[0];
-        
-        const [ey, em, ed] = endDateStr.split('-').map(Number);
-        trialEnd = new Date(ey, em - 1, ed, 23, 59, 59, 999);
+        const ed = new Date(enquiry.trialEndDate);
+        if (!isNaN(ed.getTime())) {
+            trialEnd = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate(), 23, 59, 59, 999);
+        }
     } else if (trialStart) {
         trialEnd = new Date(trialStart);
         trialEnd.setHours(23, 59, 59, 999);
@@ -59,30 +56,66 @@ exports.identifyTrial = async (req, res) => {
             });
         }
 
-        const phoneRegex = /^[6-9]\d{9}$/;
+        const cleanPhone = String(contactNumber).replace(/\D/g, '').slice(-10);
 
-        if (!phoneRegex.test(contactNumber)) {
+        if (!cleanPhone || cleanPhone.length < 10) {
             return res.status(400).json({
-                message: 'Invalid contact number.'
+                message: 'Please provide a valid 10-digit contact number.'
             });
         }
 
-        let enquiry = await Enquiry.findOne({
-            gymId,
-            contactNumber,
-            status: 'Trial'
-        }).sort({ createdAt: -1 });
+        const phoneFilter = {
+            $or: [
+                { contactNumber },
+                { contactNumber: cleanPhone },
+                { contactNumber: { $regex: cleanPhone + '$' } }
+            ]
+        };
+
+        let enquiry = null;
+        if (gymId && mongoose.Types.ObjectId.isValid(gymId)) {
+            enquiry = await Enquiry.findOne({
+                gymId,
+                $and: [
+                    phoneFilter,
+                    {
+                        $or: [
+                            { status: 'Trial' },
+                            { trialDate: { $ne: null } }
+                        ]
+                    }
+                ]
+            }).sort({ createdAt: -1 });
+
+            if (!enquiry) {
+                enquiry = await Enquiry.findOne({
+                    gymId,
+                    ...phoneFilter
+                }).sort({ createdAt: -1 });
+            }
+        }
 
         if (!enquiry) {
             enquiry = await Enquiry.findOne({
-                gymId,
-                contactNumber
+                $and: [
+                    phoneFilter,
+                    {
+                        $or: [
+                            { status: 'Trial' },
+                            { trialDate: { $ne: null } }
+                        ]
+                    }
+                ]
             }).sort({ createdAt: -1 });
         }
 
         if (!enquiry) {
+            enquiry = await Enquiry.findOne(phoneFilter).sort({ createdAt: -1 });
+        }
+
+        if (!enquiry) {
             return res.status(404).json({
-                message: 'No trial person found with this contact number.'
+                message: 'No trial enquiry found with this contact number. Please register at reception.'
             });
         }
 
@@ -95,18 +128,23 @@ exports.identifyTrial = async (req, res) => {
             isTrialActive = now >= trialStart && now <= trialEnd;
         } else if (enquiry.status === 'Trial') {
             isTrialActive = true;
+        } else if (enquiry.trialDate) {
+            const td = new Date(enquiry.trialDate);
+            isTrialActive = td.getFullYear() === now.getFullYear() &&
+                            td.getMonth() === now.getMonth() &&
+                            td.getDate() === now.getDate();
         }
 
         if (!isTrialActive) {
             return res.status(403).json({
-                message: 'Your trial period is not active.'
+                message: 'Your trial period is not active for today.'
             });
         }
 
         // Remove old device for this trial
         await TrialDevice.deleteMany({
             enquiryId: enquiry._id,
-            gymId
+            gymId: enquiry.gymId || gymId
         });
 
         // Create new device token
@@ -114,7 +152,7 @@ exports.identifyTrial = async (req, res) => {
 
         await TrialDevice.create({
             enquiryId: enquiry._id,
-            gymId,
+            gymId: enquiry.gymId || gymId,
             deviceToken,
             expiresAt: trialEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         });
@@ -123,6 +161,7 @@ exports.identifyTrial = async (req, res) => {
             message: 'Trial verified successfully.',
             skipOtp: true,
             deviceToken,
+            gymId: enquiry.gymId,
             memberName: enquiry.firstName
         });
 
@@ -177,7 +216,10 @@ exports.selfCheckInTrial = async (req, res) => {
             });
         }
 
-        const device = await TrialDevice.findOne({ deviceToken, gymId }).populate('enquiryId');
+        let device = await TrialDevice.findOne({ deviceToken, gymId }).populate('enquiryId');
+        if (!device) {
+            device = await TrialDevice.findOne({ deviceToken }).populate('enquiryId');
+        }
         if (!device) {
             return res.status(401).json({ message: 'Invalid token', requiresReauth: true });
         }
@@ -188,7 +230,7 @@ exports.selfCheckInTrial = async (req, res) => {
         }
 
         const enquiry = device.enquiryId;
-        if (!enquiry) return res.status(404).json({ message: 'No trial person found for this device.' });
+        if (!enquiry) return res.status(404).json({ message: 'No trial person found for this device.', requiresReauth: true });
 
         const { trialStart, trialEnd } = getTrialDates(enquiry);
         const now = new Date();
@@ -198,10 +240,15 @@ exports.selfCheckInTrial = async (req, res) => {
             isTrialActive = now >= trialStart && now <= trialEnd;
         } else if (enquiry.status === 'Trial') {
             isTrialActive = true;
+        } else if (enquiry.trialDate) {
+            const td = new Date(enquiry.trialDate);
+            isTrialActive = td.getFullYear() === now.getFullYear() &&
+                            td.getMonth() === now.getMonth() &&
+                            td.getDate() === now.getDate();
         }
 
         if (!isTrialActive) {
-            return res.status(400).json({ message: 'Active trial period has expired. Attendance cannot be marked.' });
+            return res.status(400).json({ message: 'Active trial period has expired. Attendance cannot be marked.', requiresReauth: true });
         }
 
         device.lastLoginAt = new Date();
@@ -280,6 +327,11 @@ exports.getTrialCheckInStatus = async (req, res) => {
             isTrialActive = now >= trialStart && now <= trialEnd;
         } else if (enquiry.status === 'Trial') {
             isTrialActive = true;
+        } else if (enquiry.trialDate) {
+            const td = new Date(enquiry.trialDate);
+            isTrialActive = td.getFullYear() === now.getFullYear() &&
+                            td.getMonth() === now.getMonth() &&
+                            td.getDate() === now.getDate();
         }
 
         if (!isTrialActive) {

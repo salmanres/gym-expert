@@ -4,19 +4,6 @@ const MemberMembership = require("../models/MemberMembership");
 const Transaction = require("../models/Transaction");
 const { notifyGym } = require("../socket");
 
-/*
-|--------------------------------------------------------------------------
-| DATE HELPERS
-|--------------------------------------------------------------------------
-| Membership dates are date-only values.
-|
-| Do NOT use:
-| new Date("2026-09-23")
-|
-| Because JavaScript treats YYYY-MM-DD as UTC and in India it can become
-| 22/09/2026 when displayed locally.
-|--------------------------------------------------------------------------
-*/
 
 const parseDateOnly = (value) => {
     if (!value) return null;
@@ -283,7 +270,7 @@ exports.assignMembership = async (req, res) => {
             pTypeStr.includes(
                 "personal training"
             ) ||
-            pTypeStr.includes("pt") ||
+            /\bpt\b/.test(pTypeStr) ||
             pNameStr.includes(
                 "personal training"
             ) ||
@@ -295,90 +282,108 @@ exports.assignMembership = async (req, res) => {
             Boolean(isPTConversion) ||
             isExplicitPT;
 
+        if (isNewPlanPT && !trainerId) {
+            return res.status(400).json({
+                message: "A trainer is required for a PT membership."
+            });
+        }
+
         /*
         |--------------------------------------------------------------------------
-        | FUTURE / SCHEDULED PLAN
+        | PT ADD-ON / CONVERSION
         |--------------------------------------------------------------------------
         |
-        | If an active membership exists and user selects a future plan,
-        | automatically start the new plan the next day after active plan ends.
+        | A PT plan is an additional membership.
         |
-        | Example:
+        | Existing normal membership:
+        |     remains Active
         |
-        | Active:
-        | 23/09/2026 → 21/10/2026
+        | New PT membership:
+        |     gets its own record
+        |     gets its own payment
+        |     gets its own trainer
+        |     gets its own sessions
         |
-        | Scheduled:
-        | 22/10/2026 → ...
-        |
+        | parentMembershipId links the PT membership to the
+        | existing normal membership.
         |--------------------------------------------------------------------------
         */
 
-        if (start > todayEnd) {
+        let parentMembershipId = null;
 
-            const sameCategoryFilter =
-                isNewPlanPT
-                    ? {
-                        isPTConversion: true
+        if (isNewPlanPT) {
+            const requestedParentId = req.body.parentMembershipId;
+            let parentMembership;
+
+            if (requestedParentId) {
+                parentMembership = await MemberMembership.findOne({
+                    _id: requestedParentId,
+                    memberId,
+                    gymId,
+                    membershipStatus: {
+                        $in: ["Active", "Scheduled"]
+                    },
+                    isPTConversion: {
+                        $ne: true
                     }
-                    : {
-                        isPTConversion: {
-                            $ne: true
-                        }
-                    };
+                });
 
-            const currentActiveMembership =
-                await MemberMembership.findOne({
+                if (!parentMembership) {
+                    return res.status(400).json({
+                        message: "The selected parent membership is not available for this PT add-on."
+                    });
+                }
+            } else {
+                parentMembership = await MemberMembership.findOne({
                     memberId,
                     membershipStatus: "Active",
-                    ...sameCategoryFilter
+                    isPTConversion: {
+                        $ne: true
+                    },
+                    startDate: {
+                        $lte: todayEnd
+                    },
+                    endDate: {
+                        $gte: getTodayStart()
+                    }
                 }).sort({
                     endDate: -1
                 });
+            }
 
-            if (
-                currentActiveMembership &&
-                currentActiveMembership.endDate
-            ) {
-
-                /*
-                | Preserve the duration selected by the user.
-                |
-                | Example:
-                | User selects 23 Oct → 20 Nov
-                | = 29 calendar days
-                |
-                | Existing active ends 21 Oct
-                |
-                | New scheduled:
-                | 22 Oct → 19 Nov
-                */
-
-                const requestedDurationDays =
-                    getInclusiveDays(
-                        start,
-                        end
-                    );
-
-                start =
-                    addCalendarDays(
-                        parseDateOnly(
-                            currentActiveMembership.endDate
-                        ),
-                        1
-                    );
-
-                end =
-                    addCalendarDays(
-                        start,
-                        requestedDurationDays - 1
-                    );
+            if (parentMembership) {
+                parentMembershipId =
+                    parentMembership._id;
             }
         }
 
         /*
         |--------------------------------------------------------------------------
+        | FUTURE / SCHEDULED PLAN
+        |--------------------------------------------------------------------------
+        |
+        | For normal membership:
+        | new membership starts after existing normal membership.
+        |
+        | For PT:
+        | PT remains its own category.
+        |--------------------------------------------------------------------------
+        */
+
+        // If start date is in the future, it is a Scheduled plan
+        // Start and end dates chosen by user are respected
+
+
+        /*
+        |--------------------------------------------------------------------------
         | EXPIRE CURRENT ACTIVE MEMBERSHIP
+        |--------------------------------------------------------------------------
+        |
+        | IMPORTANT:
+        |
+        | PT assignment does NOT expire the normal membership.
+        |
+        | It only replaces an older PT membership if one already exists.
         |--------------------------------------------------------------------------
         */
 
@@ -738,9 +743,16 @@ exports.assignMembership = async (req, res) => {
                     reference ||
                     undefined,
 
+                /*
+                | PT ADD-ON LINK
+                */
+                parentMembershipId:
+                    parentMembershipId ||
+                    undefined,
+
                 isPTConversion:
                     Boolean(
-                        isPTConversion
+                        isNewPlanPT
                     ),
 
                 bonusDays:
@@ -777,7 +789,7 @@ exports.assignMembership = async (req, res) => {
             extraAmountToWallet > 0
         ) {
 
-            member.walletBalance =
+            member.walletBalance = Math.round((
                 Math.max(
                     0,
                     (
@@ -788,18 +800,29 @@ exports.assignMembership = async (req, res) => {
                 Math.max(
                     0,
                     extraAmountToWallet
-                );
+                )
+            ) * 100) / 100;
         }
 
         /*
         |--------------------------------------------------------------------------
         | SYNC MEMBER
         |--------------------------------------------------------------------------
+        |
+        | PT MUST NOT replace:
+        |
+        | member.membershipPlan
+        | member.planStartDate
+        | member.planEndDate
+        |
+        | because those belong to the normal membership.
+        |--------------------------------------------------------------------------
         */
 
         if (
             calculatedMembershipStatus ===
-            "Active"
+            "Active" &&
+            !isNewPlanPT
         ) {
 
             member.status =
@@ -816,6 +839,16 @@ exports.assignMembership = async (req, res) => {
 
             member.paymentStatus =
                 paymentStatus;
+
+        } else if (
+            calculatedMembershipStatus ===
+            "Active"
+        ) {
+
+            // PT is an additional membership.
+            // Keep the existing normal membership intact.
+            member.status =
+                "Active";
         }
 
         await member.save();
@@ -901,6 +934,10 @@ exports.assignMembership = async (req, res) => {
                         member.lastName || ""
                     } assigned to ${
                         plan.name
+                    }${
+                        isNewPlanPT
+                            ? " (PT Add-on)"
+                            : ""
                     } (${paymentStatus} - ₹${totalPaid})`,
 
                 type:
@@ -912,7 +949,9 @@ exports.assignMembership = async (req, res) => {
                 link:
                     `/dashboard/owner/members/view/${member._id}`
             });
+
         } catch (socketError) {
+
             console.error(
                 "Membership socket error:",
                 socketError
@@ -926,6 +965,7 @@ exports.assignMembership = async (req, res) => {
         });
 
     } catch (err) {
+
         console.error(
             "assignMembership error:",
             err
@@ -945,6 +985,7 @@ exports.updateAssignedMembership = async (req, res) => {
     try {
         const gymId = req.user.gymId;
         const membershipId = req.params.id;
+
         const {
             membershipPlans,
             planStartDate,
@@ -954,37 +995,110 @@ exports.updateAssignedMembership = async (req, res) => {
         } = req.body;
 
         if (!membershipPlans || membershipPlans.length === 0) {
-            return res.status(400).json({ message: "At least one membership plan is required." });
+            return res.status(400).json({
+                message: "At least one membership plan is required."
+            });
         }
 
         const membershipPlanId = membershipPlans[0];
 
-        const membership = await MemberMembership.findOne({ _id: membershipId, gymId });
-        if (!membership) return res.status(404).json({ message: "Membership assignment not found." });
+        const membership =
+            await MemberMembership.findOne({
+                _id: membershipId,
+                gymId
+            });
 
-        const plan = await MembershipPlan.findOne({ _id: membershipPlanId, gymId });
-        if (!plan) return res.status(404).json({ message: "Membership plan not found." });
+        if (!membership) {
+            return res.status(404).json({
+                message: "Membership assignment not found."
+            });
+        }
 
-        const start = parseDateOnly(planStartDate) || new Date(planStartDate);
-        const end = planEndDate ? (parseDateOnly(planEndDate) || new Date(planEndDate)) : new Date(start);
+        const plan =
+            await MembershipPlan.findOne({
+                _id: membershipPlanId,
+                gymId
+            });
 
-        const originalPrice = (req.body.originalPrice !== undefined && req.body.originalPrice !== null && req.body.originalPrice !== '')
-            ? Number(req.body.originalPrice)
-            : plan.price;
-        const discountAmount = Number(discount) || 0;
-        const finalPrice = Math.max(0, originalPrice - discountAmount);
-        
-        const additionalPaid = Number(req.body.amountPaid) || 0;
-        const newPaidAmount = (membership.paidAmount || 0) + additionalPaid;
-        const balanceAmount = Math.max(0, finalPrice - newPaidAmount);
+        if (!plan) {
+            return res.status(404).json({
+                message: "Membership plan not found."
+            });
+        }
+
+        const start =
+            parseDateOnly(planStartDate) ||
+            new Date(planStartDate);
+
+        const end =
+            planEndDate
+                ? (
+                    parseDateOnly(planEndDate) ||
+                    new Date(planEndDate)
+                )
+                : new Date(start);
+
+        const originalPrice =
+            (
+                req.body.originalPrice !== undefined &&
+                req.body.originalPrice !== null &&
+                req.body.originalPrice !== ''
+            )
+                ? Number(req.body.originalPrice)
+                : plan.price;
+
+        const discountAmount =
+            Number(discount) || 0;
+
+        const finalPrice =
+            Math.max(
+                0,
+                originalPrice - discountAmount
+            );
+
+        const additionalPaid =
+            Number(req.body.amountPaid) || 0;
+
+        const newPaidAmount =
+            (membership.paidAmount || 0) +
+            additionalPaid;
+
+        const balanceAmount =
+            Math.max(
+                0,
+                finalPrice - newPaidAmount
+            );
 
         let paymentStatus = "Pending";
-        if (newPaidAmount >= finalPrice && finalPrice > 0) paymentStatus = "Paid";
-        else if (newPaidAmount > 0) paymentStatus = "Partial";
-        if (finalPrice === 0) paymentStatus = "Paid";
 
+        if (
+            newPaidAmount >= finalPrice &&
+            finalPrice > 0
+        ) {
+            paymentStatus = "Paid";
+        } else if (
+            newPaidAmount > 0
+        ) {
+            paymentStatus = "Partial";
+        }
+
+        if (finalPrice === 0) {
+            paymentStatus = "Paid";
+        }
+
+        const todayStart = getTodayStart();
         const todayEnd = getTodayEnd();
-        const calculatedMembershipStatus = start <= todayEnd ? "Active" : "Scheduled";
+
+        let calculatedMembershipStatus = membership.membershipStatus;
+        if (membership.membershipStatus !== "Frozen" && membership.membershipStatus !== "Cancelled") {
+            if (end < todayStart) {
+                calculatedMembershipStatus = "Expired";
+            } else if (start > todayEnd) {
+                calculatedMembershipStatus = "Scheduled";
+            } else {
+                calculatedMembershipStatus = "Active";
+            }
+        }
 
         membership.membershipPlanId = membershipPlanId;
         membership.planName = plan.name;
@@ -999,61 +1113,218 @@ exports.updateAssignedMembership = async (req, res) => {
         membership.paidAmount = newPaidAmount;
         membership.balanceAmount = balanceAmount;
         membership.paymentStatus = paymentStatus;
-        if (membership.membershipStatus !== "Expired" && membership.membershipStatus !== "Cancelled") {
-            membership.membershipStatus = calculatedMembershipStatus;
+
+        if (req.body.trainerId !== undefined) {
+            membership.trainerId = req.body.trainerId || undefined;
         }
+        if (req.body.salesPersonId !== undefined) {
+            membership.salesPersonId = req.body.salesPersonId || undefined;
+        }
+        if (req.body.reference !== undefined) {
+            membership.reference = req.body.reference || undefined;
+        }
+        if (req.body.notes !== undefined) {
+            membership.notes = req.body.notes || undefined;
+        }
+        if (req.body.bonusDays !== undefined) {
+            membership.bonusDays = Number(req.body.bonusDays) || 0;
+        }
+        if (req.body.isPTConversion !== undefined) {
+            membership.isPTConversion = Boolean(req.body.isPTConversion);
+        }
+
+        // Paid until date calculation
+        if (paymentStatus === "Paid") {
+            membership.paidUntilDate = end;
+        } else if (req.body.paidUntilDate) {
+            membership.paidUntilDate = parseDateOnly(req.body.paidUntilDate);
+        } else if (paymentStatus === "Partial" && finalPrice > 0) {
+            const totalDays = getInclusiveDays(start, end);
+            const perDayCost = finalPrice / totalDays;
+            const floorDays = Math.floor(newPaidAmount / perDayCost);
+            const allocatedDays = Math.max(1, floorDays);
+            membership.paidUntilDate = addCalendarDays(start, allocatedDays - 1);
+        } else if (paymentStatus === "Pending") {
+            membership.paidUntilDate = new Date(start);
+        }
+
+        membership.membershipStatus = calculatedMembershipStatus;
 
         await membership.save();
 
+        /*
+        |--------------------------------------------------------------------------
+        | SYNC MEMBER MODEL
+        |--------------------------------------------------------------------------
+        */
+        const member = await Member.findOne({ _id: membership.memberId, gymId });
+        if (member) {
+            if (calculatedMembershipStatus === "Active" && !membership.isPTConversion) {
+                member.status = "Active";
+                member.membershipPlan = membershipPlanId;
+                member.planStartDate = start;
+                member.planEndDate = end;
+                member.paymentStatus = paymentStatus;
+                member.paidUntilDate = membership.paidUntilDate;
+                if (req.body.trainerId) member.trainerId = req.body.trainerId;
+                if (req.body.salesPersonId) member.referredByStaff = req.body.salesPersonId;
+                await member.save();
+            } else if (calculatedMembershipStatus === "Active" && membership.isPTConversion) {
+                member.status = "Active";
+                await member.save();
+            } else if (calculatedMembershipStatus === "Scheduled") {
+                const otherActive = await MemberMembership.findOne({
+                    memberId: member._id,
+                    _id: { $ne: membership._id },
+                    membershipStatus: "Active",
+                    isPTConversion: { $ne: true }
+                });
+                if (!otherActive) {
+                    member.status = "Inactive";
+                    await member.save();
+                }
+            } else if (calculatedMembershipStatus === "Expired") {
+                const otherActive = await MemberMembership.findOne({
+                    memberId: member._id,
+                    _id: { $ne: membership._id },
+                    membershipStatus: "Active",
+                    isPTConversion: { $ne: true }
+                });
+                if (!otherActive) {
+                    member.status = "Expired";
+                    await member.save();
+                }
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | ADDITIONAL PAYMENT TRANSACTION
+        |--------------------------------------------------------------------------
+        */
+
         if (additionalPaid > 0) {
+
             await Transaction.create({
                 gymId,
-                memberId: membership.memberId,
-                membershipId: membership._id,
-                planId: membershipPlanId,
-                collectedBy: req.user.id || req.user._id,
-                amountPaid: additionalPaid,
-                cashAmount: additionalPaid,
-                paymentMode: req.body.paymentMode || 'Cash',
-                transactionId: req.body.transactionId || `TRX-${Date.now()}`,
-                paymentStatus: 'Paid',
-                paymentDate: new Date()
+
+                memberId:
+                    membership.memberId,
+
+                membershipId:
+                    membership._id,
+
+                planId:
+                    membershipPlanId,
+
+                collectedBy:
+                    req.user.id ||
+                    req.user._id,
+
+                amountPaid:
+                    additionalPaid,
+
+                cashAmount:
+                    additionalPaid,
+
+                paymentMode:
+                    req.body.paymentMode ||
+                    'Cash',
+
+                transactionId:
+                    req.body.transactionId ||
+                    `TRX-${Date.now()}`,
+
+                paymentStatus:
+                    'Paid',
+
+                paymentDate:
+                    new Date()
             });
         }
 
-        // Broadcast real-time Socket notification
+        /*
+        |--------------------------------------------------------------------------
+        | SOCKET
+        |--------------------------------------------------------------------------
+        */
+
         try {
-            const memberInfo = await Member.findById(membership.memberId).select('firstName lastName memberId');
-            const mName = memberInfo ? `${memberInfo.firstName} ${memberInfo.lastName || ''}`.trim() : 'Member';
+
+            const memberInfo =
+                await Member.findById(
+                    membership.memberId
+                ).select(
+                    'firstName lastName memberId'
+                );
+
+            const mName =
+                memberInfo
+                    ? `${memberInfo.firstName} ${
+                        memberInfo.lastName || ''
+                    }`.trim()
+                    : 'Member';
+
             notifyGym(gymId, {
-                title: `Membership Plan Updated: ${mName}`,
-                description: `Plan: ${plan.name} (Status: ${paymentStatus} • Balance: ₹${balanceAmount}).`,
-                type: 'MEMBERSHIP',
-                targetId: membership.memberId,
-                link: `/dashboard/owner/membership`
+
+                title:
+                    `Membership Plan Updated: ${mName}`,
+
+                description:
+                    `Plan: ${plan.name} ` +
+                    `(Status: ${paymentStatus} • ` +
+                    `Balance: ₹${balanceAmount}).`,
+
+                type:
+                    'MEMBERSHIP',
+
+                targetId:
+                    membership.memberId,
+
+                link:
+                    `/dashboard/owner/membership`
             });
+
         } catch (sErr) {
-            console.error("Socket error:", sErr);
+
+            console.error(
+                "Socket error:",
+                sErr
+            );
         }
 
-        res.status(200).json({
-            message: "Membership updated successfully.",
-            membership,
+        return res.status(200).json({
+            message:
+                "Membership updated successfully.",
+
+            membership
         });
 
     } catch (err) {
+
         console.error(err);
-        res.status(500).json({ message: "Server Error" });
+
+        return res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };
+
 
 // @desc    Add Payment to Membership
 // @route   POST /api/member-memberships/:id/payment
 // @access  Private
 exports.addPayment = async (req, res) => {
+
     try {
-        const gymId = req.user.gymId;
-        const membershipId = req.params.id;
+
+        const gymId =
+            req.user.gymId;
+
+        const membershipId =
+            req.params.id;
+
         const {
             amountPaid,
             walletUsed,
@@ -1062,335 +1333,1065 @@ exports.addPayment = async (req, res) => {
             transactionId
         } = req.body;
 
-        const membership = await MemberMembership.findOne({ _id: membershipId, gymId }).populate('memberId');
-        if (!membership) return res.status(404).json({ message: "Membership assignment not found." });
+        const membership =
+            await MemberMembership.findOne({
+                _id: membershipId,
+                gymId
+            }).populate('memberId');
 
-        const member = membership.memberId;
-        if (!member) return res.status(404).json({ message: "Member not found." });
+        if (!membership) {
 
-        const paid = Number(amountPaid) || 0;
-        const walletVal = Number(walletUsed) || 0;
+            return res.status(404).json({
+                message:
+                    "Membership assignment not found."
+            });
+        }
+
+        const member =
+            membership.memberId;
+
+        if (!member) {
+
+            return res.status(404).json({
+                message:
+                    "Member not found."
+            });
+        }
+
+        const paid =
+            Number(amountPaid) || 0;
+
+        const walletVal =
+            Number(walletUsed) || 0;
+
+        /*
+        |--------------------------------------------------------------------------
+        | WALLET VALIDATION
+        |--------------------------------------------------------------------------
+        */
 
         if (walletVal > 0) {
-            if ((member.walletBalance || 0) < walletVal) {
-                return res.status(400).json({ message: "Insufficient wallet balance." });
+
+            if (
+                (member.walletBalance || 0) <
+                walletVal
+            ) {
+
+                return res.status(400).json({
+                    message:
+                        "Insufficient wallet balance."
+                });
             }
         }
 
-        const totalPaid = paid + walletVal;
-        
+        const totalPaid =
+            paid + walletVal;
+
         if (totalPaid <= 0) {
-            return res.status(400).json({ message: "Payment amount must be greater than zero." });
+
+            return res.status(400).json({
+                message:
+                    "Payment amount must be greater than zero."
+            });
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | PAID UNTIL DATE VALIDATION
+        |--------------------------------------------------------------------------
+        */
 
         if (paidUntilDate) {
-            const pDate = parseDateOnly(paidUntilDate) || new Date(paidUntilDate);
-            if (pDate > membership.endDate) {
-                return res.status(400).json({ message: "Paid until date cannot be after membership end date." });
+
+            const pDate =
+                parseDateOnly(paidUntilDate) ||
+                new Date(paidUntilDate);
+
+            if (
+                pDate >
+                membership.endDate
+            ) {
+
+                return res.status(400).json({
+                    message:
+                        "Paid until date cannot be after membership end date."
+                });
             }
-            if (pDate < membership.startDate) {
-                return res.status(400).json({ message: "Paid until date cannot be before membership start date." });
+
+            if (
+                pDate <
+                membership.startDate
+            ) {
+
+                return res.status(400).json({
+                    message:
+                        "Paid until date cannot be before membership start date."
+                });
             }
         }
 
-        membership.paidAmount = (membership.paidAmount || 0) + totalPaid;
-        membership.balanceAmount = Math.max(0, membership.finalPrice - membership.paidAmount);
+        /*
+        |--------------------------------------------------------------------------
+        | UPDATE PAYMENT
+        |--------------------------------------------------------------------------
+        */
 
-        let paymentStatus = "Pending";
-        if (membership.paidAmount >= membership.finalPrice && membership.finalPrice > 0) paymentStatus = "Paid";
-        else if (membership.paidAmount > 0) paymentStatus = "Partial";
-        if (membership.finalPrice === 0) paymentStatus = "Paid";
+        membership.paidAmount =
+            (membership.paidAmount || 0) +
+            totalPaid;
 
-        membership.paymentStatus = paymentStatus;
+        membership.balanceAmount =
+            Math.max(
+                0,
+                membership.finalPrice -
+                membership.paidAmount
+            );
 
-        let calculatedPaidUntilDate = null;
-        let extraAmountToWallet = 0;
+        let paymentStatus =
+            "Pending";
 
-        if (paymentStatus === 'Paid') {
-            calculatedPaidUntilDate = membership.endDate;
-        } else if (paidUntilDate) {
-            calculatedPaidUntilDate = parseDateOnly(paidUntilDate) || new Date(paidUntilDate);
-        } else if (paymentStatus === 'Partial' && membership.finalPrice > 0) {
-            const totalDays = getInclusiveDays(membership.startDate, membership.endDate);
-            const perDayCost = membership.finalPrice / totalDays;
-            const totalCumulativePaid = membership.paidAmount;
-            
-            const exactDays = totalCumulativePaid / perDayCost;
-            const floorDays = Math.floor(exactDays);
-            
-            const costForFloorDays = Number((floorDays * perDayCost).toFixed(2));
-            extraAmountToWallet = Number((totalCumulativePaid - costForFloorDays).toFixed(2));
-            
-            membership.paidAmount = costForFloorDays;
-            membership.balanceAmount = Math.max(0, membership.finalPrice - membership.paidAmount);
-            
-            calculatedPaidUntilDate = addCalendarDays(membership.startDate, Math.max(1, floorDays) - 1);
-        } else if (paymentStatus === 'Pending') {
-            calculatedPaidUntilDate = new Date(membership.startDate);
+        if (
+            membership.paidAmount >=
+                membership.finalPrice &&
+            membership.finalPrice > 0
+        ) {
+
+            paymentStatus =
+                "Paid";
+
+        } else if (
+            membership.paidAmount > 0
+        ) {
+
+            paymentStatus =
+                "Partial";
         }
 
-        membership.paidUntilDate = calculatedPaidUntilDate;
-        membership.totalCollected = (membership.totalCollected || 0) + totalPaid;
+        if (
+            membership.finalPrice === 0
+        ) {
+
+            paymentStatus =
+                "Paid";
+        }
+
+        membership.paymentStatus =
+            paymentStatus;
+
+        /*
+        |--------------------------------------------------------------------------
+        | PAID UNTIL DATE CALCULATION
+        |--------------------------------------------------------------------------
+        */
+
+        let calculatedPaidUntilDate =
+            null;
+
+        let extraAmountToWallet =
+            0;
+
+        if (
+            paymentStatus ===
+            'Paid'
+        ) {
+
+            calculatedPaidUntilDate =
+                membership.endDate;
+
+        } else if (
+            paidUntilDate
+        ) {
+
+            calculatedPaidUntilDate =
+                parseDateOnly(
+                    paidUntilDate
+                ) ||
+                new Date(
+                    paidUntilDate
+                );
+
+        } else if (
+            paymentStatus ===
+                'Partial' &&
+            membership.finalPrice > 0
+        ) {
+
+            const totalDays =
+                getInclusiveDays(
+                    membership.startDate,
+                    membership.endDate
+                );
+
+            const perDayCost =
+                membership.finalPrice /
+                totalDays;
+
+            const totalCumulativePaid =
+                membership.paidAmount;
+
+            const exactDays =
+                totalCumulativePaid /
+                perDayCost;
+
+            const floorDays =
+                Math.floor(
+                    exactDays
+                );
+
+            const costForFloorDays =
+                Number(
+                    (
+                        floorDays *
+                        perDayCost
+                    ).toFixed(2)
+                );
+
+            extraAmountToWallet =
+                Number(
+                    (
+                        totalCumulativePaid -
+                        costForFloorDays
+                    ).toFixed(2)
+                );
+
+            membership.paidAmount =
+                costForFloorDays;
+
+            membership.balanceAmount =
+                Math.max(
+                    0,
+                    membership.finalPrice -
+                    membership.paidAmount
+                );
+
+            calculatedPaidUntilDate =
+                addCalendarDays(
+                    membership.startDate,
+                    Math.max(
+                        1,
+                        floorDays
+                    ) - 1
+                );
+
+        } else if (
+            paymentStatus ===
+            'Pending'
+        ) {
+
+            calculatedPaidUntilDate =
+                new Date(
+                    membership.startDate
+                );
+        }
+
+        membership.paidUntilDate =
+            calculatedPaidUntilDate;
+
+        membership.totalCollected =
+            (membership.totalCollected || 0) +
+            totalPaid;
 
         await membership.save();
 
-        if (walletVal > 0 || extraAmountToWallet > 0) {
-            member.walletBalance = Math.max(0, (member.walletBalance || 0) - walletVal) + extraAmountToWallet;
+        /*
+        |--------------------------------------------------------------------------
+        | WALLET UPDATE
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            walletVal > 0 ||
+            extraAmountToWallet > 0
+        ) {
+
+            member.walletBalance = Math.round((
+                Math.max(
+                    0,
+                    (member.walletBalance || 0) -
+                    walletVal
+                ) +
+                extraAmountToWallet
+            ) * 100) / 100;
         }
 
-        member.paymentStatus = paymentStatus;
-        if (membership.membershipStatus === 'Active') {
-            member.status = 'Active';
+        /*
+        |--------------------------------------------------------------------------
+        | MEMBER PAYMENT STATUS
+        |--------------------------------------------------------------------------
+        */
+
+        member.paymentStatus =
+            paymentStatus;
+
+        if (
+            membership.membershipStatus ===
+            'Active'
+        ) {
+
+            member.status =
+                'Active';
         }
+
         await member.save();
 
+        /*
+        |--------------------------------------------------------------------------
+        | PAYMENT TRANSACTION
+        |--------------------------------------------------------------------------
+        */
+
         await Transaction.create({
+
             gymId,
-            memberId: member._id,
-            membershipId: membership._id,
-            planId: membership.membershipPlanId,
-            collectedBy: req.user.id || req.user._id,
-            amountPaid: totalPaid,
-            cashAmount: paid,
-            walletAmount: walletVal,
-            paymentMode: walletVal > 0 && paid > 0 ? 'Mixed' : walletVal > 0 ? 'Wallet Cash' : (paymentMode || 'Cash'),
-            transactionId: transactionId || `TRX-${Date.now()}`,
-            paymentStatus: paymentStatus === 'Paid' ? 'Paid' : 'Partial',
-            paymentDate: req.body.paymentDate ? new Date(req.body.paymentDate) : new Date()
+
+            memberId:
+                member._id,
+
+            membershipId:
+                membership._id,
+
+            planId:
+                membership.membershipPlanId,
+
+            collectedBy:
+                req.user.id ||
+                req.user._id,
+
+            amountPaid:
+                totalPaid,
+
+            cashAmount:
+                paid,
+
+            walletAmount:
+                walletVal,
+
+            paymentMode:
+                walletVal > 0 &&
+                paid > 0
+                    ? 'Mixed'
+                    : walletVal > 0
+                        ? 'Wallet Cash'
+                        : (
+                            paymentMode ||
+                            'Cash'
+                        ),
+
+            transactionId:
+                transactionId ||
+                `TRX-${Date.now()}`,
+
+            paymentStatus:
+                paymentStatus === 'Paid'
+                    ? 'Paid'
+                    : 'Partial',
+
+            paymentDate:
+                req.body.paymentDate
+                    ? new Date(
+                        req.body.paymentDate
+                    )
+                    : new Date()
         });
 
-        // Broadcast real-time Socket notification
+        /*
+        |--------------------------------------------------------------------------
+        | SOCKET
+        |--------------------------------------------------------------------------
+        */
+
         try {
+
             notifyGym(gymId, {
-                title: `Fee Collected: ₹${totalPaid}`,
-                description: `Payment of ₹${totalPaid} recorded for ${member.firstName} ${member.lastName || ''} (${membership.planName || 'Plan'}).`,
-                type: 'PAYMENT',
-                targetId: member._id,
-                link: `/dashboard/owner/finance`
+
+                title:
+                    `Fee Collected: ₹${totalPaid}`,
+
+                description:
+                    `Payment of ₹${totalPaid} recorded for ${
+                        member.firstName
+                    } ${
+                        member.lastName || ''
+                    } (${
+                        membership.planName ||
+                        'Plan'
+                    }).`,
+
+                type:
+                    'PAYMENT',
+
+                targetId:
+                    member._id,
+
+                link:
+                    `/dashboard/owner/finance`
             });
+
         } catch (sErr) {
-            console.error("Socket error:", sErr);
+
+            console.error(
+                "Socket error:",
+                sErr
+            );
         }
 
-        res.status(200).json({
-            message: "Payment added successfully.",
-            membership,
+        return res.status(200).json({
+
+            message:
+                "Payment added successfully.",
+
+            membership
         });
 
     } catch (err) {
+
         console.error(err);
-        res.status(500).json({ message: "Server Error" });
+
+        return res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };
+
 
 // @desc    Add Bonus Days to Membership
 // @route   POST /api/member-memberships/:id/bonus
 // @access  Private
 exports.addBonusDays = async (req, res) => {
+
     try {
-        const gymId = req.user.gymId;
-        const membershipId = req.params.id;
-        const { days, reason } = req.body;
 
-        if (days === undefined || days === '' || Number(days) === 0 || !reason) {
-            return res.status(400).json({ message: "Valid days (positive or negative) and reason are required." });
+        const gymId =
+            req.user.gymId;
+
+        const membershipId =
+            req.params.id;
+
+        const {
+            days,
+            reason
+        } = req.body;
+
+        if (
+            days === undefined ||
+            days === '' ||
+            Number(days) === 0 ||
+            !reason
+        ) {
+
+            return res.status(400).json({
+                message:
+                    "Valid days (positive or negative) and reason are required."
+            });
         }
 
-        const membership = await MemberMembership.findOne({ _id: membershipId, gymId });
-        if (!membership) return res.status(404).json({ message: "Membership assignment not found." });
+        const membership =
+            await MemberMembership.findOne({
+                _id: membershipId,
+                gymId
+            });
 
-        // Add days to dates
-        const bonusMs = Number(days) * 24 * 60 * 60 * 1000;
-        
+        if (!membership) {
+
+            return res.status(404).json({
+                message:
+                    "Membership assignment not found."
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | ADD DAYS TO DATES
+        |--------------------------------------------------------------------------
+        */
+
+        const bonusMs =
+            Number(days) *
+            24 *
+            60 *
+            60 *
+            1000;
+
         if (membership.endDate) {
-            membership.endDate = new Date(new Date(membership.endDate).getTime() + bonusMs);
-        }
-        
-        if (membership.paidUntilDate) {
-            membership.paidUntilDate = new Date(new Date(membership.paidUntilDate).getTime() + bonusMs);
+
+            membership.endDate =
+                new Date(
+                    new Date(
+                        membership.endDate
+                    ).getTime() +
+                    bonusMs
+                );
         }
 
-        membership.bonusDays = (membership.bonusDays || 0) + Number(days);
+        if (
+            membership.paidUntilDate
+        ) {
+
+            membership.paidUntilDate =
+                new Date(
+                    new Date(
+                        membership.paidUntilDate
+                    ).getTime() +
+                    bonusMs
+                );
+        }
+
+        membership.bonusDays =
+            (membership.bonusDays || 0) +
+            Number(days);
+
         membership.bonusHistory.push({
-            days: Number(days),
-            reason: reason,
-            date: new Date(),
-            addedBy: req.user.id
+
+            days:
+                Number(days),
+
+            reason:
+                reason,
+
+            date:
+                new Date(),
+
+            addedBy:
+                req.user.id
         });
 
         await membership.save();
 
-        // Broadcast real-time Socket notification
+        /*
+        |--------------------------------------------------------------------------
+        | SOCKET
+        |--------------------------------------------------------------------------
+        */
+
         try {
-            const mBonusInfo = await Member.findById(membership.memberId).select('firstName lastName memberId');
-            const mBonusName = mBonusInfo ? `${mBonusInfo.firstName} ${mBonusInfo.lastName || ''}`.trim() : 'Member';
+
+            const mBonusInfo =
+                await Member.findById(
+                    membership.memberId
+                ).select(
+                    'firstName lastName memberId'
+                );
+
+            const mBonusName =
+                mBonusInfo
+                    ? `${mBonusInfo.firstName} ${
+                        mBonusInfo.lastName || ''
+                    }`.trim()
+                    : 'Member';
+
             notifyGym(gymId, {
-                title: `Bonus Days Added: +${days} Days`,
-                description: `${days} days added to ${mBonusName} (${membership.planName || 'Plan'}). Reason: ${reason}.`,
-                type: 'MEMBERSHIP',
-                targetId: membership.memberId,
-                link: `/dashboard/owner/membership`
+
+                title:
+                    `Bonus Days Added: +${days} Days`,
+
+                description:
+                    `${days} days added to ${
+                        mBonusName
+                    } (${
+                        membership.planName ||
+                        'Plan'
+                    }). Reason: ${
+                        reason
+                    }.`,
+
+                type:
+                    'MEMBERSHIP',
+
+                targetId:
+                    membership.memberId,
+
+                link:
+                    `/dashboard/owner/membership`
             });
+
         } catch (sErr) {
-            console.error("Socket error:", sErr);
+
+            console.error(
+                "Socket error:",
+                sErr
+            );
         }
 
-        res.status(200).json({
-            message: `Successfully added ${days} bonus days.`,
+        return res.status(200).json({
+
+            message:
+                `Successfully added ${days} bonus days.`,
+
             membership
         });
+
     } catch (err) {
+
         console.error(err);
-        res.status(500).json({ message: "Server Error" });
+
+        return res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };
+
 
 // @desc    Mark a PT session completed / used (+1)
 // @route   POST /api/member-memberships/:id/use-session
 // @access  Private
 exports.markPTSessionUsed = async (req, res) => {
+
     try {
-        const gymId = req.user.gymId;
-        const membershipId = req.params.id;
-        const { notes } = req.body;
 
-        const membership = await MemberMembership.findOne({ _id: membershipId, gymId });
-        if (!membership) return res.status(404).json({ message: "Membership assignment not found." });
+        const gymId =
+            req.user.gymId;
 
-        if (membership.totalSessions > 0 && membership.usedSessions >= membership.totalSessions) {
-            return res.status(400).json({ message: "All sessions for this package have already been completed." });
+        const membershipId =
+            req.params.id;
+
+        const {
+            notes
+        } = req.body;
+
+        const membership =
+            await MemberMembership.findOne({
+                _id: membershipId,
+                gymId
+            });
+
+        if (!membership) {
+
+            return res.status(404).json({
+                message:
+                    "Membership assignment not found."
+            });
         }
 
-        membership.usedSessions = (membership.usedSessions || 0) + 1;
+        /*
+        |--------------------------------------------------------------------------
+        | SESSION LIMIT
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            membership.totalSessions > 0 &&
+            membership.usedSessions >=
+                membership.totalSessions
+        ) {
+
+            return res.status(400).json({
+                message:
+                    "All sessions for this package have already been completed."
+            });
+        }
+
+        membership.usedSessions =
+            (membership.usedSessions || 0) +
+            1;
+
         membership.sessionLogs.push({
-            date: new Date(),
-            trainerId: membership.trainerId || req.user.id,
-            notes: notes || 'PT Session Completed',
-            loggedBy: req.user.id
+
+            date:
+                new Date(),
+
+            trainerId:
+                membership.trainerId ||
+                req.user.id,
+
+            notes:
+                notes ||
+                'PT Session Completed',
+
+            loggedBy:
+                req.user.id
         });
 
         await membership.save();
 
-        // Broadcast real-time Socket notification
+        /*
+        |--------------------------------------------------------------------------
+        | SOCKET
+        |--------------------------------------------------------------------------
+        */
+
         try {
-            const mPtInfo = await Member.findById(membership.memberId).select('firstName lastName memberId');
-            const mPtName = mPtInfo ? `${mPtInfo.firstName} ${mPtInfo.lastName || ''}`.trim() : 'Member';
+
+            const mPtInfo =
+                await Member.findById(
+                    membership.memberId
+                ).select(
+                    'firstName lastName memberId'
+                );
+
+            const mPtName =
+                mPtInfo
+                    ? `${mPtInfo.firstName} ${
+                        mPtInfo.lastName || ''
+                    }`.trim()
+                    : 'Member';
+
             notifyGym(gymId, {
-                title: `PT Session Completed: ${mPtName}`,
-                description: `Session ${membership.usedSessions}/${membership.totalSessions || '∞'} completed with trainer. Notes: ${notes || 'Completed'}.`,
-                type: 'MEMBERSHIP',
-                targetId: membership.memberId,
-                link: `/dashboard/owner/membership`
+
+                title:
+                    `PT Session Completed: ${mPtName}`,
+
+                description:
+                    `Session ${
+                        membership.usedSessions
+                    }/${
+                        membership.totalSessions ||
+                        '∞'
+                    } completed with trainer. Notes: ${
+                        notes ||
+                        'Completed'
+                    }.`,
+
+                type:
+                    'MEMBERSHIP',
+
+                targetId:
+                    membership.memberId,
+
+                link:
+                    `/dashboard/owner/membership`
             });
+
         } catch (sErr) {
-            console.error("Socket error:", sErr);
+
+            console.error(
+                "Socket error:",
+                sErr
+            );
         }
 
-        res.status(200).json({
-            message: `PT Session logged successfully. (${membership.usedSessions}/${membership.totalSessions || '∞'} completed)`,
+        return res.status(200).json({
+
+            message:
+                `PT Session logged successfully. (${
+                    membership.usedSessions
+                }/${
+                    membership.totalSessions ||
+                    '∞'
+                } completed)`,
+
             membership
         });
+
     } catch (err) {
+
         console.error(err);
-        res.status(500).json({ message: "Server Error" });
+
+        return res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };
+
 
 // @desc    Freeze / Unfreeze Membership & Extend End Dates Automatically
 // @route   POST /api/member-memberships/:id/freeze
 // @access  Private
 exports.toggleFreezeMembership = async (req, res) => {
+
     try {
-        const gymId = req.user.gymId;
-        const membershipId = req.params.id;
-        const { reason } = req.body;
 
-        const membership = await MemberMembership.findOne({ _id: membershipId, gymId });
-        if (!membership) return res.status(404).json({ message: "Membership assignment not found." });
+        const gymId =
+            req.user.gymId;
 
-        const now = new Date();
+        const membershipId =
+            req.params.id;
 
-        if (membership.membershipStatus === 'Frozen') {
-            const freezeStart = membership.freezeDate ? new Date(membership.freezeDate) : now;
-            const diffMs = now.getTime() - freezeStart.getTime();
-            const daysFrozen = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+        const {
+            reason
+        } = req.body;
+
+        const membership =
+            await MemberMembership.findOne({
+                _id: membershipId,
+                gymId
+            });
+
+        if (!membership) {
+
+            return res.status(404).json({
+                message:
+                    "Membership assignment not found."
+            });
+        }
+
+        const now =
+            new Date();
+
+        /*
+        |--------------------------------------------------------------------------
+        | UNFREEZE
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            membership.membershipStatus ===
+            'Frozen'
+        ) {
+
+            const freezeStart =
+                membership.freezeDate
+                    ? new Date(
+                        membership.freezeDate
+                    )
+                    : now;
+
+            const diffMs =
+                now.getTime() -
+                freezeStart.getTime();
+
+            const daysFrozen =
+                Math.max(
+                    1,
+                    Math.ceil(
+                        diffMs /
+                        (
+                            1000 *
+                            60 *
+                            60 *
+                            24
+                        )
+                    )
+                );
 
             if (membership.endDate) {
-                membership.endDate = new Date(new Date(membership.endDate).getTime() + (daysFrozen * 24 * 60 * 60 * 1000));
-            }
-            if (membership.paidUntilDate) {
-                membership.paidUntilDate = new Date(new Date(membership.paidUntilDate).getTime() + (daysFrozen * 24 * 60 * 60 * 1000));
+
+                membership.endDate =
+                    new Date(
+                        new Date(
+                            membership.endDate
+                        ).getTime() +
+                        (
+                            daysFrozen *
+                            24 *
+                            60 *
+                            60 *
+                            1000
+                        )
+                    );
             }
 
-            membership.membershipStatus = 'Active';
-            membership.freezeDate = null;
+            if (
+                membership.paidUntilDate
+            ) {
 
-            const lastHistory = membership.freezeHistory[membership.freezeHistory.length - 1];
-            if (lastHistory && !lastHistory.unfreezeDate) {
-                lastHistory.unfreezeDate = now;
-                lastHistory.daysFrozen = daysFrozen;
+                membership.paidUntilDate =
+                    new Date(
+                        new Date(
+                            membership.paidUntilDate
+                        ).getTime() +
+                        (
+                            daysFrozen *
+                            24 *
+                            60 *
+                            60 *
+                            1000
+                        )
+                    );
+            }
+
+            membership.membershipStatus =
+                'Active';
+
+            membership.freezeDate =
+                null;
+
+            const lastHistory =
+                membership.freezeHistory[
+                    membership.freezeHistory.length - 1
+                ];
+
+            if (
+                lastHistory &&
+                !lastHistory.unfreezeDate
+            ) {
+
+                lastHistory.unfreezeDate =
+                    now;
+
+                lastHistory.daysFrozen =
+                    daysFrozen;
+
             } else {
+
                 membership.freezeHistory.push({
-                    freezeDate: freezeStart,
-                    unfreezeDate: now,
-                    daysFrozen: daysFrozen,
-                    reason: reason || 'Unfrozen by Admin',
-                    actionBy: req.user.id
+
+                    freezeDate:
+                        freezeStart,
+
+                    unfreezeDate:
+                        now,
+
+                    daysFrozen:
+                        daysFrozen,
+
+                    reason:
+                        reason ||
+                        'Unfrozen by Admin',
+
+                    actionBy:
+                        req.user.id
                 });
             }
 
             await membership.save();
 
+            /*
+            |--------------------------------------------------------------------------
+            | SOCKET
+            |--------------------------------------------------------------------------
+            */
+
             try {
+
                 notifyGym(gymId, {
-                    title: 'Membership Unfrozen',
-                    description: `Membership for ${membership.planName} unfrozen. Extended by ${daysFrozen} days.`,
-                    type: 'MEMBERSHIP',
-                    targetId: membership.memberId,
-                    link: `/dashboard/owner/members/view/${membership.memberId}`
+
+                    title:
+                        'Membership Unfrozen',
+
+                    description:
+                        `Membership for ${
+                            membership.planName
+                        } unfrozen. Extended by ${
+                            daysFrozen
+                        } days.`,
+
+                    type:
+                        'MEMBERSHIP',
+
+                    targetId:
+                        membership.memberId,
+
+                    link:
+                        `/dashboard/owner/members/view/${
+                            membership.memberId
+                        }`
                 });
+
             } catch (sErr) {
-                console.error("Socket error:", sErr);
+
+                console.error(
+                    "Socket error:",
+                    sErr
+                );
             }
 
             return res.status(200).json({
-                message: `Membership Unfrozen! End date extended by ${daysFrozen} days to ${new Date(membership.endDate).toLocaleDateString()}`,
-                membership
-            });
-        } else {
-            membership.membershipStatus = 'Frozen';
-            membership.freezeDate = now;
-            membership.freezeHistory.push({
-                freezeDate: now,
-                reason: reason || 'Medical / Personal Leave',
-                actionBy: req.user.id
-            });
 
-            await membership.save();
+                message:
+                    `Membership Unfrozen! End date extended by ${
+                        daysFrozen
+                    } days to ${
+                        new Date(
+                            membership.endDate
+                        ).toLocaleDateString()
+                    }`,
 
-            try {
-                notifyGym(gymId, {
-                    title: 'Membership Frozen',
-                    description: `Membership for ${membership.planName} frozen (${reason || 'Leave'}).`,
-                    type: 'MEMBERSHIP',
-                    targetId: membership.memberId,
-                    link: `/dashboard/owner/members/view/${membership.memberId}`
-                });
-            } catch (sErr) {
-                console.error("Socket error:", sErr);
-            }
-
-            return res.status(200).json({
-                message: "Membership frozen successfully. End date will automatically extend upon unfreezing.",
                 membership
             });
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | FREEZE
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            membership.membershipStatus ===
+            'Active'
+        ) {
+
+            membership.membershipStatus =
+                'Frozen';
+
+            membership.freezeDate =
+                now;
+
+            membership.freezeHistory.push({
+
+                freezeDate:
+                    now,
+
+                unfreezeDate:
+                    null,
+
+                daysFrozen:
+                    0,
+
+                reason:
+                    reason ||
+                    'Frozen by Admin',
+
+                actionBy:
+                    req.user.id
+            });
+
+            await membership.save();
+
+            try {
+
+                notifyGym(gymId, {
+
+                    title:
+                        'Membership Frozen',
+
+                    description:
+                        `Membership for ${
+                            membership.planName
+                        } has been frozen.`,
+
+                    type:
+                        'MEMBERSHIP',
+
+                    targetId:
+                        membership.memberId,
+
+                    link:
+                        `/dashboard/owner/members/view/${
+                            membership.memberId
+                        }`
+                });
+
+            } catch (sErr) {
+
+                console.error(
+                    "Socket error:",
+                    sErr
+                );
+            }
+
+            return res.status(200).json({
+
+                message:
+                    "Membership frozen successfully.",
+
+                membership
+            });
+        }
+
+        return res.status(400).json({
+
+            message:
+                `Membership cannot be frozen/unfrozen while its status is ${membership.membershipStatus}.`
+        });
+
     } catch (err) {
+
         console.error(err);
-        res.status(500).json({ message: "Server Error" });
+
+        return res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };
 
+// @desc Get Latest Memberships
+// @route GET /api/member-memberships/latest
+// @access Private
 exports.getLatestMemberships = async (req, res) => {
     try {
         const memberships = await MemberMembership.find({
@@ -1403,181 +2404,491 @@ exports.getLatestMemberships = async (req, res) => {
             .sort({ createdAt: -1 });
 
         const latestMap = new Map();
+
         const now = getTodayStart();
         const todayEnd = getTodayEnd();
 
         memberships.forEach(m => {
-            const memberIdStr = m.memberId?._id?.toString() || m.memberId?.toString();
-            if (memberIdStr && !latestMap.has(memberIdStr)) {
-                const endDate = new Date(m.endDate);
-                endDate.setHours(23, 59, 59, 999);
 
-                let computedStatus = m.membershipStatus;
-                if (computedStatus !== 'Frozen' && computedStatus !== 'Cancelled') {
-                    if (m.paymentStatus === 'Pending' && (m.paidAmount || 0) <= 0) {
-                        computedStatus = 'Pending';
-                    } else if (endDate < now) {
-                        computedStatus = 'Expired';
-                    } else if (new Date(m.startDate) > todayEnd) {
-                        computedStatus = 'Scheduled';
+            const memberIdStr =
+                m.memberId?._id?.toString() ||
+                m.memberId?.toString();
+
+            if (
+                memberIdStr &&
+                !latestMap.has(memberIdStr)
+            ) {
+
+                const endDate =
+                    new Date(m.endDate);
+
+                endDate.setHours(
+                    23,
+                    59,
+                    59,
+                    999
+                );
+
+                let computedStatus =
+                    m.membershipStatus;
+
+                if (
+                    computedStatus !== 'Frozen' &&
+                    computedStatus !== 'Cancelled'
+                ) {
+
+                    if (
+                        m.paymentStatus === 'Pending' &&
+                        (m.paidAmount || 0) <= 0
+                    ) {
+
+                        computedStatus =
+                            'Pending';
+
+                    } else if (
+                        endDate < now
+                    ) {
+
+                        computedStatus =
+                            'Expired';
+
+                    } else if (
+                        new Date(m.startDate) >
+                        todayEnd
+                    ) {
+
+                        computedStatus =
+                            'Scheduled';
+
                     } else {
-                        computedStatus = 'Active';
+
+                        computedStatus =
+                            'Active';
                     }
                 }
 
-                const mObj = m.toObject();
-                mObj.computedStatus = computedStatus;
-                mObj.membershipStatus = computedStatus;
-                latestMap.set(memberIdStr, mObj);
+                const mObj =
+                    m.toObject();
+
+                mObj.computedStatus =
+                    computedStatus;
+
+                mObj.membershipStatus =
+                    computedStatus;
+
+                latestMap.set(
+                    memberIdStr,
+                    mObj
+                );
             }
         });
 
-        res.json(Array.from(latestMap.values()));
+        res.json(
+            Array.from(
+                latestMap.values()
+            )
+        );
+
     } catch (err) {
+
         console.error(err);
-        res.status(500).json({ message: "Server Error" });
+
+        res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };
+
 
 // @desc Get Active Memberships
 // @route GET /api/member-memberships/active
 // @access Private
 exports.getActiveMemberships = async (req, res) => {
+
     try {
-        const todayEnd = getTodayEnd();
 
-        const memberships = await MemberMembership.find({
-            gymId: req.user.gymId,
-            membershipStatus: { $in: ["Active", "Scheduled"] },
-            endDate: { $gte: getTodayStart() }
-        })
-            .populate("memberId")
-            .populate("membershipPlanId")
-            .populate("trainerId", "name email phone role")
-            .populate("salesPersonId", "name email phone role")
-            .sort({ createdAt: -1 });
+        const todayEnd =
+            getTodayEnd();
 
-        let processed = memberships.map(m => {
-            const mObj = m.toObject();
-            if (mObj.membershipStatus !== 'Frozen' && mObj.membershipStatus !== 'Cancelled') {
-                if (new Date(mObj.startDate) <= todayEnd) {
-                    mObj.membershipStatus = 'Active';
-                } else {
-                    mObj.membershipStatus = 'Scheduled';
+        const memberships =
+            await MemberMembership.find({
+
+                gymId:
+                    req.user.gymId,
+
+                membershipStatus:
+                    {
+                        $in: [
+                            "Active",
+                            "Scheduled"
+                        ]
+                    },
+
+                endDate:
+                    {
+                        $gte:
+                            getTodayStart()
+                    }
+
+            })
+                .populate("memberId")
+                .populate("membershipPlanId")
+                .populate(
+                    "trainerId",
+                    "name email phone role"
+                )
+                .populate(
+                    "salesPersonId",
+                    "name email phone role"
+                )
+                .sort({
+                    createdAt:
+                        -1
+                });
+
+        const processed =
+            memberships.map(m => {
+
+                const mObj =
+                    m.toObject();
+
+                if (
+                    mObj.membershipStatus !==
+                        'Frozen' &&
+                    mObj.membershipStatus !==
+                        'Cancelled'
+                ) {
+
+                    if (
+                        new Date(
+                            mObj.startDate
+                        ) <= todayEnd
+                    ) {
+
+                        mObj.membershipStatus =
+                            'Active';
+
+                    } else {
+
+                        mObj.membershipStatus =
+                            'Scheduled';
+                    }
                 }
-            }
-            return mObj;
-        });
+
+                return mObj;
+            });
 
         res.json(processed);
+
     } catch (err) {
+
         console.error(err);
-        res.status(500).json({ message: "Server Error" });
+
+        res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };
+
 
 // @desc Get Membership History of Member
 // @route GET /api/member-memberships/member/:memberId
 // @access Private
-exports.getMemberMembershipHistory = async (req, res) => {
+exports.getMemberMembershipHistory = async (
+    req,
+    res
+) => {
+
     try {
-        const todayStart = getTodayStart();
-        const todayEnd = getTodayEnd();
 
-        const memberships = await MemberMembership.find({
-            gymId: req.user.gymId,
-            memberId: req.params.memberId,
-        })
-            .populate("membershipPlanId")
-            .populate("trainerId", "name email phone role")
-            .populate("salesPersonId", "name email phone role")
-            .sort({ startDate: -1 });
+        const todayStart =
+            getTodayStart();
 
-        const processed = memberships.map(m => {
-            const mObj = m.toObject();
-            if (mObj.membershipStatus !== 'Frozen' && mObj.membershipStatus !== 'Cancelled') {
-                const start = parseDateOnly(mObj.startDate);
-                const end = parseDateOnly(mObj.endDate);
-                if (end) end.setHours(23, 59, 59, 999);
+        const todayEnd =
+            getTodayEnd();
 
-                if (end && end < todayStart) {
-                    mObj.membershipStatus = 'Expired';
-                } else if (start && start <= todayEnd) {
-                    mObj.membershipStatus = 'Active';
-                } else if (start && start > todayEnd) {
-                    mObj.membershipStatus = 'Scheduled';
+        const memberships =
+            await MemberMembership.find({
+
+                gymId:
+                    req.user.gymId,
+
+                memberId:
+                    req.params.memberId
+
+            })
+                .populate(
+                    "membershipPlanId"
+                )
+                .populate(
+                    "trainerId",
+                    "name email phone role"
+                )
+                .populate(
+                    "salesPersonId",
+                    "name email phone role"
+                )
+                .sort({
+                    startDate:
+                        -1
+                });
+
+        const processed =
+            memberships.map(m => {
+
+                const mObj =
+                    m.toObject();
+
+                if (
+                    mObj.membershipStatus !==
+                        'Frozen' &&
+                    mObj.membershipStatus !==
+                        'Cancelled'
+                ) {
+
+                    const start =
+                        parseDateOnly(
+                            mObj.startDate
+                        );
+
+                    const end =
+                        parseDateOnly(
+                            mObj.endDate
+                        );
+
+                    if (end) {
+
+                        end.setHours(
+                            23,
+                            59,
+                            59,
+                            999
+                        );
+                    }
+
+                    if (
+                        end &&
+                        end < todayStart
+                    ) {
+
+                        mObj.membershipStatus =
+                            'Expired';
+
+                    } else if (
+                        start &&
+                        start <= todayEnd
+                    ) {
+
+                        mObj.membershipStatus =
+                            'Active';
+
+                    } else if (
+                        start &&
+                        start > todayEnd
+                    ) {
+
+                        mObj.membershipStatus =
+                            'Scheduled';
+                    }
                 }
-            }
-            return mObj;
-        });
+
+                return mObj;
+            });
 
         res.json(processed);
+
     } catch (err) {
+
         console.error(err);
-        res.status(500).json({ message: "Server Error" });
+
+        res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };
 
-// @desc    Delete an assigned membership
-// @route   DELETE /api/member-memberships/:id
-// @access  Private
-exports.deleteAssignedMembership = async (req, res) => {
+
+// @desc Delete an assigned membership
+// @route DELETE /api/member-memberships/:id
+// @access Private
+exports.deleteAssignedMembership = async (
+    req,
+    res
+) => {
+
     try {
-        const gymId = req.user.gymId;
-        const membership = await MemberMembership.findOne({ _id: req.params.id, gymId });
+
+        const gymId =
+            req.user.gymId;
+
+        const membership =
+            await MemberMembership.findOne({
+                _id:
+                    req.params.id,
+
+                gymId
+            });
+
         if (!membership) {
-            return res.status(404).json({ message: "Membership assignment not found." });
+
+            return res.status(404).json({
+                message:
+                    "Membership assignment not found."
+            });
         }
 
-        const memberId = membership.memberId;
+        const memberId =
+            membership.memberId;
 
-        // Delete associated transactions for this membership
+        /*
+        |--------------------------------------------------------------------------
+        | DELETE ASSOCIATED TRANSACTIONS
+        |--------------------------------------------------------------------------
+        */
+
         await Transaction.deleteMany({
             gymId,
-            $or: [
-                { membershipId: membership._id },
-                { memberId: memberId, planId: membership.membershipPlanId }
-            ]
+            membershipId: membership._id
         });
 
-        // Delete the membership record
+        /*
+        |--------------------------------------------------------------------------
+        | DELETE MEMBERSHIP
+        |--------------------------------------------------------------------------
+        */
+
         await membership.deleteOne();
 
-        // Check if member has other active/scheduled memberships
-        const remainingActive = await MemberMembership.findOne({
-            gymId,
-            memberId,
-            membershipStatus: { $in: ['Active', 'Scheduled'] }
-        }).sort({ createdAt: -1 });
+        /*
+        |--------------------------------------------------------------------------
+        | FIND REMAINING ACTIVE / SCHEDULED
+        |--------------------------------------------------------------------------
+        */
 
-        const member = await Member.findById(memberId);
+        const remainingActive =
+            await MemberMembership.findOne({
+
+                gymId,
+
+                memberId,
+
+                membershipStatus:
+                    {
+                        $in: [
+                            'Active',
+                            'Scheduled'
+                        ]
+                    }
+
+            }).sort({
+                createdAt:
+                    -1
+            });
+
+        /*
+        |--------------------------------------------------------------------------
+        | UPDATE MEMBER MASTER RECORD
+        |--------------------------------------------------------------------------
+        */
+
+        const member =
+            await Member.findById(
+                memberId
+            );
+
         if (member) {
-            if (remainingActive) {
-                member.status = remainingActive.membershipStatus;
-                member.membershipPlan = remainingActive.membershipPlanId;
-                member.planStartDate = remainingActive.startDate;
-                member.planEndDate = remainingActive.endDate;
-                member.paymentStatus = remainingActive.paymentStatus;
+
+            if (
+                remainingActive
+            ) {
+
+                member.status =
+                    remainingActive
+                        .membershipStatus;
+
+                member.membershipPlan =
+                    remainingActive
+                        .membershipPlanId;
+
+                member.planStartDate =
+                    remainingActive
+                        .startDate;
+
+                member.planEndDate =
+                    remainingActive
+                        .endDate;
+
+                member.paymentStatus =
+                    remainingActive
+                        .paymentStatus;
+
             } else {
-                member.membershipPlan = undefined;
-                member.planStartDate = undefined;
-                member.planEndDate = undefined;
-                member.paymentStatus = 'Pending';
+
+                member.membershipPlan =
+                    undefined;
+
+                member.planStartDate =
+                    undefined;
+
+                member.planEndDate =
+                    undefined;
+
+                member.paymentStatus =
+                    'Pending';
             }
+
             await member.save();
         }
 
-        notifyGym(gymId, {
-            title: 'Membership Deleted',
-            description: `Membership assignment for ${membership.planName} was deleted.`,
-            type: 'MEMBERSHIP',
-            targetId: memberId,
-            link: `/dashboard/owner/members/view/${memberId}`
+        /*
+        |--------------------------------------------------------------------------
+        | SOCKET NOTIFICATION
+        |--------------------------------------------------------------------------
+        */
+
+        notifyGym(
+            gymId,
+            {
+                title:
+                    'Membership Deleted',
+
+                description:
+                    `Membership assignment for ${
+                        membership.planName
+                    } was deleted.`,
+
+                type:
+                    'MEMBERSHIP',
+
+                targetId:
+                    memberId,
+
+                link:
+                    `/dashboard/owner/members/view/${
+                        memberId
+                    }`
+            }
+        );
+
+        res.status(200).json({
+
+            message:
+                "Membership assignment deleted successfully."
         });
 
-        res.status(200).json({ message: "Membership assignment deleted successfully." });
     } catch (err) {
-        console.error('deleteAssignedMembership error:', err);
-        res.status(500).json({ message: "Server Error" });
+
+        console.error(
+            'deleteAssignedMembership error:',
+            err
+        );
+
+        res.status(500).json({
+            message:
+                "Server Error"
+        });
     }
 };

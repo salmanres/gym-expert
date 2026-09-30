@@ -2,13 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
+*, ::before, ::after {
   font-family: 'Roboto', sans-serif;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+html, body, input, select, textarea, button, table, th, td {
+  font-family: 'Roboto', sans-serif !important;
+}
+
+body {
+  font-family: 'Roboto', sans-serif !important;
 }
 
 /* Custom Modern Gym Brand Toast Notifications */

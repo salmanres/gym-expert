@@ -88,7 +88,7 @@ export default function OwnerDashboard() {
                 // Calculate Stats
                 const activeMembers = members.filter(m => m.status === 'Active');
                 const newEnquiries = leads.filter(l => l.status === 'Pending' || (!l.followUpDate && ['New', 'Lead', 'Pending', 'Open'].includes(l.status))).length;
-                const trials = leads.filter(l => l.status === 'Trial' || Boolean(l.trialDate)).length;
+                const trials = leads.filter(l => (l.status === 'Trial' || Boolean(l.trialDate)) && !['Converted', 'Lost', 'Closed', 'Cancelled', 'Dropped'].includes(l.status)).length;
                 const followUps = leads.filter(l => (Boolean(l.followUpDate) || l.status === 'Contacted' || l.status === 'Follow-up' || l.status === 'Follow Up') && !['Converted', 'Lost'].includes(l.status) && (l.status !== 'Pending' || Boolean(l.followUpDate))).length;
                 const converted = leads.filter(l => l.status === 'Converted').length;
                 const lost = leads.filter(l => ['Lost', 'Closed', 'Cancelled', 'Dropped'].includes(l.status)).length;
@@ -195,6 +195,12 @@ export default function OwnerDashboard() {
             return !isNaN(d.getTime()) && d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear;
         };
 
+        const isCurrentYear = (dateVal) => {
+            if (!dateVal) return false;
+            const d = new Date(dateVal);
+            return !isNaN(d.getTime()) && d.getFullYear() === currentYear;
+        };
+
         const getGrowthStats = (currentCount, lastCount) => {
             if (lastCount === 0) {
                 if (currentCount > 0) {
@@ -223,6 +229,9 @@ export default function OwnerDashboard() {
             .reduce((sum, t) => sum + (t.amountPaid || 0), 0);
         const prevMonthRevenue = allTransactions
             .filter(t => isPreviousMonth(t.paymentDate || t.createdAt))
+            .reduce((sum, t) => sum + (t.amountPaid || 0), 0);
+        const curYearRevenue = allTransactions
+            .filter(t => isCurrentYear(t.paymentDate || t.createdAt))
             .reduce((sum, t) => sum + (t.amountPaid || 0), 0);
         const totalRevenue = allTransactions.reduce((sum, t) => sum + (t.amountPaid || 0), 0);
         const revenueGrowth = getGrowthStats(curMonthRevenue, prevMonthRevenue);
@@ -276,7 +285,7 @@ export default function OwnerDashboard() {
                 value: `₹${Math.round(curMonthRevenue).toLocaleString()}`,
                 percentage: revenueGrowth.percentage,
                 isPositive: revenueGrowth.isPositive,
-                subtitle: `₹${Math.round(totalRevenue).toLocaleString()} Lifetime`,
+                subtitle: `₹${Math.round(curYearRevenue).toLocaleString()} Yearly`,
                 icon: <FiTrendingUp className="text-[#2E7D32] text-lg" />,
                 iconBg: 'bg-[#E8F5E9]',
                 link: '/dashboard/owner/finance'
@@ -321,10 +330,10 @@ export default function OwnerDashboard() {
                 {/* Header Greeting Banner */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-black text-[#CA0410] tracking-tight">
+                        <h1 className="text-3xl sm:text-[32px] font-black text-[#CA0410] tracking-tight">
                            Welcome, {user?.name || 'Harjeet Kaur'}!
                         </h1>
-                        <p className="text-xs sm:text-sm font-semibold text-slate-500 mt-0.5">
+                        <p className="text-sm sm:text-[15px] font-bold text-slate-600 mt-1">
                             Here's your real-time gym management summary
                         </p>
                     </div>
@@ -333,21 +342,21 @@ export default function OwnerDashboard() {
                         {!todayAttendance ? (
                             <button 
                                 onClick={() => setShowQRScanner(true)}
-                                className="flex items-center gap-2 bg-[#CA0410] hover:bg-[#b0030e] text-white px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all hover:shadow-lg active:scale-95 cursor-pointer"
+                                className="flex items-center gap-2.5 bg-[#CA0410] hover:bg-[#b0030e] text-white px-6 py-3 rounded-xl font-bold text-sm sm:text-[15px] shadow-md transition-all hover:shadow-lg active:scale-95 cursor-pointer"
                             >
-                                <FiCamera className="text-base" /> Scan QR to Check In <FiChevronRight className="text-sm ml-0.5" />
+                                <FiCamera className="text-lg" /> Scan QR to Check In <FiChevronRight className="text-base ml-0.5" />
                             </button>
                         ) : !todayAttendance.checkOutTime ? (
                             <button 
                                 onClick={handleDirectCheckOut}
                                 disabled={checkingOut}
-                                className="flex items-center gap-2 bg-[#CA0410] hover:bg-[#b0030e] text-white px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                                className="flex items-center gap-2.5 bg-[#CA0410] hover:bg-[#b0030e] text-white px-6 py-3 rounded-xl font-bold text-sm sm:text-[15px] shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                             >
-                                <FiLogOut className="text-base" /> {checkingOut ? 'Checking Out...' : 'Tap to Check Out'} <FiChevronRight className="text-sm ml-0.5" />
+                                <FiLogOut className="text-lg" /> {checkingOut ? 'Checking Out...' : 'Tap to Check Out'} <FiChevronRight className="text-base ml-0.5" />
                             </button>
                         ) : (
-                            <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-xl font-bold text-xs">
-                                <FiCheckCircle className="text-base text-emerald-600" /> Attendance Completed
+                            <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-5 py-2.5 rounded-xl font-bold text-sm">
+                                <FiCheckCircle className="text-lg text-emerald-600" /> Attendance Completed
                             </div>
                         )}
                     </div>
@@ -384,90 +393,90 @@ export default function OwnerDashboard() {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch">
                         
                         {/* 4 Quick Actions (7 Columns) */}
-                        <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                        <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-3.5">
                             
                             {/* Add Member */}
                             <div 
                                 onClick={() => navigate('/dashboard/owner/members/add')}
-                                className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group min-h-[80px]"
+                                className="bg-white p-3.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group min-h-[82px] sm:min-h-[86px]"
                             >
-                                <div className="w-11 h-11 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                <div className="w-11 h-11 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform text-lg">
                                     <FiUsers size={20} />
                                 </div>
-                                <div className="min-w-0">
-                                    <h4 className="text-[13px] font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight truncate">Add Member</h4>
-                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">Register member</p>
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="text-[13.5px] sm:text-[14.5px] font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight">Add Member</h4>
+                                    <p className="text-[11.5px] sm:text-[12px] text-slate-500 font-medium mt-0.5 leading-tight">Register member</p>
                                 </div>
                             </div>
 
                             {/* Add Leads */}
                             <div 
                                 onClick={() => navigate('/dashboard/owner/leads/add')}
-                                className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group min-h-[80px]"
+                                className="bg-white p-3.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group min-h-[82px] sm:min-h-[86px]"
                             >
-                                <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform text-lg">
                                     <FiUserPlus size={20} />
                                 </div>
-                                <div className="min-w-0">
-                                    <h4 className="text-[13px] font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight truncate">Add Leads</h4>
-                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">Capture new leads</p>
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="text-[13.5px] sm:text-[14.5px] font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight">Add Leads</h4>
+                                    <p className="text-[11.5px] sm:text-[12px] text-slate-500 font-medium mt-0.5 leading-tight">Capture new leads</p>
                                 </div>
                             </div>
 
                             {/* New Plan */}
                             <div 
                                 onClick={() => navigate('/dashboard/owner/membership')}
-                                className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group min-h-[80px]"
+                                className="bg-white p-3.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-[#CA0410] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group min-h-[82px] sm:min-h-[86px]"
                             >
-                                <div className="w-11 h-11 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                <div className="w-11 h-11 rounded-xl bg-[#CA0410] text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform text-lg">
                                     <FiCalendar size={20} />
                                 </div>
-                                <div className="min-w-0">
-                                    <h4 className="text-[13px] font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight truncate">New Plan</h4>
-                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">Membership plan</p>
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="text-[13.5px] sm:text-[14.5px] font-black text-slate-900 group-hover:text-[#CA0410] transition-colors leading-tight">New Plan</h4>
+                                    <p className="text-[11.5px] sm:text-[12px] text-slate-500 font-medium mt-0.5 leading-tight">Membership plan</p>
                                 </div>
                             </div>
 
                             {/* View Reports */}
                             <div 
                                 onClick={() => navigate('/dashboard/owner/reports')}
-                                className="bg-white p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group min-h-[80px]"
+                                className="bg-white p-3.5 sm:p-4 rounded-2xl border border-rose-200/80 shadow-2xs hover:shadow-md hover:border-slate-800 hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group min-h-[82px] sm:min-h-[86px]"
                             >
-                                <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                                <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform text-lg">
                                     <FiFileText size={20} />
                                 </div>
-                                <div className="min-w-0">
-                                    <h4 className="text-[13px] font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight truncate">View Reports</h4>
-                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">Check detailed</p>
+                                <div className="min-w-0 flex-1">
+                                    <h4 className="text-[13.5px] sm:text-[14.5px] font-black text-slate-900 group-hover:text-slate-700 transition-colors leading-tight">View Reports</h4>
+                                    <p className="text-[11.5px] sm:text-[12px] text-slate-500 font-medium mt-0.5 leading-tight">Check detailed</p>
                                 </div>
                             </div>
 
                         </div>
 
                         {/* Lead Pipeline Quick Stats Box (5 Columns) */}
-                        <div className="lg:col-span-5 bg-white rounded-2xl border border-rose-200/80 p-4 shadow-2xs flex flex-col justify-between">
-                            <div className="flex items-center gap-2 mb-2.5">
-                                <div className="w-6 h-6 rounded-lg bg-rose-50 text-[#CA0410] flex items-center justify-center text-xs">
+                        <div className="lg:col-span-5 bg-white rounded-2xl border border-rose-200/80 p-4 sm:p-4.5 shadow-2xs flex flex-col justify-between">
+                            <div className="flex items-center gap-2.5 mb-3">
+                                <div className="w-7 h-7 rounded-lg bg-rose-50 text-[#CA0410] flex items-center justify-center text-sm">
                                     <FiTrendingUp />
                                 </div>
-                                <h4 className="text-xs font-black text-slate-800 tracking-tight">Pipeline Highlights</h4>
+                                <h4 className="text-[13.5px] sm:text-[14px] font-black text-slate-800 tracking-tight">Pipeline Highlights</h4>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                <div className="bg-[#FFECEC]/80 border border-rose-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
-                                    <span className="text-sm font-black text-[#CA0410]">{stats.newEnquiries}</span>
-                                    <span className="text-[9.5px] font-bold text-rose-600 mt-0.5">New Enquiries</span>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                <div className="bg-[#FFECEC]/80 border border-rose-200/60 p-2.5 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-base sm:text-[17px] font-black text-[#CA0410]">{stats.newEnquiries}</span>
+                                    <span className="text-[11px] sm:text-[11.5px] font-bold text-rose-600 mt-0.5">New Enquiries</span>
                                 </div>
-                                <div className="bg-[#FFF3E0]/80 border border-amber-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
-                                    <span className="text-sm font-black text-amber-700">{stats.trials}</span>
-                                    <span className="text-[9.5px] font-bold text-amber-600 mt-0.5">Active Trials</span>
+                                <div className="bg-[#FFF3E0]/80 border border-amber-200/60 p-2.5 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-base sm:text-[17px] font-black text-amber-700">{stats.trials}</span>
+                                    <span className="text-[11px] sm:text-[11.5px] font-bold text-amber-600 mt-0.5">Active Trials</span>
                                 </div>
-                                <div className="bg-[#FFF9C4]/80 border border-yellow-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
-                                    <span className="text-sm font-black text-amber-800">{stats.followUps}</span>
-                                    <span className="text-[9.5px] font-bold text-yellow-700 mt-0.5">Follow-ups Due</span>
+                                <div className="bg-[#FFF9C4]/80 border border-yellow-200/60 p-2.5 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-base sm:text-[17px] font-black text-amber-800">{stats.followUps}</span>
+                                    <span className="text-[11px] sm:text-[11.5px] font-bold text-yellow-700 mt-0.5">Follow-ups Due</span>
                                 </div>
-                                <div className="bg-[#E8F5E9]/80 border border-emerald-200/60 p-2 rounded-xl text-center flex flex-col justify-center">
-                                    <span className="text-sm font-black text-emerald-700">{stats.converted}</span>
-                                    <span className="text-[9.5px] font-bold text-emerald-600 mt-0.5">Converted</span>
+                                <div className="bg-[#E8F5E9]/80 border border-emerald-200/60 p-2.5 rounded-xl text-center flex flex-col justify-center">
+                                    <span className="text-base sm:text-[17px] font-black text-emerald-700">{stats.converted}</span>
+                                    <span className="text-[11px] sm:text-[11.5px] font-bold text-emerald-600 mt-0.5">Converted</span>
                                 </div>
                             </div>
                         </div>
@@ -480,18 +489,18 @@ export default function OwnerDashboard() {
                     
                     {/* Recent Member Registrations */}
                     <div className="bg-white rounded-2xl border border-rose-200/80 shadow-2xs overflow-hidden flex flex-col">
-                        <div className="p-4 border-b border-rose-100/80 flex items-center justify-between bg-white">
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center border border-rose-200/60 shrink-0">
-                                    <FiUsers size={16} />
+                        <div className="p-4 sm:p-4.5 border-b border-rose-100/80 flex items-center justify-between bg-white">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center border border-rose-200/60 shrink-0">
+                                    <FiUsers size={18} />
                                 </div>
-                                <h3 className="font-extrabold text-slate-800 text-sm">Recent Member Registrations</h3>
+                                <h3 className="font-extrabold text-slate-800 text-[15px] sm:text-[16px]">Recent Member Registrations</h3>
                             </div>
                             <button 
                                 onClick={() => navigate('/dashboard/owner/members')} 
-                                className="text-xs font-bold text-[#CA0410] hover:text-[#a8030d] flex items-center gap-1 cursor-pointer transition-colors"
+                                className="text-[13px] font-bold text-[#CA0410] hover:text-[#a8030d] flex items-center gap-1 cursor-pointer transition-colors"
                             >
-                                View All <FiArrowRight size={13} />
+                                View All <FiArrowRight size={14} />
                             </button>
                         </div>
                         
@@ -499,40 +508,40 @@ export default function OwnerDashboard() {
                             {recentMembers.length === 0 ? (
                                 <div className="p-8 text-center text-slate-400 text-xs font-medium">No recent members found.</div>
                             ) : (
-                                <table className="w-full text-left text-xs border-collapse">
+                                <table className="w-full text-left border-collapse">
                                     <thead>
-                                        <tr className="border-b border-rose-100 text-[10px] uppercase font-bold text-slate-500 bg-rose-50/40">
-                                            <th className="py-2.5 px-4">Member Name</th>
-                                            <th className="py-2.5 px-3">Joining Date</th>
-                                            <th className="py-2.5 px-3 text-center">Status</th>
-                                            <th className="py-2.5 px-3 w-8"></th>
+                                        <tr className="border-b border-rose-100 text-[12px] uppercase font-bold text-slate-700 bg-rose-50/50">
+                                            <th className="py-3 px-4">Member Name</th>
+                                            <th className="py-3 px-3">Joining Date</th>
+                                            <th className="py-3 px-3 text-center">Status</th>
+                                            <th className="py-3 px-3 w-8"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {recentMembers.map(m => (
                                             <tr key={m._id} className="hover:bg-rose-50/30 transition-colors">
-                                                <td className="py-3 px-4">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <div className="w-7 h-7 rounded-full bg-rose-50 text-[#CA0410] font-black text-[10px] flex items-center justify-center shrink-0 border border-rose-200/60">
+                                                <td className="py-3.5 px-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] font-black text-sm flex items-center justify-center shrink-0 border border-rose-200/80 shadow-2xs">
                                                             {m.firstName?.charAt(0)}{m.lastName?.charAt(0) || ''}
                                                         </div>
-                                                        <span className="font-bold text-slate-800 text-xs truncate max-w-[150px]">
+                                                        <span className="font-bold text-slate-900 text-[14.5px] truncate max-w-[150px]">
                                                             {m.firstName} {m.lastName || ''}
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="py-3 px-3 text-slate-500 font-medium text-xs">
+                                                <td className="py-3.5 px-3 text-slate-600 font-medium text-[13px]">
                                                     {formatDate(m.createdAt || m.joiningDate)}
                                                 </td>
-                                                <td className="py-3 px-3 text-center">
-                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                                        m.status === 'Active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-600'
+                                                <td className="py-3.5 px-3 text-center">
+                                                    <span className={`px-2.5 py-1 rounded-md text-[12px] font-bold ${
+                                                        m.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700'
                                                     }`}>
                                                         {m.status || 'Active'}
                                                     </span>
                                                 </td>
-                                                <td className="py-3 px-3 text-right text-slate-300">
-                                                    <FiChevronRight size={14} />
+                                                <td className="py-3.5 px-3 text-right text-slate-400">
+                                                    <FiChevronRight size={16} />
                                                 </td>
                                             </tr>
                                         ))}
@@ -545,18 +554,18 @@ export default function OwnerDashboard() {
                     {/* Recent Fee Payments */}
                     {isOwnerOrAdmin && (
                         <div className="bg-white rounded-2xl border border-rose-200/80 shadow-2xs overflow-hidden flex flex-col">
-                            <div className="p-4 border-b border-rose-100/80 flex items-center justify-between bg-white">
-                                <div className="flex items-center gap-2.5">
-                                    <div className="w-8 h-8 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center border border-rose-200/60 shrink-0">
-                                        <FiCreditCard size={16} />
+                            <div className="p-4 sm:p-4.5 border-b border-rose-100/80 flex items-center justify-between bg-white">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-rose-50 text-[#CA0410] flex items-center justify-center border border-rose-200/60 shrink-0">
+                                        <FiCreditCard size={18} />
                                     </div>
-                                    <h3 className="font-extrabold text-slate-800 text-sm">Recent Fee Payments</h3>
+                                    <h3 className="font-extrabold text-slate-800 text-[15px] sm:text-[16px]">Recent Fee Payments</h3>
                                 </div>
                                 <button 
                                     onClick={() => navigate('/dashboard/owner/finance')} 
-                                    className="text-xs font-bold text-[#CA0410] hover:text-[#a8030d] flex items-center gap-1 cursor-pointer transition-colors"
+                                    className="text-[13px] font-bold text-[#CA0410] hover:text-[#a8030d] flex items-center gap-1 cursor-pointer transition-colors"
                                 >
-                                    View All <FiArrowRight size={13} />
+                                    View All <FiArrowRight size={14} />
                                 </button>
                             </div>
                             
@@ -564,42 +573,42 @@ export default function OwnerDashboard() {
                                 {recentTransactions.length === 0 ? (
                                     <div className="p-8 text-center text-slate-400 text-xs font-medium">No recent fee payments found.</div>
                                 ) : (
-                                    <table className="w-full text-left text-xs border-collapse">
+                                    <table className="w-full text-left border-collapse">
                                         <thead>
-                                            <tr className="border-b border-rose-100 text-[10px] uppercase font-bold text-slate-500 bg-rose-50/40">
-                                                <th className="py-2.5 px-4">Member Name</th>
-                                                <th className="py-2.5 px-3">Date</th>
-                                                <th className="py-2.5 px-3">Amount</th>
-                                                <th className="py-2.5 px-3 text-center">Status</th>
-                                                <th className="py-2.5 px-3 w-8"></th>
+                                            <tr className="border-b border-rose-100 text-[12px] uppercase font-bold text-slate-700 bg-rose-50/50">
+                                                <th className="py-3 px-4">Member Name</th>
+                                                <th className="py-3 px-3">Date</th>
+                                                <th className="py-3 px-3">Amount</th>
+                                                <th className="py-3 px-3 text-center">Status</th>
+                                                <th className="py-3 px-3 w-8"></th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {recentTransactions.map(tx => (
                                                 <tr key={tx._id} className="hover:bg-rose-50/30 transition-colors">
-                                                    <td className="py-3 px-4">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <div className="w-7 h-7 rounded-full bg-rose-50 text-[#CA0410] font-black text-[10px] flex items-center justify-center shrink-0 border border-rose-200/60">
+                                                    <td className="py-3.5 px-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] font-black text-sm flex items-center justify-center shrink-0 border border-rose-200/80 shadow-2xs">
                                                                 {tx.memberId?.firstName?.charAt(0) || 'M'}{tx.memberId?.lastName?.charAt(0) || ''}
                                                             </div>
-                                                            <span className="font-bold text-slate-800 text-xs truncate max-w-[150px]">
+                                                            <span className="font-bold text-slate-900 text-[14.5px] truncate max-w-[150px]">
                                                                 {tx.memberId?.firstName} {tx.memberId?.lastName || ''}
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="py-3 px-3 text-slate-500 font-medium text-xs">
+                                                    <td className="py-3.5 px-3 text-slate-600 font-medium text-[13px]">
                                                         {formatDate(tx.paymentDate || tx.createdAt)}
                                                     </td>
-                                                    <td className="py-3 px-3 font-black text-slate-900 text-xs">
+                                                    <td className="py-3.5 px-3 font-black text-slate-900 text-[14.5px]">
                                                         ₹{tx.amountPaid}
                                                     </td>
-                                                    <td className="py-3 px-3 text-center">
-                                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                                    <td className="py-3.5 px-3 text-center">
+                                                        <span className="px-2.5 py-1 rounded-md text-[12px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
                                                             {tx.paymentMode || 'Cash'}
                                                         </span>
                                                     </td>
-                                                    <td className="py-3 px-3 text-right text-slate-300">
-                                                        <FiChevronRight size={14} />
+                                                    <td className="py-3.5 px-3 text-right text-slate-400">
+                                                        <FiChevronRight size={16} />
                                                     </td>
                                                 </tr>
                                             ))}

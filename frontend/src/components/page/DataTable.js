@@ -26,16 +26,16 @@ export default function DataTable({
                 <table className="w-full text-left table-fixed min-w-[1000px] border-collapse">
                     {/* TABLE HEADER */}
                     <thead>
-                        <tr className={`h-8 ${getHeaderBg()}`}>
+                        <tr className={`h-10 sm:h-11 ${getHeaderBg()}`}>
                             {columns.map((col, index) => (
                                 <th
                                     key={index}
                                     className={`
-                                        h-8
-                                        py-1
+                                        h-10 sm:h-11
+                                        py-2
                                         px-3
                                         font-['Roboto',sans-serif]
-                                        text-[10.5px]
+                                        text-[12px] sm:text-[12.5px]
                                         font-bold
                                         tracking-wider
                                         uppercase
@@ -45,7 +45,7 @@ export default function DataTable({
                                         align-middle
                                         first:rounded-tl-xl
                                         last:rounded-tr-xl
-                                        ${darkHeader ? 'text-white !bg-[#162544]' : (headerBgClass ? '' : 'text-white !bg-[#CA0410]')}
+                                        ${darkHeader ? 'text-white !bg-[#162544]' : (headerBgClass ? headerBgClass : 'text-white !bg-[#CA0410]')}
                                         ${col.className || ''}
                                     `}
                                 >

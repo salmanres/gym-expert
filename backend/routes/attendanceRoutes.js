@@ -3,6 +3,11 @@ const router = express.Router();
 const { markAttendance, getGymAttendance, getMyAttendance, getDailySheet, getUserAttendanceHistory, selfCheckIn, requestOTP, verifyOTP } = require('../controllers/attendanceController');
 const { protect } = require('../middleware/authMiddleware');
 
+// @route   POST /api/attendance/lookup
+// @desc    Lookup user type (Member vs Trial) from phone number
+// @access  Public
+router.post('/lookup', require('../controllers/attendanceController').lookupUser);
+
 // @route   POST /api/attendance/request-otp
 // @access  Public
 router.post('/request-otp', requestOTP);

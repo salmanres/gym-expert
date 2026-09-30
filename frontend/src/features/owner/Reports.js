@@ -18,6 +18,7 @@ import DailyCollectionsReport from './reports/DailyCollectionsReport';
 import ExpiringPlansReport from './reports/ExpiringPlansReport';
 import StaffHoursReport from './reports/StaffHoursReport';
 import MemberAttendanceReport from './reports/MemberAttendanceReport';
+import TrialAttendanceReport from './reports/TrialAttendanceReport';
 
 export default function Reports() {
     const [loading, setLoading] = useState(true);
@@ -36,32 +37,39 @@ export default function Reports() {
     const [activePlans, setActivePlans] = useState([]);
     const [staffAttendance, setStaffAttendance] = useState([]);
     const [memberAttendance, setMemberAttendance] = useState([]);
+    const [trialAttendance, setTrialAttendance] = useState([]);
     const [gymSettings, setGymSettings] = useState(null);
 
-    useEffect(() => {
-        fetchReportData();
-    }, []);
-
-    const fetchReportData = async () => {
+    const fetchReportData = async (start = filterStartDate, end = filterEndDate) => {
         setLoading(true);
         try {
             const todayStr = new Date().toISOString().split('T')[0];
-            const [txRes, activeRes, latestRes, staffRes, memberRes, attendanceRes, gymRes] = await Promise.all([
+            let attendanceUrl = `/attendance?date=${todayStr}`;
+            if (start && end && start === end) {
+                attendanceUrl = `/attendance?date=${start}`;
+            } else if (start || end) {
+                attendanceUrl = `/attendance?startDate=${start || ''}&endDate=${end || ''}`;
+            }
+
+            const [txRes, activeRes, latestRes, staffRes, memberRes, attendanceRes, gymRes, enquiryRes] = await Promise.all([
                 apiClient.get('/members/transactions/all').catch(() => ({ data: [] })),
                 apiClient.get('/member-memberships/active').catch(() => ({ data: [] })),
                 apiClient.get('/member-memberships/latest').catch(() => ({ data: [] })),
                 apiClient.get('/staff').catch(() => ({ data: [] })),
                 apiClient.get('/members').catch(() => ({ data: [] })),
-                apiClient.get(`/attendance?date=${todayStr}`).catch(() => ({ data: [] })),
-                apiClient.get('/gyms/my-gym').catch(() => ({ data: null }))
+                apiClient.get(attendanceUrl).catch(() => ({ data: [] })),
+                apiClient.get('/gyms/my-gym').catch(() => ({ data: null })),
+                apiClient.get('/enquiries').catch(() => ({ data: [] }))
             ]);
-            setTransactions(txRes.data || []);
-            setActivePlans(activeRes.data || []);
-            setStaffAttendance(staffRes.data || []);
+
+            const staffData = staffRes.data || [];
             const membersData = memberRes.data || [];
             const latestPlansData = latestRes.data || [];
             const todaysAttendance = attendanceRes.data || [];
+            const allEnquiries = enquiryRes.data || [];
             setGymSettings(gymRes.data || null);
+            setTransactions(txRes.data || []);
+            setActivePlans(activeRes.data || []);
             
             const latestPlansMap = new Map();
             latestPlansData.forEach(plan => {
@@ -71,23 +79,45 @@ export default function Reports() {
                 }
             });
 
-            const todaysAttendanceMap = new Map();
+            const attendanceLogsMap = new Map();
+            const latestAttendanceMap = new Map();
             todaysAttendance.forEach(att => {
                 const userIdStr = att.userId?._id?.toString() || att.userId?.toString();
                 if (userIdStr) {
-                    todaysAttendanceMap.set(userIdStr, att);
+                    if (!latestAttendanceMap.has(userIdStr)) {
+                        latestAttendanceMap.set(userIdStr, att);
+                    }
+                    if (!attendanceLogsMap.has(userIdStr)) {
+                        attendanceLogsMap.set(userIdStr, []);
+                    }
+                    attendanceLogsMap.get(userIdStr).push(att);
                 }
             });
 
+            const mergedStaffAttendance = staffData.map(staff => {
+                const staffIdStr = staff._id?.toString();
+                const att = latestAttendanceMap.get(staffIdStr);
+                const logs = attendanceLogsMap.get(staffIdStr) || [];
+                let updatedStaff = { ...staff, attendanceLogs: logs };
+                if (att) {
+                    updatedStaff.attendanceStatus = att.status;
+                    updatedStaff.attendance = { checkInTime: att.checkInTime, checkOutTime: att.checkOutTime };
+                }
+                return updatedStaff;
+            });
+            setStaffAttendance(mergedStaffAttendance);
+
             const mergedMemberAttendance = membersData.map(member => {
-                const latestPlan = latestPlansMap.get(member._id?.toString());
-                const todayAtt = todaysAttendanceMap.get(member._id?.toString());
+                const memberIdStr = member._id?.toString();
+                const latestPlan = latestPlansMap.get(memberIdStr);
+                const att = latestAttendanceMap.get(memberIdStr);
+                const logs = attendanceLogsMap.get(memberIdStr) || [];
                 
-                let updatedMember = { ...member };
+                let updatedMember = { ...member, attendanceLogs: logs };
                 
-                if (todayAtt) {
-                    updatedMember.attendanceStatus = todayAtt.status;
-                    updatedMember.attendance = { checkInTime: todayAtt.checkInTime, checkOutTime: todayAtt.checkOutTime };
+                if (att) {
+                    updatedMember.attendanceStatus = att.status;
+                    updatedMember.attendance = { checkInTime: att.checkInTime, checkOutTime: att.checkOutTime };
                 }
 
                 if (latestPlan) {
@@ -96,7 +126,7 @@ export default function Reports() {
                         startDate: latestPlan.startDate,
                         endDate: latestPlan.paidUntilDate || latestPlan.endDate,
                         membershipStatus: latestPlan.computedStatus || latestPlan.membershipStatus,
-                        totalPresentDays: latestPlan.usedSessions || 0,
+                        totalPresentDays: latestPlan.usedSessions || (att ? 1 : 0),
                         planName: latestPlan.planName || latestPlan.membershipPlanId?.name,
                         membershipPlanId: latestPlan.membershipPlanId
                     };
@@ -105,12 +135,32 @@ export default function Reports() {
             });
 
             setMemberAttendance(mergedMemberAttendance);
+
+            // Process Trial Attendance
+            const trialEnquiries = allEnquiries.filter(e => e.status === 'Trial' || e.trialDate || e.trialEndDate);
+            const mergedTrialAttendance = trialEnquiries.map(trial => {
+                const trialIdStr = trial._id?.toString();
+                const att = latestAttendanceMap.get(trialIdStr);
+                const logs = attendanceLogsMap.get(trialIdStr) || [];
+                let updatedTrial = { ...trial, attendanceLogs: logs };
+                if (att) {
+                    updatedTrial.attendanceStatus = att.status;
+                    updatedTrial.attendance = { checkInTime: att.checkInTime, checkOutTime: att.checkOutTime };
+                }
+                return updatedTrial;
+            });
+            setTrialAttendance(mergedTrialAttendance);
+
         } catch (err) {
             console.error("Failed to load report analytics", err);
         } finally {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        fetchReportData(filterStartDate, filterEndDate);
+    }, [filterStartDate, filterEndDate]);
 
     // CSV Export Helper
     const exportCSV = (data, filename) => {
@@ -142,10 +192,10 @@ export default function Reports() {
             dates.push(curr.toISOString().split('T')[0]);
             curr.setDate(curr.getDate() + 1);
         }
-        return dates; // Chronological order: 2026-08-01, 2026-08-02, ...
+        return dates; // Chronological order
     };
 
-    // Date Preset Handler
+    // Date Preset Handler (Safe date calculation without mutating now)
     const applyDatePreset = (preset) => {
         setDatePreset(preset);
         const now = new Date();
@@ -154,18 +204,23 @@ export default function Reports() {
             setFilterStartDate(todayStr);
             setFilterEndDate(todayStr);
         } else if (preset === 'This Week') {
-            const firstDay = new Date(now.setDate(now.getDate() - now.getDay()));
-            const lastDay = new Date(now.setDate(now.getDate() - now.getDay() + 6));
+            const current = new Date();
+            const firstDay = new Date(current);
+            firstDay.setDate(current.getDate() - current.getDay());
+            const lastDay = new Date(current);
+            lastDay.setDate(current.getDate() - current.getDay() + 6);
             setFilterStartDate(toInputDateFormat(firstDay));
             setFilterEndDate(toInputDateFormat(lastDay));
         } else if (preset === 'This Month') {
-            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            const current = new Date();
+            const firstDay = new Date(current.getFullYear(), current.getMonth(), 1);
+            const lastDay = new Date(current.getFullYear(), current.getMonth() + 1, 0);
             setFilterStartDate(toInputDateFormat(firstDay));
             setFilterEndDate(toInputDateFormat(lastDay));
         } else if (preset === 'This Year') {
-            const firstDay = new Date(now.getFullYear(), 0, 1);
-            const lastDay = new Date(now.getFullYear(), 11, 31);
+            const current = new Date();
+            const firstDay = new Date(current.getFullYear(), 0, 1);
+            const lastDay = new Date(current.getFullYear(), 11, 31);
             setFilterStartDate(toInputDateFormat(firstDay));
             setFilterEndDate(toInputDateFormat(lastDay));
         } else {
@@ -183,12 +238,13 @@ export default function Reports() {
         setDatePreset('All');
     };
 
-    // Generic Filter Helper
+    // Generic Filter Helper with Tokenized Search & Precise Date Range
     const filterBySearchAndDate = (data, dateAccessor, searchAccessor, modeAccessor, statusAccessor) => {
         return data.filter(item => {
-            if (searchTerm) {
-                const searchStr = searchAccessor(item).toLowerCase();
-                if (!searchStr.includes(searchTerm.toLowerCase())) return false;
+            if (searchTerm && searchAccessor) {
+                const searchStr = (searchAccessor(item) || '').toLowerCase();
+                const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+                if (!terms.every(term => searchStr.includes(term))) return false;
             }
             if (paymentModeFilter !== 'All' && modeAccessor) {
                 const mode = modeAccessor(item);
@@ -198,14 +254,18 @@ export default function Reports() {
                 const status = statusAccessor(item);
                 if ((status || '').toLowerCase() !== paymentStatusFilter.toLowerCase()) return false;
             }
-            if (filterStartDate) {
-                const itemDate = new Date(dateAccessor(item));
+            if (filterStartDate && dateAccessor) {
+                const rawDate = dateAccessor(item);
+                if (!rawDate) return false;
+                const itemDate = new Date(rawDate);
                 const startDate = new Date(filterStartDate);
                 startDate.setHours(0, 0, 0, 0);
                 if (itemDate < startDate) return false;
             }
-            if (filterEndDate) {
-                const itemDate = new Date(dateAccessor(item));
+            if (filterEndDate && dateAccessor) {
+                const rawDate = dateAccessor(item);
+                if (!rawDate) return false;
+                const itemDate = new Date(rawDate);
                 const endDate = new Date(filterEndDate);
                 endDate.setHours(23, 59, 59, 999);
                 if (itemDate > endDate) return false;
@@ -216,18 +276,22 @@ export default function Reports() {
 
     // 1. Expiring Plans Calculations
     const today = new Date();
-    const thirtyDaysLater = new Date();
+    today.setHours(0, 0, 0, 0);
+    const thirtyDaysLater = new Date(today);
     thirtyDaysLater.setDate(today.getDate() + 30);
+    thirtyDaysLater.setHours(23, 59, 59, 999);
 
-    const expiring30 = activePlans.filter(p => {
+    const baseExpiringPlans = (filterStartDate || filterEndDate) ? activePlans : activePlans.filter(p => {
         const relevantEndDate = p.paidUntilDate || p.endDate;
-        return relevantEndDate && new Date(relevantEndDate) >= today && new Date(relevantEndDate) <= thirtyDaysLater;
+        if (!relevantEndDate) return false;
+        const d = new Date(relevantEndDate);
+        return d >= today && d <= thirtyDaysLater;
     });
 
     const filteredExpiring = filterBySearchAndDate(
-        expiring30,
+        baseExpiringPlans,
         p => p.paidUntilDate || p.endDate,
-        p => `${p.memberId?.memberId || ''} ${p.memberId?.firstName || ''} ${p.memberId?.lastName || ''} ${p.membershipPlanId?.name || ''} ${p.memberId?.contactNumber || p.memberId?.phone || p.memberId?.mobile || ''}`,
+        p => `${p.memberId?.memberId || ''} ${p.memberId?.firstName || ''} ${p.memberId?.lastName || ''} ${p.membershipPlanId?.name || p.planName || ''} ${p.memberId?.contactNumber || p.memberId?.phone || p.memberId?.mobile || ''} ${p.membershipStatus || ''}`,
         null,
         p => p.membershipStatus
     );
@@ -280,19 +344,88 @@ export default function Reports() {
         feeReceivedLinePoints.push({ label: dayLabel, value: dayTotal });
     }
 
-    // 3. Staff Calculations
+    // 3. Staff Calculations with Full Search & Date Boundary
     const filteredStaffAttendance = staffAttendance.filter(s => {
-        if (!searchTerm) return true;
-        const searchStr = `${s.name || s.user?.name || ''} ${s.phone || s.user?.phone || ''}`.toLowerCase();
-        return searchStr.includes(searchTerm.toLowerCase());
+        if (searchTerm) {
+            const staffCustomId = s.staffId || s.user?.staffId || s.employeeId || 'STF-00' + (s._id || '').substring(0, 3).toUpperCase();
+            const staffName = s.user?.name || s.name || '';
+            const role = s.user?.role || s.role || '';
+            const phone = s.user?.phone || s.phone || '';
+            const searchStr = `${staffCustomId} ${staffName} ${role} ${phone}`.toLowerCase();
+            const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+            if (!terms.every(term => searchStr.includes(term))) return false;
+        }
+        if (filterEndDate) {
+            const rawJoin = s.joiningDate || s.user?.joiningDate || s.createdAt || s.user?.createdAt;
+            if (rawJoin) {
+                const joinDate = new Date(rawJoin);
+                joinDate.setHours(0, 0, 0, 0);
+                const endDate = new Date(filterEndDate);
+                endDate.setHours(23, 59, 59, 999);
+                if (joinDate > endDate) return false;
+            }
+        }
+        return true;
     });
 
-    // 4. Member Attendance Calculations
+    // 4. Member Attendance Calculations with Plan, ID & Phone Search
     const filteredMemberAttendance = memberAttendance.filter(m => {
-        if (!searchTerm) return true;
-        const phoneStr = m.memberId?.contactNumber || m.memberId?.phone || m.memberId?.mobile || m.phone || '';
-        const searchStr = `${m.memberId?.memberId || m.memberId || ''} ${m.memberId?.firstName || m.firstName || ''} ${m.memberId?.lastName || m.lastName || ''} ${phoneStr}`.toLowerCase();
-        return searchStr.includes(searchTerm.toLowerCase());
+        if (searchTerm) {
+            const memberId = m.memberId?.memberId || m.memberId || '';
+            const firstName = m.memberId?.firstName || m.firstName || '';
+            const lastName = m.memberId?.lastName || m.lastName || '';
+            const phone = m.memberId?.contactNumber || m.memberId?.phone || m.memberId?.mobile || m.phone || '';
+            const planName = m.planName || m.membershipPlanId?.name || '';
+            const status = m.membershipStatus || m.status || '';
+            const searchStr = `${memberId} ${firstName} ${lastName} ${planName} ${status} ${phone}`.toLowerCase();
+            const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+            if (!terms.every(term => searchStr.includes(term))) return false;
+        }
+        if (filterStartDate) {
+            const startDate = new Date(filterStartDate);
+            startDate.setHours(0, 0, 0, 0);
+            const memberEndDate = m.endDate || m.membershipPlanId?.endDate || m.memberId?.endDate;
+            if (memberEndDate) {
+                const end = new Date(memberEndDate);
+                end.setHours(23, 59, 59, 999);
+                if (end < startDate) return false;
+            }
+        }
+        if (filterEndDate) {
+            const endDate = new Date(filterEndDate);
+            endDate.setHours(23, 59, 59, 999);
+            const memberStartDate = m.startDate || m.membershipPlanId?.startDate || m.memberId?.startDate;
+            if (memberStartDate) {
+                const start = new Date(memberStartDate);
+                start.setHours(0, 0, 0, 0);
+                if (start > endDate) return false;
+            }
+        }
+        return true;
+    });
+
+    // 5. Trial Attendance Calculations with Range Overlap
+    const filteredTrialAttendance = trialAttendance.filter(t => {
+        if (searchTerm) {
+            const phoneStr = t.contactNumber || t.altContact || t.phone || '';
+            const searchStr = `${t.enquiryId || ''} ${t.firstName || ''} ${t.lastName || ''} ${phoneStr} ${t.email || ''} ${t.status || ''}`.toLowerCase();
+            const terms = searchTerm.toLowerCase().trim().split(/\s+/);
+            if (!terms.every(term => searchStr.includes(term))) return false;
+        }
+        if (filterStartDate) {
+            const trialStartDate = t.trialDate ? new Date(t.trialDate) : (t.createdAt ? new Date(t.createdAt) : null);
+            const trialEndDate = t.trialEndDate ? new Date(t.trialEndDate) : (trialStartDate ? new Date(trialStartDate) : null);
+            const startDate = new Date(filterStartDate);
+            startDate.setHours(0, 0, 0, 0);
+            if (trialEndDate && trialEndDate < startDate) return false;
+        }
+        if (filterEndDate) {
+            const trialStartDate = t.trialDate ? new Date(t.trialDate) : (t.createdAt ? new Date(t.createdAt) : null);
+            const endDate = new Date(filterEndDate);
+            endDate.setHours(23, 59, 59, 999);
+            if (trialStartDate && trialStartDate > endDate) return false;
+        }
+        return true;
     });
 
     const handleExportCSV = () => {
@@ -323,7 +456,7 @@ export default function Reports() {
                 'Membership Plan': t.planId?.name || t.planName || 'Membership Payment',
                 'Amount': t.amountPaid,
                 'Payment Mode': t.paymentMode || 'Cash',
-                'Collected By': t.collectedBy?.name || (typeof t.collectedBy === 'string' ? t.collectedBy : null) || t.collectedByName || (JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Harjeet'),
+                'Collected By': t.collectedBy?.name || (typeof t.collectedBy === 'string' ? t.collectedBy : null) || t.collectedByName || (JSON.parse(localStorage.getItem('user') || '{}')?.name || 'Staff'),
                 'Status': t.paymentStatus || 'Paid',
                 'Date': formatDate(t.paymentDate || t.createdAt)
             })), 'Daily_Collections_Report');
@@ -337,6 +470,10 @@ export default function Reports() {
                 const staffName = item.user?.name || item.name || 'Staff Member';
                 const role = item.user?.role || item.role || 'Staff';
                 const phone = item.user?.phone || item.user?.contactNumber || item.phone || item.contactNumber || 'N/A';
+                const rawJoiningDate = item.joiningDate || item.user?.joiningDate || item.createdAt || item.user?.createdAt;
+                const staffJoinDate = rawJoiningDate ? new Date(rawJoiningDate) : null;
+                if (staffJoinDate) staffJoinDate.setHours(0, 0, 0, 0);
+
                 const totalDays = `${item.totalPresentDays || 22} Days`;
 
                 const realLogs = item.attendanceLogs || item.attendanceHistory || item.history;
@@ -353,12 +490,18 @@ export default function Reports() {
                     'Staff Name': staffName,
                     'Role': role,
                     'Contact Number': phone,
+                    'Joining Date': formatDate(rawJoiningDate, 'N/A'),
                     'Total Present Days': totalDays
                 };
 
                 // Add each date as a Column Header
                 datesList.forEach((dateStr, idx) => {
-                    if (logsMap[dateStr]) {
+                    const dObj = new Date(dateStr);
+                    dObj.setHours(0, 0, 0, 0);
+
+                    if (staffJoinDate && dObj < staffJoinDate) {
+                        rowObj[dateStr] = 'Not Joined';
+                    } else if (logsMap[dateStr]) {
                         const log = logsMap[dateStr];
                         const status = log.status || (log.checkInTime ? 'Present' : 'Absent');
                         if (status === 'Absent') {
@@ -371,7 +514,6 @@ export default function Reports() {
                             rowObj[dateStr] = `${inTime} - ${outTime}`;
                         }
                     } else {
-                        const dObj = new Date(dateStr);
                         const isSunday = dObj.getDay() === 0;
                         const isAbsent = !isSunday && (idx % 5 === 4);
 
@@ -391,8 +533,84 @@ export default function Reports() {
             });
 
             exportCSV(csvRows, 'Staff_Datewise_Matrix_Attendance_Report');
+        } else if (activeTab === 'Trial Attendance') {
+            // Trial Attendance Horizontal Matrix CSV
+            const datesList = getDatesListBetween(filterStartDate, filterEndDate);
+            const csvRows = [];
+
+            filteredTrialAttendance.forEach(item => {
+                const trialId = item.enquiryId || `TRL-${(item._id || '').substring(0, 5).toUpperCase()}`;
+                const guestName = `${item.firstName || ''} ${item.lastName || ''}`.trim() || 'Trial Guest';
+                const phone = item.contactNumber || item.altContact || item.phone || 'N/A';
+                const email = item.email || 'N/A';
+                
+                const startDateStr = formatDate(item.trialDate, 'N/A');
+                const endDateStr = formatDate(item.trialEndDate || item.trialDate, 'N/A');
+                const trialStatus = item.status === 'Trial' ? 'Active Trial' : (item.status || 'Trial');
+                const totalDays = `${item.totalPresentDays !== undefined ? item.totalPresentDays : (item.attendance?.checkInTime ? 1 : 0)} Sessions`;
+
+                const realLogs = item.attendanceLogs || item.attendanceHistory || item.history;
+                const logsMap = {};
+                if (realLogs && Array.isArray(realLogs)) {
+                    realLogs.forEach(l => {
+                        const dKey = toInputDateFormat(l.date || l.checkInTime);
+                        logsMap[dKey] = l;
+                    });
+                }
+
+                const rowObj = {
+                    'Trial ID': trialId,
+                    'Guest Name': guestName,
+                    'Contact Number': phone,
+                    'Email': email,
+                    'Trial Start Date': startDateStr,
+                    'Trial End Date': endDateStr,
+                    'Trial Status': trialStatus,
+                    'Total Attended Sessions': totalDays
+                };
+
+                // Add each date as a Column Header
+                datesList.forEach((dateStr) => {
+                    if (logsMap[dateStr]) {
+                        const log = logsMap[dateStr];
+                        const status = log.status || (log.checkInTime ? 'Present' : 'Absent');
+                        if (status === 'Absent') {
+                            rowObj[dateStr] = 'Absent';
+                        } else if (status === 'Off') {
+                            rowObj[dateStr] = 'OFF';
+                        } else {
+                            const inTime = log.checkInTime ? new Date(log.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '07:30 AM';
+                            const outTime = log.checkOutTime ? new Date(log.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '08:45 AM';
+                            rowObj[dateStr] = `${inTime} - ${outTime}`;
+                        }
+                    } else {
+                        const dObj = new Date(dateStr);
+                        const isSunday = dObj.getDay() === 0;
+                        const trialStart = item.trialDate ? new Date(item.trialDate) : null;
+                        let trialEnd = item.trialEndDate ? new Date(item.trialEndDate) : (trialStart ? new Date(trialStart) : null);
+                        if (trialStart) trialStart.setHours(0,0,0,0);
+                        if (trialEnd) trialEnd.setHours(23,59,59,999);
+
+                        if (isSunday) {
+                            rowObj[dateStr] = 'OFF';
+                        } else if (trialStart && trialEnd && dObj >= trialStart && dObj <= trialEnd) {
+                            if (dObj <= today) {
+                                rowObj[dateStr] = item.attendance?.checkInTime ? 'Present' : 'Absent';
+                            } else {
+                                rowObj[dateStr] = 'Scheduled';
+                            }
+                        } else {
+                            rowObj[dateStr] = '-';
+                        }
+                    }
+                });
+
+                csvRows.push(rowObj);
+            });
+
+            exportCSV(csvRows, 'Trial_Datewise_Matrix_Attendance_Report');
         } else {
-            // Member Attendance Horizontal Matrix CSV with Dates as Columns: 2026-08-01, 2026-08-02, 2026-08-03...
+            // Member Attendance Horizontal Matrix CSV
             const datesList = getDatesListBetween(filterStartDate, filterEndDate);
             const csvRows = [];
 
@@ -400,7 +618,6 @@ export default function Reports() {
                 const memberId = item.memberId?.memberId || item.memberId || 'MEM-001';
                 const memberName = item.memberId?.firstName ? `${item.memberId.firstName} ${item.memberId.lastName || ''}`.trim() : item.memberName || item.name || 'Gym Member';
                 
-                // Full contact number lookup fallback chain
                 const phone = item.memberId?.contactNumber || item.memberId?.phone || item.memberId?.mobile || item.memberId?.contactNo || item.contactNumber || item.phone || item.mobile || item.contactNo || 'N/A';
                 const planName = item.membershipPlanId?.name || item.planName || 'Standard Plan';
                 
@@ -430,7 +647,7 @@ export default function Reports() {
                     'Total Present Days': totalDays
                 };
 
-                // Add each date as a Column Header (2026-08-01, 2026-08-02, 2026-08-03...)
+                // Add each date as a Column Header
                 datesList.forEach((dateStr, idx) => {
                     if (logsMap[dateStr]) {
                         const log = logsMap[dateStr];
@@ -466,7 +683,7 @@ export default function Reports() {
         }
     };
 
-    // Single-Line FilterBar Element placed after Charts above Data Table
+    // Single-Line FilterBar Element
     const filterBarElement = (
         <FilterBar 
             searchTerm={searchTerm}
@@ -536,7 +753,7 @@ export default function Reports() {
             {/* Always Visible Clear Filters Button */}
             <button 
                 onClick={clearAllFilters}
-                className="h-9 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition-colors whitespace-nowrap"
+                className="h-9 px-3 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition-colors whitespace-nowrap cursor-pointer"
             >
                 Clear
             </button>
@@ -703,6 +920,66 @@ export default function Reports() {
             ];
         }
 
+        if (activeTab === 'Trial Attendance') {
+            const todayObj = new Date();
+            todayObj.setHours(0, 0, 0, 0);
+
+            const activeValidTrials = filteredTrialAttendance.filter(t => {
+                const start = t.trialDate ? new Date(t.trialDate) : null;
+                const end = t.trialEndDate ? new Date(t.trialEndDate) : (start ? new Date(start) : null);
+                if (!start && !end) return t.status === 'Trial';
+                if (start) start.setHours(0,0,0,0);
+                if (end) end.setHours(23,59,59,999);
+                return start && end && todayObj >= start && todayObj <= end && t.status !== 'Converted';
+            });
+
+            const presentTodayTrials = filteredTrialAttendance.filter(t => t.attendance?.checkInTime || t.attendanceStatus === 'Present');
+            const onFloorTrials = filteredTrialAttendance.filter(t => t.attendance?.checkInTime && !t.attendance?.checkOutTime);
+
+            return [
+                {
+                    title: 'Total Trial Guests',
+                    value: `${filteredTrialAttendance.length} Trials`,
+                    percentage: 'All Time',
+                    percentageColor: 'text-purple-600',
+                    subtitle: 'Registered trial leads',
+                    icon: <FiUsers />,
+                    bgClass: 'bg-[#FFECEC]',
+                    iconColor: 'text-[#CA0410]'
+                },
+                {
+                    title: 'Active Trial Period',
+                    value: `${activeValidTrials.length} Active`,
+                    percentage: `${filteredTrialAttendance.length > 0 ? Math.round((activeValidTrials.length / filteredTrialAttendance.length) * 100) : 0}%`,
+                    percentageColor: 'text-emerald-600',
+                    subtitle: 'Valid trial passes',
+                    icon: <FiCheckCircle />,
+                    bgClass: 'bg-[#E8F5E9]',
+                    iconColor: 'text-[#2E7D32]'
+                },
+                {
+                    title: 'Present Today',
+                    value: `${presentTodayTrials.length} Trials`,
+                    percentage: 'Today',
+                    percentageColor: 'text-blue-600',
+                    subtitle: 'Logged check-ins',
+                    icon: <FiActivity />,
+                    bgClass: 'bg-[#E3F2FD]',
+                    iconColor: 'text-[#1976D2]'
+                },
+                {
+                    title: 'Currently On Floor',
+                    value: `${onFloorTrials.length} Active`,
+                    percentage: 'Live',
+                    percentageColor: 'text-purple-600',
+                    subtitle: 'Workout in progress',
+                    icon: <FiClock />,
+                    bgClass: 'bg-[#F3E8FF]',
+                    iconColor: 'text-[#7E22CE]'
+                }
+            ];
+        }
+
         if (activeTab === 'Member Attendance') {
             const presentTodayMembers = filteredMemberAttendance.filter(m => m.attendance?.checkInTime || m.attendanceStatus === 'Present');
             const currentlyInGym = filteredMemberAttendance.filter(m => m.attendance?.checkInTime && !m.attendance?.checkOutTime);
@@ -776,7 +1053,7 @@ export default function Reports() {
             </div>
 
             <Tabs 
-                tabs={['Daily Collections', 'Expiring Plans', 'Staff Attendance', 'Member Attendance']}
+                tabs={['Daily Collections', 'Expiring Plans', 'Staff Attendance', 'Member Attendance', 'Trial Attendance']}
                 activeTab={activeTab}
                 onTabChange={(tab) => {
                     setActiveTab(tab);
@@ -814,6 +1091,7 @@ export default function Reports() {
                         staffAttendance={filteredStaffAttendance}
                         filterStartDate={filterStartDate}
                         filterEndDate={filterEndDate}
+                        gymSettings={gymSettings}
                         loading={loading}
                     />
                 )}
@@ -822,6 +1100,16 @@ export default function Reports() {
                     <MemberAttendanceReport 
                         memberAttendance={filteredMemberAttendance}
                         activePlans={activePlans}
+                        filterStartDate={filterStartDate}
+                        filterEndDate={filterEndDate}
+                        gymSettings={gymSettings}
+                        loading={loading}
+                    />
+                )}
+
+                {activeTab === 'Trial Attendance' && (
+                    <TrialAttendanceReport 
+                        trialAttendance={filteredTrialAttendance}
                         filterStartDate={filterStartDate}
                         filterEndDate={filterEndDate}
                         gymSettings={gymSettings}

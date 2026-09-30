@@ -9,6 +9,7 @@ import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import SummaryCards from '../../components/page/SummaryCards';
 import Loader from '../../components/page/Loader';
+import ConfirmModal from '../../components/modal/ConfirmModal';
 import { FiCreditCard, FiEye, FiTrash2, FiPhone, FiDollarSign, FiTrendingUp, FiAlertCircle, FiCheckCircle, FiClock, FiRefreshCw, FiPlus, FiEdit2, FiUser } from 'react-icons/fi';
 import { formatDate, toInputDateFormat } from '../../utils/dateUtils';
 import DatePicker from '../../components/form/DatePicker';
@@ -19,6 +20,7 @@ export default function Finance() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('Payments'); // 'Payments', 'Pending Dues', 'Transactions'
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDestructive: false });
     
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -88,16 +90,22 @@ export default function Finance() {
     };
 
     const handleDeleteTransaction = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this transaction record? This action cannot be undone.")) {
-            return;
-        }
-        try {
-            await apiClient.delete(`/members/transactions/${id}`);
-            toast.success("Transaction deleted successfully");
-            fetchData();
-        } catch (error) {
-            toast.error("Failed to delete transaction");
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Transaction Record',
+            message: 'Are you sure you want to delete this transaction record? This action cannot be undone.',
+            isDestructive: true,
+            confirmText: 'Delete Record',
+            onConfirm: async () => {
+                try {
+                    await apiClient.delete(`/members/transactions/${id}`);
+                    toast.success("Transaction deleted successfully");
+                    fetchData();
+                } catch (error) {
+                    toast.error("Failed to delete transaction");
+                }
+            }
+        });
     };
 
     const openEditTxModal = (tx) => {
@@ -282,51 +290,51 @@ export default function Finance() {
 
         return (
             <tr key={t._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
-                <td className="py-2.5 pl-4 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
+                <td className="py-3.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
                         {member.profilePhoto ? (
-                            <img src={member.profilePhoto} alt={member.firstName} className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
+                            <img src={member.profilePhoto} alt={member.firstName} className="w-9 h-9 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-sm flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
                                 {(member.firstName || 'M').charAt(0).toUpperCase()}
                             </div>
                         )}
                         <div className="flex flex-col items-start min-w-0">
-                            <span className="font-bold text-slate-900 text-[13.5px] leading-tight truncate">
+                            <span className="font-bold text-slate-900 text-[14.5px] leading-tight truncate">
                                 {member.firstName} {member.lastName}
                             </span>
-                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                            <p className="text-[12.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 {member.contactNumber || '-'}
                             </p>
                         </div>
                     </div>
                 </td>
 
-                <td className="py-2.5 px-3 align-middle">
-                    <span className="font-mono font-bold text-slate-800 text-[12.5px]">
+                <td className="py-3.5 px-3 align-middle">
+                    <span className="font-mono font-bold text-slate-800 text-[13px]">
                         {receiptNo}
                     </span>
                 </td>
 
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col text-[11.5px] leading-tight">
-                        <span className="font-bold text-slate-900 text-[12.5px]">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col text-[12px] leading-tight">
+                        <span className="font-bold text-slate-900 text-[13px]">
                             {formatDate(t.paymentDate, 'N/A')}
                         </span>
-                        <span className="text-slate-500 text-[11px] font-normal mt-0.5">
+                        <span className="text-slate-500 text-[11.5px] font-normal mt-0.5">
                             {t.paymentDate ? new Date(t.paymentDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </span>
                     </div>
                 </td>
 
-                <td className="py-2.5 px-3 align-middle">
+                <td className="py-3.5 px-3 align-middle">
                     <div className="flex items-center gap-1 font-bold text-emerald-600 text-[14px]">
                         <span>₹</span>
                         <span>{Number(t.amountPaid || 0).toLocaleString()}</span>
                     </div>
                 </td>
 
-                <td className="py-2.5 px-2 text-center align-middle">
+                <td className="py-3.5 px-2 text-center align-middle">
                     <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
                         (t.paymentMode || '').toLowerCase() === 'cash' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                         (t.paymentMode || '').toLowerCase() === 'upi' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
@@ -336,7 +344,7 @@ export default function Finance() {
                     </span>
                 </td>
 
-                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                <td className="py-3.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
                         {member._id && (
                             <>
@@ -416,23 +424,23 @@ export default function Finance() {
 
         return (
             <tr key={m._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
-                <td className="py-2.5 pl-4 pr-2 align-middle">
-                    <div className="flex items-center gap-2.5">
+                <td className="py-3.5 pl-4 pr-2 align-middle">
+                    <div className="flex items-center gap-3">
                         {m.profilePhoto ? (
-                            <img src={m.profilePhoto} alt={m.firstName} className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
+                            <img src={m.profilePhoto} alt={m.firstName} className="w-9 h-9 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-sm flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
                                 {(displayName || 'M').charAt(0).toUpperCase()}
                             </div>
                         )}
                         <div className="flex flex-col items-start min-w-0">
                             <button 
                                 onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
-                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer max-w-[170px]"
+                                className="font-bold text-slate-900 text-[14.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer max-w-[170px]"
                             >
                                 {displayName}
                             </button>
-                            <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                            <div className="flex items-center gap-1.5 text-[12.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 <FiPhone className="text-slate-400 text-xs shrink-0" />
                                 <span>{m.contactNumber || 'N/A'}</span>
                             </div>
@@ -440,14 +448,14 @@ export default function Finance() {
                     </div>
                 </td>
 
-                <td className="py-2.5 px-2 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
-                        <span className="font-bold text-slate-900 text-[12.5px]">{m.activeMembership?.planName || m.membershipPlan?.name || 'General Plan'}</span>
-                        <span className="text-slate-500 font-normal text-[11.5px]">Fee: ₹{originalFee.toLocaleString()}</span>
+                <td className="py-3.5 px-2 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12.5px] leading-snug">
+                        <span className="font-bold text-slate-900 text-[13.5px]">{m.activeMembership?.planName || m.membershipPlan?.name || 'General Plan'}</span>
+                        <span className="text-slate-500 font-normal text-[12px]">Fee: ₹{originalFee.toLocaleString()}</span>
                     </div>
                 </td>
 
-                <td className="py-2.5 px-2 text-center align-middle">
+                <td className="py-3.5 px-2 text-center align-middle">
                     {discountAmount > 0 ? (
                         <span className="inline-flex items-center text-[12px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
                             ₹{discountAmount.toLocaleString()}
@@ -457,22 +465,22 @@ export default function Finance() {
                     )}
                 </td>
 
-                <td className="py-2.5 px-2 align-middle">
+                <td className="py-3.5 px-2 align-middle">
                     <div className="flex items-center gap-1 font-bold text-emerald-600 text-[14px]">
                         <span>₹</span>
                         <span>{paidAmount.toLocaleString()}</span>
                     </div>
                 </td>
 
-                <td className="py-2.5 px-2 align-middle">
-                    <div className={`flex items-center gap-1 font-bold text-[13.5px] ${dueAmount > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                <td className="py-3.5 px-2 align-middle">
+                    <div className={`flex items-center gap-1 font-bold text-[14px] ${dueAmount > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
                         <span>₹</span>
                         <span>{dueAmount.toLocaleString()}</span>
                     </div>
                 </td>
 
-                <td className="py-2.5 px-1 text-center align-middle">
-                    <span className={`inline-flex items-center justify-center text-[12px] font-bold rounded-lg px-2.5 py-1 border leading-none shadow-2xs ${
+                <td className="py-3.5 px-1 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3 py-1.5 border leading-none shadow-2xs ${
                         isPaid ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
                         isPartial ? 'bg-amber-50 text-amber-700 border-amber-200' :
                         'bg-rose-50 text-rose-700 border-rose-200'
@@ -481,7 +489,7 @@ export default function Finance() {
                     </span>
                 </td>
 
-                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                <td className="py-3.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
                         <button 
                             onClick={() => openPaymentModal(m)} 
@@ -782,6 +790,16 @@ export default function Finance() {
                     </div>
                 </div>
             )}
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText}
+                isDestructive={confirmModal.isDestructive}
+            />
         </PageLayout>
     );
 }

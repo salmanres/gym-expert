@@ -405,7 +405,7 @@ export default function LeadForm() {
                             <Input label="First Name" name="firstName" value={formData.firstName || ''} onChange={handleChange} required placeholder="First Name" error={errors.firstName} />
                             <Input label="Last Name" name="lastName" value={formData.lastName || ''} onChange={handleChange} placeholder="Last Name" error={errors.lastName} />
                             <Select label="Gender" name="gender" value={formData.gender || ''} onChange={handleChange} options={['Male', 'Female', 'Other']} error={errors.gender} />
-                            <Input type="date" label="Date of Birth" name="dob" value={formData.dob || ''} onChange={handleChange} error={errors.dob} />
+                            <Input type="dob" label="Date of Birth" name="dob" value={formData.dob || ''} onChange={handleChange} error={errors.dob} />
                             <Input type="tel" label="Phone Number" name="contactNumber" value={formData.contactNumber || ''} onChange={handleChange} required placeholder="10-digit mobile" pattern="[6-9][0-9]{9}" maxLength={10} title="Please enter a valid 10-digit Indian mobile number starting with 6-9" error={errors.contactNumber} />
                             <Input type="tel" label="Alt. Phone" name="altContact" value={formData.altContact || ''} onChange={handleChange} placeholder="Secondary Phone" pattern="[6-9][0-9]{9}" maxLength={10} title="Please enter a valid 10-digit Indian mobile number starting with 6-9" error={errors.altContact} />
                             <Input type="email" label="Email Address" name="email" value={formData.email || ''} onChange={handleChange} placeholder="email@example.com" error={errors.email} />
@@ -643,25 +643,19 @@ export default function LeadForm() {
                                 <Checkbox label="Send WhatsApp" name="sendWhatsApp" checked={formData.sendWhatsApp} onChange={handleChange} />
                             </div>
                             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                                <button 
-                                    type="button" 
+                                <Button 
                                     onClick={() => navigate('/dashboard/owner/leads')} 
-                                    className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer active:scale-95"
+                                    variant="secondary"
                                 >
                                     Cancel
-                                </button>
-                                <button 
+                                </Button>
+                                <Button 
                                     type="submit" 
                                     disabled={submitting}
-                                    className="w-full sm:w-auto px-8 py-2.5 bg-[#CA0410] hover:bg-[#a8030d] text-white font-bold text-xs rounded-xl transition-all shadow-2xs hover:shadow-md active:scale-95 cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                                    loading={submitting}
                                 >
-                                    {submitting ? (
-                                        <>
-                                            <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0"></div>
-                                            <span>Saving Enquiry...</span>
-                                        </>
-                                    ) : (formData.status === 'Converted' ? 'Save & Convert to Member' : (isEdit ? 'Update Enquiry' : 'Save Enquiry'))}
-                                </button>
+                                    {formData.status === 'Converted' ? 'Save & Convert to Member' : (isEdit ? 'Update Enquiry' : 'Save Enquiry')}
+                                </Button>
                             </div>
                         </div>
                     </form>

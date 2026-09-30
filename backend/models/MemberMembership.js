@@ -20,6 +20,11 @@ const memberMembershipSchema = new mongoose.Schema(
       required: true,
     },
 
+    parentMembershipId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MemberMembership",
+    },
+
     // Plan Details (Snapshot)
     planName: {
       type: String,

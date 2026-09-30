@@ -64,7 +64,7 @@ function LoginPage() {
                 <div 
                     className="w-full md:w-1/2 min-h-[260px] md:min-h-[500px] relative flex flex-col items-center justify-center p-6 sm:p-10 text-center border-b md:border-b-0 md:border-r border-white/10"
                     style={{
-                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.65), rgba(12, 12, 16, 0.88)), url(${process.env.PUBLIC_URL}/gym-bg-cinematic.jpg)`,
+                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.68), rgba(12, 12, 16, 0.88))`,
                         backgroundSize: 'cover',
                         backgroundPosition: 'center'
                     }}
@@ -148,18 +148,9 @@ function LoginPage() {
 
                             {/* Password */}
                             <div>
-                                <div className="flex items-center justify-between mb-1">
-                                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider" htmlFor="password">
-                                        PASSWORD
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={() => toast.info('Please contact your administrator to reset password.')}
-                                        className="text-[11px] text-gray-400 hover:text-[#ff4d4d] transition-colors cursor-pointer font-medium"
-                                    >
-                                        Forgot password?
-                                    </button>
-                                </div>
+                                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1" htmlFor="password">
+                                    PASSWORD
+                                </label>
                                 <div className="flex items-center bg-[#141418] border border-neutral-800 focus-within:border-[#e52525] focus-within:ring-1 focus-within:ring-[#e52525]/30 rounded-xl px-4 py-3 transition-all shadow-inner group">
                                     <FiLock className="text-[#e52525] text-base mr-3 flex-shrink-0 group-focus-within:text-[#ff4d4d] transition-colors" />
                                     <input

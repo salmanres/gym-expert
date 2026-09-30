@@ -240,16 +240,16 @@ export default function Members() {
         return (
             <tr key={member._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
                 {/* MEMBER */}
-                <td className="py-2.5 pl-4 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
+                <td className="py-3.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
                         {member.profilePhoto ? (
                             <img
                                 src={member.profilePhoto}
                                 alt={member.firstName}
-                                className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0"
+                                className="w-9 h-9 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0"
                             />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-sm flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
                                 {getInitial(member)}
                             </div>
                         )}
@@ -257,16 +257,16 @@ export default function Members() {
                         <div className="flex flex-col items-start min-w-0">
                             <button
                                 onClick={() => navigate(`/dashboard/owner/members/view/${member._id}`, { state: { member } })}
-                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                                className="font-bold text-slate-900 text-[14.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
                             >
                                 {member.firstName} {member.lastName}
                             </button>
-                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                            <p className="text-[12.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 ID: <span className="font-bold text-slate-700">{member.memberId}</span> • {member.gender || 'Member'} • Joined: {formatDate(member.joiningDate, 'N/A')}
                             </p>
 
                             {/* Multi-Plan Active Badges */}
-                            <div className="flex flex-wrap items-center gap-1 mt-1 whitespace-nowrap">
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1 whitespace-nowrap">
                                 {member.allActiveMemberships && member.allActiveMemberships.length > 0 ? (
                                     member.allActiveMemberships.map((m, i) => {
                                         const pNameRaw = String(m.membershipPlanId?.name || m.planName || '').toLowerCase();
@@ -278,7 +278,7 @@ export default function Members() {
                                         const sessInfo = isPT && m.totalSessions > 0 ? `[${m.usedSessions || 0}/${m.totalSessions}]` : '';
 
                                         return (
-                                            <span key={m._id || i} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border shrink-0 ${m.membershipStatus === 'Frozen'
+                                            <span key={m._id || i} className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border shrink-0 ${m.membershipStatus === 'Frozen'
                                                     ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
                                                     : isPT
                                                         ? 'bg-amber-50 text-amber-800 border-amber-300'
@@ -290,15 +290,15 @@ export default function Members() {
                                     })
                                 ) : (
                                     member.membershipPlan && member.paymentStatus !== 'Pending' && Number(member.amountPaid) > 0 && (
-                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border border-slate-200 text-slate-700 bg-slate-50 shrink-0">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border border-slate-200 text-slate-700 bg-slate-50 shrink-0">
                                             {member.membershipPlan.name}
                                         </span>
                                     )
                                 )}
 
-                                {Number(member.walletBalance) >= 1 && (
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider border border-indigo-200 text-indigo-700 bg-indigo-50 shrink-0">
-                                        Wallet: ₹{Number(member.walletBalance).toFixed(0)}
+                                {Number(member.walletBalance) > 0 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border border-indigo-200 text-indigo-700 bg-indigo-50 shrink-0">
+                                        Wallet: ₹{Number(member.walletBalance).toFixed(2)}
                                     </span>
                                 )}
                             </div>
@@ -307,14 +307,14 @@ export default function Members() {
                 </td>
 
                 {/* CONTACT INFO */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
-                        <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12.5px] leading-snug">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[14px] tracking-tight">
                             <FiPhone className="text-slate-400 text-xs shrink-0" />
                             <span>{member.contactNumber || '-'}</span>
                         </div>
                         {member.email && (
-                            <div className="flex items-center gap-1.5 text-slate-500 font-normal text-[11.5px]">
+                            <div className="flex items-center gap-1.5 text-slate-500 font-normal text-[12px]">
                                 <FiMail className="text-slate-400 text-[11px] shrink-0" />
                                 <span className="truncate max-w-[160px]" title={member.email}>{member.email}</span>
                             </div>
@@ -323,8 +323,8 @@ export default function Members() {
                 </td>
 
                 {/* MEMBERSHIP / PLAN DETAILS */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[13px] leading-snug">
                         {member.membershipPlan ? (
                             <>
                                 <div>
@@ -351,14 +351,14 @@ export default function Members() {
                 </td>
 
                 {/* STATUS */}
-                <td className="py-2.5 px-2 text-center align-middle">
+                <td className="py-3.5 px-2 text-center align-middle">
                     <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${getStatusStyle(member.status)}`}>
                         {member.status || 'Inactive'}
                     </span>
                 </td>
 
                 {/* ACTIONS */}
-                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                <td className="py-3.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
                         {/* View Profile */}
                         <button

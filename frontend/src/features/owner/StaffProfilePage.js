@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { 
     FiUser, FiPhone, FiMail, FiCalendar, FiAward, FiBriefcase, 
     FiEdit2, FiUsers, FiMapPin, FiClock, FiTag, FiDollarSign, 
-    FiCheckCircle, FiShield, FiTrendingUp, FiUserCheck, FiUserX
+    FiCheckCircle, FiShield, FiTrendingUp, FiUserCheck, FiUserX, FiTrash2
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/page/PageLayout';
@@ -77,6 +77,7 @@ export default function StaffProfilePage() {
                 ? `Are you sure you want to activate ${staff?.name || 'this staff member'}? Their system access and login will be restored.`
                 : `Are you sure you want to suspend ${staff?.name || 'this staff member'}? They will be blocked from logging into the gym portal.`,
             isDestructive: !isCurrentlySuspended,
+            confirmText: isCurrentlySuspended ? 'Activate Staff' : 'Suspend Staff',
             onConfirm: async () => {
                 try {
                     await apiClient.put(`/staff/${staffIdVal}`, { status: targetStatus });
@@ -84,6 +85,30 @@ export default function StaffProfilePage() {
                     setFetchedStaff(prev => ({ ...(prev || staff), status: targetStatus }));
                 } catch (error) {
                     toast.error(error.response?.data?.message || `Failed to update staff status`);
+                }
+            }
+        });
+    };
+
+    const handleDeleteStaff = () => {
+        if (!isOwner) {
+            toast.error("Only Gym Owner can delete staff members.");
+            return;
+        }
+
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Staff Member',
+            message: `Are you sure you want to delete ${staff?.name || 'this staff member'}? This action cannot be undone and will permanently remove their system access.`,
+            isDestructive: true,
+            confirmText: 'Delete Staff',
+            onConfirm: async () => {
+                try {
+                    await apiClient.delete(`/staff/${staffIdVal}`);
+                    toast.success("Staff member deleted successfully");
+                    navigate('/dashboard/owner/staff');
+                } catch (error) {
+                    toast.error(error.response?.data?.message || "Failed to delete staff member");
                 }
             }
         });
@@ -186,24 +211,33 @@ export default function StaffProfilePage() {
                         {/* Quick Action Buttons */}
                         <div className="flex items-center gap-2.5 shrink-0 flex-wrap self-start sm:self-center">
                             {isOwner && (
-                                <button 
-                                    onClick={handleToggleStatus}
-                                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer border ${
-                                        status === 'Suspended'
-                                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500'
-                                            : 'bg-white/15 hover:bg-white/25 text-white border-white/30 backdrop-blur-xs'
-                                    }`}
-                                >
-                                    {status === 'Suspended' ? (
-                                        <>
-                                            <FiUserCheck size={14} className="text-emerald-200" /> Activate Staff
-                                        </>
-                                    ) : (
-                                        <>
-                                            <FiUserX size={14} className="text-rose-200" /> Suspend Staff
-                                        </>
-                                    )}
-                                </button>
+                                <>
+                                    <button 
+                                        onClick={handleToggleStatus}
+                                        className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer border ${
+                                            status === 'Suspended'
+                                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500'
+                                                : 'bg-white/15 hover:bg-white/25 text-white border-white/30 backdrop-blur-xs'
+                                        }`}
+                                    >
+                                        {status === 'Suspended' ? (
+                                            <>
+                                                <FiUserCheck size={14} className="text-emerald-200" /> Activate Staff
+                                            </>
+                                        ) : (
+                                            <>
+                                                <FiUserX size={14} className="text-rose-200" /> Suspend Staff
+                                            </>
+                                        )}
+                                    </button>
+                                    <button 
+                                        onClick={handleDeleteStaff}
+                                        className="px-3.5 py-2 bg-rose-700/80 hover:bg-rose-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer border border-rose-500/50"
+                                        title="Delete Staff Member"
+                                    >
+                                        <FiTrash2 size={13} className="text-rose-100" /> Delete
+                                    </button>
+                                </>
                             )}
                             <button 
                                 onClick={() => navigate(`/dashboard/owner/staff/edit/${staff._id || staffIdVal}`, { state: { staff } })}
@@ -256,7 +290,7 @@ export default function StaffProfilePage() {
                                 <div className="flex items-center gap-1.5 mt-1 min-w-0">
                                     <FiTag className="text-amber-600 text-sm shrink-0" />
                                     <p className="text-[13.5px] sm:text-[14px] font-black text-emerald-600">
-                                        ₹{walletBalance}
+                                        ₹{Number(walletBalance || 0).toFixed(2)}
                                     </p>
                                 </div>
                             </div>
@@ -570,7 +604,7 @@ export default function StaffProfilePage() {
                 title={confirmModal.title}
                 message={confirmModal.message}
                 isDestructive={confirmModal.isDestructive}
-                confirmText={confirmModal.isDestructive ? 'Yes, Suspend' : 'Yes, Activate'}
+                confirmText={confirmModal.confirmText || (confirmModal.isDestructive ? 'Confirm' : 'Yes, Proceed')}
                 cancelText="Cancel"
             />
         </PageLayout>

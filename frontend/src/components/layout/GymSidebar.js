@@ -16,7 +16,7 @@ function GymSidebar({ user, location, sidebarOpen, setSidebarOpen, handleLogout 
             {/* Gym Header Banner / Logo (Exact same height as Navbar: h-16, flush at the top) */}
             <div className="h-16 bg-white border-b-2 border-[#CA0410] px-2 py-1 flex items-center justify-center relative shrink-0 overflow-hidden">
                 <img 
-                    src="/gym.jpg" 
+                    src="/gymH.jpg" 
                     alt="Gym Chalak" 
                     className="h-full w-full object-contain select-none scale-105" 
                     onError={(e) => { 

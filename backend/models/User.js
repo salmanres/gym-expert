@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
+const Counter = require('./Counter');
 
 const userSchema = new mongoose.Schema({
     name: {
@@ -38,6 +39,7 @@ const userSchema = new mongoose.Schema({
         default: null
     },
     // Additional Staff Fields
+    employeeId: { type: String },
     gender: { type: String, enum: ['Male', 'Female', 'Other'] },
     dob: { type: Date },
     address: { type: String },
@@ -53,6 +55,23 @@ const userSchema = new mongoose.Schema({
     profilePhoto: { type: String },
     walletBalance: { type: Number, default: 0 }
 }, { timestamps: true });
+
+// Pre-validate hook to auto-generate employeeId atomically
+userSchema.pre('validate', async function(next) {
+    if (!this.employeeId && this.gymId && ['STAFF', 'TRAINER', 'ADMIN', 'BRANCH_MANAGER'].includes(this.role)) {
+        try {
+            const counter = await Counter.findOneAndUpdate(
+                { gymId: this.gymId, identifier: 'employeeId' },
+                { $inc: { seq: 1 } },
+                { new: true, upsert: true }
+            );
+            this.employeeId = `EMP${String(counter.seq).padStart(4, '0')}`;
+        } catch (err) {
+            return next(err);
+        }
+    }
+    next();
+});
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {

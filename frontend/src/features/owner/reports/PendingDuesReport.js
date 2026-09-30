@@ -97,16 +97,16 @@ export default function PendingDuesReport({
         return (
             <tr key={p._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
                 {/* MEMBER */}
-                <td className="py-2.5 pl-4 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                <td className="py-3.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-sm flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
                             {(memberName || 'M').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex flex-col min-w-0">
-                            <span className="font-bold text-slate-900 text-[13.5px] leading-tight truncate">
+                            <span className="font-bold text-slate-900 text-[14.5px] leading-tight truncate">
                                 {memberName}
                             </span>
-                            <span className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                            <span className="text-[12.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 ID: <span className="font-bold text-slate-700">{memberCustomId}</span>
                             </span>
                         </div>
@@ -114,30 +114,30 @@ export default function PendingDuesReport({
                 </td>
 
                 {/* CONTACT */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[14px] tracking-tight">
                         <FiPhone className="text-slate-400 text-xs shrink-0" />
                         <span>{phone}</span>
                     </div>
                 </td>
 
                 {/* MEMBERSHIP PLAN */}
-                <td className="py-2.5 px-3 align-middle">
-                    <span className="font-bold text-slate-900 text-[12.5px]">
+                <td className="py-3.5 px-3 align-middle">
+                    <span className="font-bold text-slate-900 text-[13.5px]">
                         {planName}
                     </span>
                 </td>
 
                 {/* TOTAL / PAID */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-tight">
-                        <span className="text-slate-500 font-normal text-[11px]">Total: ₹{Number(totalAmt).toLocaleString()}</span>
-                        <span className="text-emerald-600 font-bold text-[12.5px]">Paid: ₹{Number(paidAmt).toLocaleString()}</span>
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12px] leading-tight">
+                        <span className="text-slate-500 font-normal text-[11.5px]">Total: ₹{Number(totalAmt).toLocaleString()}</span>
+                        <span className="text-emerald-600 font-bold text-[13px]">Paid: ₹{Number(paidAmt).toLocaleString()}</span>
                     </div>
                 </td>
 
                 {/* PENDING DUES */}
-                <td className="py-2.5 px-3 align-middle">
+                <td className="py-3.5 px-3 align-middle">
                     <div className="flex items-center gap-1 font-bold text-[#CA0410] text-[14px]">
                         <span>₹</span>
                         <span>{Number(pendingAmt).toLocaleString()}</span>
@@ -145,7 +145,7 @@ export default function PendingDuesReport({
                 </td>
 
                 {/* STATUS */}
-                <td className="py-2.5 px-2 text-center align-middle">
+                <td className="py-3.5 px-2 text-center align-middle">
                     <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
                         status === 'Partial' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                         'bg-rose-50 text-rose-700 border-rose-200'
@@ -155,7 +155,7 @@ export default function PendingDuesReport({
                 </td>
 
                 {/* ACTIONS */}
-                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                <td className="py-3.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center">
                         <Link 
                             to="/dashboard/owner/finance/collect" 

@@ -37,5 +37,16 @@ const gymOwnerOnly = (req, res, next) => {
         res.status(403).json({ message: 'Not authorized as Gym Owner' });
     }
 };
-
-module.exports = { protect, superAdminOnly, gymOwnerOnly };
+const gymOwnerOrAdmin = (req, res, next) => {
+    if (
+        req.user &&
+        ['GYM_OWNER', 'ADMIN', 'SUPERADMIN'].includes(req.user.role)
+    ) {
+        next();
+    } else {
+        res.status(403).json({
+            message: 'Not authorized for this action'
+        });
+    }
+};
+module.exports = { protect, superAdminOnly, gymOwnerOnly,gymOwnerOrAdmin };

@@ -9,6 +9,7 @@ import apiClient from '../../api/apiClient';
 import { toast } from 'react-toastify';
 import { formatDate } from '../../utils/dateUtils';
 import Tabs from '../../components/page/Tabs';
+import ConfirmModal from '../../components/modal/ConfirmModal';
 import GeneralTab from './settings/GeneralTab';
 import ReferralTab from './settings/ReferralTab';
 import ScheduleTab from './settings/ScheduleTab';
@@ -19,6 +20,7 @@ export default function GymSettings() {
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('General'); // 'General' | 'Referral' | 'Schedule'
     const [referralHistory, setReferralHistory] = useState([]);
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDestructive: false, confirmText: 'Confirm' });
     
     const [settings, setSettings] = useState({
         name: '',
@@ -171,10 +173,21 @@ export default function GymSettings() {
     };
 
     const removeHoliday = (index) => {
-        setSettings(prev => ({
-            ...prev,
-            holidays: prev.holidays.filter((_, i) => i !== index)
-        }));
+        const holiday = settings.holidays[index];
+        setConfirmModal({
+            isOpen: true,
+            title: 'Remove Holiday',
+            message: `Are you sure you want to remove the holiday ${holiday?.reason ? `"${holiday.reason}"` : ''}?`,
+            isDestructive: true,
+            confirmText: 'Remove Holiday',
+            onConfirm: () => {
+                setSettings(prev => ({
+                    ...prev,
+                    holidays: prev.holidays.filter((_, i) => i !== index)
+                }));
+                toast.info("Holiday removed. Click 'Save Settings' to apply.");
+            }
+        });
     };
 
     const handleGetCurrentLocation = () => {
@@ -241,9 +254,18 @@ export default function GymSettings() {
 
     // Delete Coupon
     const handleDeleteCoupon = (code) => {
-        const updated = settings.couponOffers.filter(c => c.code !== code);
-        setSettings(prev => ({ ...prev, couponOffers: updated }));
-        toast.info(`Coupon "${code}" removed.`);
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Coupon Offer',
+            message: `Are you sure you want to delete coupon "${code}"?`,
+            isDestructive: true,
+            confirmText: 'Delete Coupon',
+            onConfirm: () => {
+                const updated = settings.couponOffers.filter(c => c.code !== code);
+                setSettings(prev => ({ ...prev, couponOffers: updated }));
+                toast.info(`Coupon "${code}" removed. Click 'Save Settings' to apply.`);
+            }
+        });
     };
 
     const handleSubmit = async (e) => {
@@ -340,6 +362,17 @@ export default function GymSettings() {
                         newCoupon={newCoupon}
                         setNewCoupon={setNewCoupon}
                         handleAddCoupon={handleAddCoupon}
+                    />
+
+                    {/* CONFIRM MODAL */}
+                    <ConfirmModal
+                        isOpen={confirmModal.isOpen}
+                        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                        onConfirm={confirmModal.onConfirm}
+                        title={confirmModal.title}
+                        message={confirmModal.message}
+                        isDestructive={confirmModal.isDestructive}
+                        confirmText={confirmModal.confirmText}
                     />
                 </div>
             </div>

@@ -59,18 +59,18 @@ function GymsList() {
         const avatarStyle = getAvatarStyle(gym.name, index);
 
         return (
-            <tr key={gym._id} className="bg-white hover:bg-slate-50/70 transition-colors duration-150 group">
+            <tr key={gym._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
                 {/* GYM NAME */}
-                <td className="py-2.5 pl-6 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
-                        <div className={`w-9 h-9 rounded-full ${avatarStyle.bg} ${avatarStyle.text} font-bold text-sm flex items-center justify-center shrink-0`}>
+                <td className="py-3.5 pl-6 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full ${avatarStyle.bg} ${avatarStyle.text} font-bold text-sm flex items-center justify-center shrink-0 border border-slate-200/80 shadow-2xs`}>
                             {(gym.name || 'G').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex flex-col items-start min-w-0">
-                            <span className="font-bold text-[#111827] text-[13px] leading-tight truncate">
+                            <span className="font-bold text-slate-900 text-[14.5px] leading-tight truncate">
                                 {gym.name}
                             </span>
-                            <span className="text-[11px] text-slate-500 font-mono mt-0.5">
+                            <span className="text-[12.5px] text-slate-500 font-mono mt-0.5">
                                 ID: {gym._id.slice(-6).toUpperCase()}
                             </span>
                         </div>
@@ -78,28 +78,28 @@ function GymsList() {
                 </td>
 
                 {/* OWNER */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[12px] leading-tight">
-                        <span className="font-bold text-[#111827] text-[13px]">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12.5px] leading-tight">
+                        <span className="font-bold text-slate-900 text-[13.5px]">
                             {gym.ownerId?.name || 'N/A'}
                         </span>
-                        <span className="text-slate-500 text-[11px]">
+                        <span className="text-slate-500 text-[12px]">
                             {gym.ownerId?.email || ''}
                         </span>
                     </div>
                 </td>
 
                 {/* CONTACT */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[12px] leading-tight">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12.5px] leading-tight">
                         {gym.contactPhone && (
-                            <div className="flex items-center gap-1.5 font-bold text-[#111827]">
+                            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[14px]">
                                 <FiPhone className="text-emerald-600 text-xs shrink-0" />
                                 <span>{gym.contactPhone}</span>
                             </div>
                         )}
                         {gym.contactEmail && (
-                            <div className="flex items-center gap-1.5 text-slate-500 font-medium text-[11px]">
+                            <div className="flex items-center gap-1.5 text-slate-500 font-medium text-[12px]">
                                 <FiMail className="text-slate-400 text-xs shrink-0" />
                                 <span>{gym.contactEmail}</span>
                             </div>
@@ -108,16 +108,16 @@ function GymsList() {
                 </td>
 
                 {/* ADDRESS */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex items-start gap-1.5 text-[11px] text-slate-600 font-medium max-w-[280px]">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex items-start gap-1.5 text-[12.5px] text-slate-600 font-medium max-w-[280px]">
                         <FiMapPin className="text-slate-400 mt-0.5 shrink-0 text-xs" />
                         <span className="line-clamp-2">{gym.address || 'Address not specified'}</span>
                     </div>
                 </td>
 
                 {/* STATUS */}
-                <td className="py-2.5 pl-1 pr-6 text-left align-middle">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2.5 py-0.5 border leading-none shadow-2xs ${
+                <td className="py-3.5 pl-1 pr-6 text-left align-middle">
+                    <span className={`inline-flex items-center gap-1 text-[12px] font-bold rounded-lg px-3 py-1 border leading-none shadow-2xs ${
                         gym.isActive 
                             ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
                             : 'bg-slate-100 text-slate-600 border-slate-200'

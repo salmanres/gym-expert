@@ -14,22 +14,24 @@ const {
     toggleFreezeMembership
 } = require("../controllers/memberMembershipController");
 
-const { protect } = require("../middleware/authMiddleware");
+const { protect, gymOwnerOrAdmin } = require("../middleware/authMiddleware");
 
-router.post("/", protect, assignMembership);
-router.put("/:id", protect, updateAssignedMembership);
-router.delete("/:id", protect, deleteAssignedMembership);
-router.post("/:id/payment", protect, addPayment);
-router.post("/:id/bonus", protect, addBonusDays);
-router.post("/:id/use-session", protect, markPTSessionUsed);
-router.post("/:id/freeze", protect, toggleFreezeMembership);
+router.use(protect);
+router.use(gymOwnerOrAdmin);
 
-router.get("/active", protect, getActiveMemberships);
-router.get("/latest", protect, getLatestMemberships);
+router.post("/", assignMembership);
+router.put("/:id", updateAssignedMembership);
+router.delete("/:id", deleteAssignedMembership);
+router.post("/:id/payment", addPayment);
+router.post("/:id/bonus", addBonusDays);
+router.post("/:id/use-session", markPTSessionUsed);
+router.post("/:id/freeze", toggleFreezeMembership);
+
+router.get("/active", getActiveMemberships);
+router.get("/latest", getLatestMemberships);
 
 router.get(
     "/member/:memberId",
-    protect,
     getMemberMembershipHistory
 );
 

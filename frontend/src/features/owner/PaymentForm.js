@@ -520,7 +520,7 @@ export default function PaymentForm() {
                                                     </div>
                                                     <div>
                                                         <span className="text-sm font-extrabold text-slate-800 block">Use Wallet</span>
-                                                        <span className="text-xs font-bold text-slate-500">Available: ₹{members.find(m => m._id === formData.memberId)?.walletBalance || 0}</span>
+                                                        <span className="text-xs font-bold text-slate-500">Available: ₹{Number(members.find(m => m._id === formData.memberId)?.walletBalance || 0).toFixed(2)}</span>
                                                     </div>
                                                 </label>
                                             </div>

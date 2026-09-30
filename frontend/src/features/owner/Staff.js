@@ -164,27 +164,27 @@ export default function Staff() {
         return (
             <tr key={staff._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
                 {/* STAFF NAME & ID */}
-                <td className="py-2.5 pl-4 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
+                <td className="py-3.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
                         {staff.profilePhoto ? (
                             <img 
                                 src={staff.profilePhoto} 
                                 alt={staff.name} 
-                                className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" 
+                                className="w-9 h-9 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" 
                             />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-sm flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
                                 {(staff.name || 'S').charAt(0).toUpperCase()}
                             </div>
                         )}
                         <div className="flex flex-col items-start min-w-0">
                             <button 
                                 onClick={() => navigate(`/dashboard/owner/staff/view/${staff._id}`, { state: { staff } })}
-                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                                className="font-bold text-slate-900 text-[14.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
                             >
                                 {staff.name}
                             </button>
-                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                            <p className="text-[12.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 ID: <span className="font-bold text-slate-700">{staff.staffId || staff.employeeId || `STF-${staff._id.slice(-4).toUpperCase()}`}</span> • {staff.gender || 'Staff'}
                             </p>
                         </div>
@@ -192,16 +192,16 @@ export default function Staff() {
                 </td>
 
                 {/* CONTACT INFO */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12.5px] leading-snug">
                         {staff.phone && (
-                            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
+                            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[14px] tracking-tight">
                                 <FiPhone className="text-slate-400 text-xs shrink-0" />
                                 <span>{staff.phone}</span>
                             </div>
                         )}
                         {staff.email && (
-                            <div className="flex items-center gap-1.5 text-slate-500 font-normal text-[11.5px]">
+                            <div className="flex items-center gap-1.5 text-slate-500 font-normal text-[12px]">
                                 <FiMail className="text-slate-400 text-[11px] shrink-0" />
                                 <span className="truncate max-w-[150px]" title={staff.email}>{staff.email}</span>
                             </div>
@@ -210,14 +210,14 @@ export default function Staff() {
                 </td>
 
                 {/* ROLE & SHIFT */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border w-max ${getRoleBadgeStyle(staff.role)}`}>
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12.5px] leading-snug">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border w-max ${getRoleBadgeStyle(staff.role)}`}>
                             {getRoleLabel(staff.role)}
                         </span>
                         {staff.shiftStart && staff.shiftEnd ? (
-                            <div className="flex items-center gap-1 text-slate-500 font-normal text-[11.5px]">
-                                <FiClock className="text-slate-400 text-[10px] shrink-0" />
+                            <div className="flex items-center gap-1 text-slate-600 font-medium text-[12px]">
+                                <FiClock className="text-slate-400 text-[11px] shrink-0" />
                                 <span>{staff.shiftStart} - {staff.shiftEnd}</span>
                             </div>
                         ) : null}
@@ -225,15 +225,15 @@ export default function Staff() {
                 </td>
 
                 {/* WALLET (REWARDS) */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex items-center gap-1 font-bold text-slate-900 text-[13.5px]">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex items-center gap-1 font-bold text-slate-900 text-[14px]">
                         <span className="text-emerald-600 font-bold">₹</span>
                         <span>{Number(staff.walletBalance || 0).toLocaleString()}</span>
                     </div>
                 </td>
 
                 {/* STATUS */}
-                <td className="py-2.5 px-2 text-center align-middle">
+                <td className="py-3.5 px-2 text-center align-middle">
                     <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${
                         staff.status === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
                         staff.status === 'Suspended' ? 'bg-rose-50 text-[#CA0410] border-rose-200' :
@@ -244,7 +244,7 @@ export default function Staff() {
                 </td>
 
                 {/* ACTIONS */}
-                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                <td className="py-3.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
                         {/* View Profile */}
                         <button 

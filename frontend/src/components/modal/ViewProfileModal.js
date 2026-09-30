@@ -114,14 +114,14 @@ export default function ViewProfileModal({ isOpen, onClose, data, type = 'member
                             {renderField('Blood Group', data.bloodGroup, FiActivity)}
                             {renderField('Address', data.address, FiMapPin)}
                             {renderField('Emergency Contact', data.emergencyContactName ? `${data.emergencyContactName} (${data.emergencyContactNumber || ''})` : '', FiPhone)}
-                            {renderField('Wallet Balance', `₹${data.walletBalance || 0}`, FiAward)}
+                            {renderField('Wallet Balance', `₹${Number(data.walletBalance || 0).toFixed(2)}`, FiAward)}
                         </>
                     )}
 
                     {type === 'staff' && (
                         <>
                             {renderField('Role', data.role, FiBriefcase)}
-                            {renderField('Wallet Balance', `₹${data.walletBalance || 0}`, FiAward)}
+                            {renderField('Wallet Balance', `₹${Number(data.walletBalance || 0).toFixed(2)}`, FiAward)}
                         </>
                     )}
                 </div>

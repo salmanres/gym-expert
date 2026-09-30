@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Attendance = require('../models/Attendance');
 const Gym = require('../models/Gym');
 const User = require('../models/User');
@@ -185,13 +186,19 @@ exports.markAttendance = async (req, res) => {
                 membershipStatus: 'Active',
                 startDate: { $lte: currentDate },
                 endDate: { $gte: currentDate },
-                $or: [
-                    { paidUntilDate: null },
-                    { paidUntilDate: { $gte: currentDate } }
-                ],
-                $or: [
-                    { totalSessions: 0 },
-                    { $expr: { $lt: ["$usedSessions", "$totalSessions"] } }
+                $and: [
+                    {
+                        $or: [
+                            { paidUntilDate: null },
+                            { paidUntilDate: { $gte: currentDate } }
+                        ]
+                    },
+                    {
+                        $or: [
+                            { totalSessions: 0 },
+                            { $expr: { $lt: ["$usedSessions", "$totalSessions"] } }
+                        ]
+                    }
                 ]
             });
 
@@ -430,13 +437,25 @@ exports.markAttendance = async (req, res) => {
 exports.getGymAttendance = async (req, res) => {
     try {
         await autoCheckoutOverdueAttendance(req.user?.gymId);
-        const { date } = req.query;
+        const { date, startDate, endDate } = req.query;
         let query = { gymId: req.user.gymId };
         
         if (date) {
             const queryDate = new Date(date);
             queryDate.setHours(0, 0, 0, 0);
             query.date = queryDate;
+        } else if (startDate || endDate) {
+            query.date = {};
+            if (startDate) {
+                const s = new Date(startDate);
+                s.setHours(0, 0, 0, 0);
+                query.date.$gte = s;
+            }
+            if (endDate) {
+                const e = new Date(endDate);
+                e.setHours(23, 59, 59, 999);
+                query.date.$lte = e;
+            }
         }
 
         const records = await Attendance.find(query)
@@ -505,7 +524,15 @@ exports.getUserAttendanceHistory = async (req, res) => {
 exports.getDailySheet = async (req, res) => {
     try {
         const { date, type = 'members' } = req.query;
-        const queryDate = date ? new Date(date) : new Date();
+        let queryDate = new Date();
+        if (date) {
+            if (date.includes('-') && date.length === 10) {
+                const [y, m, d] = date.split('-');
+                queryDate = new Date(y, parseInt(m) - 1, d);
+            } else {
+                queryDate = new Date(date);
+            }
+        }
         queryDate.setHours(0, 0, 0, 0);
 
         const gym = await Gym.findById(req.user.gymId);
@@ -516,7 +543,7 @@ exports.getDailySheet = async (req, res) => {
             const staffMembers = await User.find({ 
                 gymId: req.user.gymId,
                 role: { $in: ['STAFF', 'TRAINER', 'BRANCH_MANAGER', 'ADMIN'] }
-            }).select('name phone profilePhoto status shiftStart shiftEnd salary role');
+            }).select('name phone profilePhoto status shiftStart shiftEnd salary role joiningDate createdAt');
             
             users = staffMembers.map(u => ({
                 _id: u._id,
@@ -527,7 +554,9 @@ exports.getDailySheet = async (req, res) => {
                 shiftStart: u.shiftStart,
                 shiftEnd: u.shiftEnd,
                 salary: u.salary,
-                role: u.role
+                role: u.role,
+                joiningDate: u.joiningDate,
+                createdAt: u.createdAt
             }));
         } else if (type === 'trial') {
             // Show enquiries that are actively on trial during the queryDate
@@ -648,7 +677,10 @@ exports.getCheckInStatus = async (req, res) => {
 
         await autoCheckoutOverdueAttendance(gymId);
 
-        const device = await MemberDevice.findOne({ deviceToken, gymId }).populate('memberId');
+        let device = await MemberDevice.findOne({ deviceToken, gymId }).populate('memberId');
+        if (!device) {
+            device = await MemberDevice.findOne({ deviceToken }).populate('memberId');
+        }
         if (!device) {
             return res.status(401).json({ message: 'Invalid token', requiresReauth: true });
         }
@@ -724,7 +756,10 @@ exports.selfCheckIn = async (req, res) => {
         }
 
         // 3. Find Device Token
-        const device = await MemberDevice.findOne({ deviceToken, gymId }).populate('memberId');
+        let device = await MemberDevice.findOne({ deviceToken, gymId }).populate('memberId');
+        if (!device) {
+            device = await MemberDevice.findOne({ deviceToken }).populate('memberId');
+        }
         if (!device) {
             return res.status(401).json({ message: 'Invalid or expired device token. Please verify OTP again.', requiresReauth: true });
         }
@@ -745,25 +780,32 @@ exports.selfCheckIn = async (req, res) => {
         await device.save();
 
         // 3.5 Check if member has an active membership
-        const currentDate = new Date();
-        currentDate.setHours(0, 0, 0, 0);
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
         
-        const activeMembership = await MemberMembership.findOne({
+        let activeMembership = await MemberMembership.findOne({
             memberId: member._id,
             membershipStatus: 'Active',
-            startDate: { $lte: currentDate },
-            endDate: { $gte: currentDate },
-            $or: [
-                { paidUntilDate: null },
-                { paidUntilDate: { $gte: currentDate } }
-            ],
-            $or: [
-                { totalSessions: 0 },
-                { $expr: { $lt: ["$usedSessions", "$totalSessions"] } }
-            ]
-        });
+            startDate: { $lte: todayEnd },
+            endDate: { $gte: todayStart }
+        }).sort({ createdAt: -1 });
 
+        // If not found with date overlap, check if member has any active membership
         if (!activeMembership) {
+            activeMembership = await MemberMembership.findOne({
+                memberId: member._id,
+                membershipStatus: 'Active'
+            }).sort({ createdAt: -1 });
+        }
+
+        // If sessions are limited, verify remaining sessions
+        if (activeMembership && activeMembership.totalSessions > 0 && activeMembership.usedSessions >= activeMembership.totalSessions) {
+            return res.status(400).json({ message: 'All plan sessions have been completed. Please renew your membership package.' });
+        }
+
+        if (!activeMembership && member.status !== 'Active') {
             // Check if member is on a valid trial period
             let isValidTrial = false;
             if (member.enquiryId) {
@@ -771,14 +813,14 @@ exports.selfCheckIn = async (req, res) => {
                 if (enquiry && enquiry.trialEndDate) {
                     const trialEndDate = new Date(enquiry.trialEndDate);
                     trialEndDate.setHours(23, 59, 59, 999);
-                    if (currentDate <= trialEndDate) {
+                    if (new Date() <= trialEndDate) {
                         isValidTrial = true;
                     }
                 }
             }
 
             if (!isValidTrial) {
-                return res.status(400).json({ message: 'No valid membership plan or active trial found. Attendance cannot be marked.' });
+                return res.status(400).json({ message: 'No active membership plan found. Attendance cannot be marked.' });
             }
         }
 
@@ -839,6 +881,121 @@ exports.selfCheckIn = async (req, res) => {
     }
 };
 
+// @desc    Lookup phone number to detect if Member or Trial Guest
+// @route   POST /api/attendance/lookup
+// @access  Public
+exports.lookupUser = async (req, res) => {
+    try {
+        const { gymId, phone } = req.body;
+        if (!phone) {
+            return res.status(400).json({ message: 'Phone number is required' });
+        }
+
+        const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
+        if (!cleanPhone || cleanPhone.length < 10) {
+            return res.status(400).json({ message: 'Please enter a valid 10-digit phone number.' });
+        }
+
+        const phoneFilter = {
+            $or: [
+                { contactNumber: phone },
+                { contactNumber: cleanPhone },
+                { contactNumber: { $regex: cleanPhone + '$' } }
+            ]
+        };
+
+        // 1. Check Member first (try with gymId if provided, fallback across gyms)
+        let member = null;
+        if (gymId && mongoose.Types.ObjectId.isValid(gymId)) {
+            member = await Member.findOne({ gymId, ...phoneFilter });
+        }
+        if (!member) {
+            member = await Member.findOne(phoneFilter);
+        }
+
+        if (member) {
+            const activeMs = await MemberMembership.findOne({
+                memberId: member._id,
+                membershipStatus: 'Active'
+            }).sort({ createdAt: -1 });
+
+            return res.json({
+                found: true,
+                userType: 'member',
+                gymId: member.gymId,
+                name: `${member.firstName} ${member.lastName || ''}`.trim(),
+                status: member.status || 'Active',
+                hasActivePlan: Boolean(activeMs),
+                message: member.status === 'Frozen' 
+                    ? 'Membership Frozen' 
+                    : (activeMs ? 'Active Member' : (member.status === 'Active' ? 'Active Member' : 'Inactive Member'))
+            });
+        }
+
+        // 2. Check Trial / Enquiry
+        let enquiry = null;
+        if (gymId && mongoose.Types.ObjectId.isValid(gymId)) {
+            enquiry = await Enquiry.findOne({ gymId, ...phoneFilter }).sort({ createdAt: -1 });
+        }
+        if (!enquiry) {
+            enquiry = await Enquiry.findOne(phoneFilter).sort({ createdAt: -1 });
+        }
+
+        if (enquiry) {
+            let trialStart = null;
+            let trialEnd = null;
+
+            if (enquiry.trialDate) {
+                const d = new Date(enquiry.trialDate);
+                if (!isNaN(d.getTime())) {
+                    trialStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+                }
+            }
+            if (enquiry.trialEndDate) {
+                const ed = new Date(enquiry.trialEndDate);
+                if (!isNaN(ed.getTime())) {
+                    trialEnd = new Date(ed.getFullYear(), ed.getMonth(), ed.getDate(), 23, 59, 59, 999);
+                }
+            } else if (trialStart) {
+                trialEnd = new Date(trialStart);
+                trialEnd.setHours(23, 59, 59, 999);
+            }
+
+            const now = new Date();
+            let isTrialActive = false;
+            if (trialStart && trialEnd) {
+                isTrialActive = now >= trialStart && now <= trialEnd;
+            } else if (enquiry.status === 'Trial') {
+                isTrialActive = true;
+            } else if (enquiry.trialDate) {
+                const td = new Date(enquiry.trialDate);
+                isTrialActive = td.getFullYear() === now.getFullYear() &&
+                                td.getMonth() === now.getMonth() &&
+                                td.getDate() === now.getDate();
+            }
+
+            return res.json({
+                found: true,
+                userType: 'trial',
+                gymId: enquiry.gymId,
+                name: `${enquiry.firstName} ${enquiry.lastName || ''}`.trim(),
+                status: enquiry.status || 'Trial',
+                isTrialActive,
+                message: isTrialActive ? 'Active Trial Pass' : 'Trial Period Expired / Inactive'
+            });
+        }
+
+        return res.json({
+            found: false,
+            userType: 'none',
+            message: 'No member or trial pass found for this phone number.'
+        });
+    } catch (error) {
+        console.error("Lookup user error:", error);
+        res.status(500).json({ message: 'Server Error', error: error.message });
+    }
+};
+
 // @desc    Request OTP for Self Check-in
 // @route   POST /api/attendance/request-otp
 // @access  Public
@@ -846,11 +1003,31 @@ exports.requestOTP = async (req, res) => {
     try {
         const { gymId, phone } = req.body;
         
-        if (!gymId || !phone) {
-            return res.status(400).json({ message: 'Gym ID and Phone number are required' });
+        if (!phone) {
+            return res.status(400).json({ message: 'Phone number is required' });
         }
 
-        const member = await Member.findOne({ gymId, contactNumber: phone });
+        const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
+        if (!cleanPhone || cleanPhone.length < 10) {
+            return res.status(400).json({ message: 'Please enter a valid 10-digit phone number.' });
+        }
+
+        const phoneFilter = {
+            $or: [
+                { contactNumber: phone },
+                { contactNumber: cleanPhone },
+                { contactNumber: { $regex: cleanPhone + '$' } }
+            ]
+        };
+
+        let member = null;
+        if (gymId && mongoose.Types.ObjectId.isValid(gymId)) {
+            member = await Member.findOne({ gymId, ...phoneFilter });
+        }
+        if (!member) {
+            member = await Member.findOne(phoneFilter);
+        }
+
         if (!member) {
             return res.status(404).json({ message: 'No member found with this phone number.' });
         }
@@ -859,8 +1036,8 @@ exports.requestOTP = async (req, res) => {
             return res.status(403).json({ message: 'Your membership is frozen. OTP cannot be generated.' });
         }
 
-        if (member.status !== 'Active') {
-            return res.status(403).json({ message: 'Your account is not active.' });
+        if (member.status && !['Active', 'Pending'].includes(member.status)) {
+            return res.status(403).json({ message: 'Your account is inactive. Please contact reception.' });
         }
 
         // Generate 6 digit OTP
@@ -873,7 +1050,7 @@ exports.requestOTP = async (req, res) => {
         // In a real app, send OTP via SMS here
         console.log(`[OTP] Generated for ${member.firstName} (${phone}): ${otp}`);
 
-        res.json({ message: 'OTP sent successfully', mockOtp: otp }); // mockOtp sent for testing/demo purposes
+        res.json({ message: 'OTP sent successfully', mockOtp: otp, gymId: member.gymId }); // mockOtp sent for testing/demo purposes
     } catch (error) {
         console.error("Request OTP error:", error);
         res.status(500).json({ message: 'Server Error' });
@@ -887,11 +1064,28 @@ exports.verifyOTP = async (req, res) => {
     try {
         const { gymId, phone, otp } = req.body;
         
-        if (!gymId || !phone || !otp) {
+        if (!phone || !otp) {
             return res.status(400).json({ message: 'Missing required fields' });
         }
 
-        const member = await Member.findOne({ gymId, contactNumber: phone });
+        const cleanPhone = String(phone).replace(/\D/g, '').slice(-10);
+
+        const phoneFilter = {
+            $or: [
+                { contactNumber: phone },
+                { contactNumber: cleanPhone },
+                { contactNumber: { $regex: cleanPhone + '$' } }
+            ]
+        };
+
+        let member = null;
+        if (gymId && mongoose.Types.ObjectId.isValid(gymId)) {
+            member = await Member.findOne({ gymId, ...phoneFilter });
+        }
+        if (!member) {
+            member = await Member.findOne(phoneFilter);
+        }
+
         if (!member) {
             return res.status(404).json({ message: 'Member not found' });
         }
@@ -900,8 +1094,8 @@ exports.verifyOTP = async (req, res) => {
             return res.status(403).json({ message: 'Your membership is frozen.' });
         }
 
-        if (member.status !== 'Active') {
-            return res.status(403).json({ message: 'Your account is not active.' });
+        if (member.status && !['Active', 'Pending'].includes(member.status)) {
+            return res.status(403).json({ message: 'Your account is inactive.' });
         }
 
         if (member.otp !== otp || !member.otpExpiry || member.otpExpiry < new Date()) {
@@ -918,13 +1112,14 @@ exports.verifyOTP = async (req, res) => {
 
         await MemberDevice.create({
             memberId: member._id,
-            gymId: gymId,
+            gymId: member.gymId || gymId,
             deviceToken
         });
 
         res.json({ 
             message: 'OTP verified successfully',
             deviceToken,
+            gymId: member.gymId,
             memberName: member.firstName
         });
     } catch (error) {

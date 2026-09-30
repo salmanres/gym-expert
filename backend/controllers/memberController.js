@@ -364,7 +364,7 @@ const updateTransaction = async (req, res) => {
                 gymId: req.user.gymId,
                 $or: [
                     { membershipId: membership._id },
-                    { memberId: membership.memberId, planId: membership.membershipPlanId }
+                    { memberId: membership.memberId, planId: membership.membershipPlanId, membershipId: { $in: [null, undefined] } }
                 ]
             });
 
@@ -382,7 +382,14 @@ const updateTransaction = async (req, res) => {
 
             membership.paymentStatus = paymentStatus;
 
-            if (paymentStatus === 'Paid') {
+            if (totalPaidFromTxns === 0 && membership.membershipStatus !== 'Frozen' && membership.membershipStatus !== 'Cancelled') {
+                const now = new Date();
+                now.setHours(23, 59, 59, 999);
+                if (membership.startDate && new Date(membership.startDate) > now) {
+                    membership.membershipStatus = 'Scheduled';
+                }
+                membership.paidUntilDate = membership.startDate;
+            } else if (paymentStatus === 'Paid') {
                 membership.paidUntilDate = membership.endDate;
             } else if (paymentStatus === 'Partial' && realFinalPrice > 0 && membership.startDate && membership.endDate) {
                 const startMs = new Date(membership.startDate).getTime();
@@ -467,7 +474,7 @@ const deleteTransaction = async (req, res) => {
                 gymId: req.user.gymId,
                 $or: [
                     { membershipId: membership._id },
-                    { memberId: membership.memberId, planId: membership.membershipPlanId }
+                    { memberId: membership.memberId, planId: membership.membershipPlanId, membershipId: { $in: [null, undefined] } }
                 ]
             });
 
@@ -486,7 +493,11 @@ const deleteTransaction = async (req, res) => {
             membership.paymentStatus = paymentStatus;
 
             if (totalPaidFromTxns === 0 && membership.membershipStatus !== 'Frozen' && membership.membershipStatus !== 'Cancelled') {
-                membership.membershipStatus = 'Pending';
+                const now = new Date();
+                now.setHours(23, 59, 59, 999);
+                if (membership.startDate && new Date(membership.startDate) > now) {
+                    membership.membershipStatus = 'Scheduled';
+                }
                 membership.paidUntilDate = membership.startDate;
             } else if (paymentStatus === 'Paid') {
                 membership.paidUntilDate = membership.endDate;
@@ -639,7 +650,7 @@ const updateMember = async (req, res) => {
         if (recordTransaction) {
             // Deduct wallet balance if used
             if (walletUsed > 0 && updatedMember.walletBalance >= walletUsed) {
-                updatedMember.walletBalance -= walletUsed;
+                updatedMember.walletBalance = Math.round((updatedMember.walletBalance - walletUsed) * 100) / 100;
                 await updatedMember.save();
             }
 

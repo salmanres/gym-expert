@@ -165,20 +165,20 @@ export default function AttendanceDashboard() {
         return (
             <tr key={user._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
                 {/* PERSON */}
-                <td className="py-2.5 pl-4 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
+                <td className="py-3.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
                         {user.profilePhoto ? (
-                            <img src={user.profilePhoto} alt={displayName} className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
+                            <img src={user.profilePhoto} alt={displayName} className="w-9 h-9 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-sm flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
                                 {(displayName || 'M').charAt(0).toUpperCase()}
                             </div>
                         )}
                         <div className="flex flex-col items-start min-w-0">
-                            <p className="font-bold text-slate-900 text-[13.5px] leading-tight truncate max-w-[170px]">
+                            <p className="font-bold text-slate-900 text-[14.5px] leading-tight truncate max-w-[170px]">
                                 {displayName}
                             </p>
-                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                            <p className="text-[12.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 {isStaffTab && user.role ? (
                                     <span className="font-bold text-[#CA0410] uppercase">{user.role}</span>
                                 ) : (
@@ -190,8 +190,8 @@ export default function AttendanceDashboard() {
                 </td>
 
                 {/* CONTACT */}
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[14px] tracking-tight">
                         <FiPhone className="text-slate-400 text-xs shrink-0" />
                         <span>{user.phone || 'N/A'}</span>
                     </div>
@@ -199,21 +199,21 @@ export default function AttendanceDashboard() {
 
                 {/* SHIFT (for Staff) */}
                 {isStaffTab && (
-                    <td className="py-2.5 px-3 align-middle">
+                    <td className="py-3.5 px-3 align-middle">
                         {user.shiftStart && user.shiftEnd ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 font-bold text-[11.5px] rounded-full border border-slate-200">
-                                <FiClock className="text-slate-500 text-[10px]" /> {user.shiftStart} - {user.shiftEnd}
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-slate-100 text-slate-700 font-bold text-[12px] rounded-full border border-slate-200">
+                                <FiClock className="text-slate-500 text-[11px]" /> {user.shiftStart} - {user.shiftEnd}
                             </span>
                         ) : (
-                            <span className="text-[11.5px] text-slate-400 font-medium">Not set</span>
+                            <span className="text-[12.5px] text-slate-400 font-medium">Not set</span>
                         )}
                     </td>
                 )}
 
                 {/* LEAD STATUS (for Trial) */}
                 {isTrialTab && (
-                    <td className="py-2.5 px-2 text-center align-middle">
-                        <span className="inline-flex items-center justify-center text-[11.5px] font-bold rounded-lg px-2.5 py-0.5 border leading-none shadow-2xs bg-purple-50 text-purple-700 border-purple-200">
+                    <td className="py-3.5 px-2 text-center align-middle">
+                        <span className="inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3 py-1 border leading-none shadow-2xs bg-purple-50 text-purple-700 border-purple-200">
                             {user.status || 'Trial'}
                         </span>
                     </td>
@@ -221,9 +221,9 @@ export default function AttendanceDashboard() {
 
                 {/* MEMBERSHIP STATUS (for Members) */}
                 {!isStaffTab && !isTrialTab && (
-                    <td className="py-2.5 px-2 text-center align-middle">
+                    <td className="py-3.5 px-2 text-center align-middle">
                         <div className="flex flex-col items-center justify-center gap-0.5">
-                            <span className={`inline-flex items-center justify-center text-[11.5px] font-bold rounded-lg px-2.5 py-0.5 border leading-none shadow-2xs ${
+                            <span className={`inline-flex items-center justify-center text-[12px] font-bold rounded-lg px-2.5 py-1 border leading-none shadow-2xs ${
                                 memStatus === 'Active' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
                                 memStatus === 'Frozen' ? 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]' :
                                 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]'
@@ -231,7 +231,7 @@ export default function AttendanceDashboard() {
                                 {memStatus}
                             </span>
                             {user.planName && (
-                                <span className="text-[10px] text-slate-500 font-medium truncate max-w-[125px]" title={user.planName}>
+                                <span className="text-[11px] text-slate-500 font-medium truncate max-w-[125px]" title={user.planName}>
                                     {user.planName}
                                 </span>
                             )}
@@ -240,8 +240,8 @@ export default function AttendanceDashboard() {
                 )}
 
                 {/* ATTENDANCE STATUS */}
-                <td className="py-2.5 px-2 text-center align-middle">
-                    <span className={`inline-flex items-center justify-center text-[12px] font-bold rounded-lg px-3 py-1 border leading-none shadow-2xs ${
+                <td className="py-3.5 px-2 text-center align-middle">
+                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3 py-1.5 border leading-none shadow-2xs ${
                         currentStatus === 'Present' ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' :
                         currentStatus === 'Absent' ? 'bg-rose-50 text-rose-700 border-rose-200' :
                         currentStatus === 'Late' ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -254,27 +254,27 @@ export default function AttendanceDashboard() {
                 </td>
 
                 {/* CHECK IN */}
-                <td className="py-2.5 px-3 align-middle">
+                <td className="py-3.5 px-3 align-middle">
                     {attendance?.checkInTime ? (
-                         <span className="text-[12.5px] text-slate-900 font-bold">
+                         <span className="text-[13.5px] text-slate-900 font-bold">
                              {new Date(attendance.checkInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                          </span>
                     ) : <span className="text-slate-400 font-medium text-xs">-</span>}
                 </td>
 
                 {/* CHECK OUT */}
-                <td className="py-2.5 px-3 align-middle">
+                <td className="py-3.5 px-3 align-middle">
                     {attendance?.checkOutTime ? (
-                         <span className="text-[12.5px] text-slate-900 font-bold">
+                         <span className="text-[13.5px] text-slate-900 font-bold">
                              {new Date(attendance.checkOutTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                          </span>
                     ) : <span className="text-slate-400 font-medium text-xs">-</span>}
                 </td>
 
                 {/* WORK / WORKOUT HOURS */}
-                <td className="py-2.5 px-3 align-middle">
+                <td className="py-3.5 px-3 align-middle">
                     {attendance?.checkInTime ? (
-                        <span className={`inline-flex px-2 py-0.5 rounded-md text-[11.5px] font-bold border ${attendance?.checkOutTime ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                        <span className={`inline-flex px-2.5 py-1 rounded-md text-[12px] font-bold border ${attendance?.checkOutTime ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                             {workHoursStr}
                         </span>
                     ) : (
@@ -283,7 +283,7 @@ export default function AttendanceDashboard() {
                 </td>
 
                 {/* ACTIONS */}
-                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                <td className="py-3.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                         {!(selectedDate > todayStr) && (
                             <>

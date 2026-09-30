@@ -182,12 +182,9 @@ function GymNavbar({
                 </div>
 
                 <div className="flex items-center gap-2 cursor-pointer" title={user?.name || user?.email}>
-                    <div className="w-11 h-11 rounded-full bg-[#CA0410] text-white font-bold text-xl flex items-center justify-center shadow-sm shrink-0">
-                        {user?.name ? user.name.charAt(0).toUpperCase() : (user?.email ? user.email.charAt(0).toUpperCase() : 'U')}
-                    </div>
                     <div className="flex items-center gap-1.5 mr-4">
-                        <p className="text-black text-base font-semibold">Welcome, {user?.name || 'User'}</p>
-                        <FaAngleDown className="text-black text-base" />
+                        <p className="text-black text-lg font-semibold">Welcome, {user?.name || 'User'}</p>
+                       
                     </div>
                 </div>
             </div>

@@ -22,6 +22,11 @@ const initSocket = (server) => {
             }
         });
 
+        socket.on('join_superadmin', () => {
+            socket.join('superadmin_room');
+            console.log(`📡 Socket ${socket.id} joined room: superadmin_room`);
+        });
+
         socket.on('disconnect', () => {
             console.log(`🔌 Socket disconnected: ${socket.id}`);
         });
@@ -50,7 +55,8 @@ const notifyGym = async (gymId, { title, description, type = 'SYSTEM', targetId 
         if (io) {
             const roomName = `gym_${gymId}`;
             io.to(roomName).emit('new_notification', log);
-            console.log(`🔔 Broadcasted notification to ${roomName}:`, title);
+            io.to('superadmin_room').emit('new_notification', log); // Send to superadmin too
+            console.log(`🔔 Broadcasted notification to ${roomName} and superadmin:`, title);
         }
 
         return log;

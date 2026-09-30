@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
-import { FiEdit2, FiTrash2, FiPlus, FiCreditCard, FiRefreshCw, FiGift, FiPhone, FiCheckCircle, FiClock, FiAlertCircle, FiXCircle, FiUsers, FiEye } from 'react-icons/fi';
+import { FiEdit2, FiTrash2, FiCreditCard, FiRefreshCw, FiGift, FiPhone, FiMail, FiCheckCircle, FiAlertCircle, FiXCircle, FiEye, FiActivity } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/page/PageLayout';
 import PageHeader from '../../components/page/PageHeader';
@@ -9,8 +9,27 @@ import DataTable from '../../components/page/DataTable';
 import Tabs from '../../components/page/Tabs';
 import FilterBar from '../../components/page/FilterBar';
 import SummaryCards from '../../components/page/SummaryCards';
-import Loader from '../../components/page/Loader';
+import ConfirmModal from '../../components/modal/ConfirmModal';
 import { formatDate } from '../../utils/dateUtils';
+
+const isPTMembership = (membership) => {
+    if (!membership) return false;
+    const plan = membership?.membershipPlanId && typeof membership.membershipPlanId === 'object'
+        ? membership.membershipPlanId
+        : membership;
+    const name = String(plan?.name || membership?.planName || '').toLowerCase();
+    const type = Array.isArray(plan?.planType)
+        ? plan.planType.join(' ').toLowerCase()
+        : String(plan?.planType || membership?.planType || '').toLowerCase();
+
+    return Boolean(membership?.isPTConversion) ||
+        type.includes('personal training') ||
+        type.includes('pt') ||
+        name.includes('personal training') ||
+        name.includes('pt package') ||
+        (plan?.sessions || 0) > 0 ||
+        (membership?.totalSessions || 0) > 0;
+};
 
 function Memberships() {
     const navigate = useNavigate();
@@ -18,8 +37,9 @@ function Memberships() {
     const [members, setMembers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [activeTab, setActiveTab] = useState('Plans'); // 'Plans', 'Assign', 'Active', 'Scheduled', 'Expired', 'Renewals'
+    const [activeTab, setActiveTab] = useState('Plans'); // 'Plans', 'Assign', 'Active', 'Scheduled', 'Expired'
     const [bonusModal, setBonusModal] = useState({ open: false, membership: null, days: '', reason: '' });
+    const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isDestructive: false });
     const [gymSettings, setGymSettings] = useState(null);
 
     // Pagination
@@ -70,29 +90,50 @@ function Memberships() {
                 return d;
             };
 
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+
+            const allFetchedMems = [...activeAndScheduled, ...latestMemberships];
+
             const membersWithPlans = memberRes.data.map(member => {
                 const memIdStr = member._id?.toString();
-                const memberMemberships = activeAndScheduled.filter(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr);
+                const memberMemberships = allFetchedMems
+                    .filter(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr)
+                    .filter((m, idx, self) => m._id && self.findIndex(s => s._id?.toString() === m._id?.toString()) === idx);
                 
-                const activeMem = memberMemberships.find(m => {
+                const isCurrentlyActive = m => {
                     if (m.membershipStatus === 'Cancelled') return false;
                     if (m.membershipStatus === 'Frozen') return true;
                     const start = parseLocalDateStart(m.startDate);
                     const end = parseLocalDateEnd(m.endDate);
                     if (!start || !end) return m.membershipStatus === 'Active';
-                    return start <= todayEnd && end >= today;
-                });
+                    return start <= todayEnd && end >= todayStart;
+                };
 
-                const scheduledMem = memberMemberships.find(m => {
+                const allActiveMems = memberMemberships.filter(isCurrentlyActive);
+                const activeGymMem = allActiveMems.find(m => !isPTMembership(m)) || memberMemberships.find(m => !isPTMembership(m) && m.membershipStatus === 'Active');
+                const activePTMem = allActiveMems.find(isPTMembership) || memberMemberships.find(m => isPTMembership(m) && m.membershipStatus === 'Active');
+                const activeMem = activeGymMem || activePTMem || allActiveMems[0];
+
+                const scheduledMemberships = memberMemberships.filter(m => {
                     if (m.membershipStatus === 'Cancelled' || m.membershipStatus === 'Frozen') return false;
-                    if (activeMem && m._id?.toString() === activeMem._id?.toString()) return false;
+                    if (allActiveMems.some(a => a._id?.toString() === m._id?.toString())) return false;
                     const start = parseLocalDateStart(m.startDate);
-                    return Boolean(start && start > todayEnd);
+                    return Boolean(start && start > todayEnd) || m.membershipStatus === 'Scheduled';
                 });
+                const scheduledGymMem = scheduledMemberships.find(m => !isPTMembership(m));
+                const scheduledPTMem = scheduledMemberships.find(isPTMembership);
+                const scheduledMem = scheduledGymMem || scheduledPTMem || scheduledMemberships[0];
 
                 const latestMem = latestMemberships.find(m => (m.memberId?._id || m.memberId)?.toString() === memIdStr);
 
-                const mainMem = activeMem || scheduledMem || latestMem;
+                const mainMem = activeGymMem || activeMem || scheduledMem || latestMem;
+
+                member.allActiveMemberships = allActiveMems;
+                member.activeGymMembership = activeGymMem;
+                member.activePTMembership = activePTMem;
+                member.scheduledGymMembership = scheduledGymMem;
+                member.scheduledPTMembership = scheduledPTMem;
 
                 if (mainMem) {
                     member.membershipPlan = mainMem.membershipPlanId || { name: mainMem.planName };
@@ -125,14 +166,22 @@ function Memberships() {
     const handleEdit = (m) => navigate(`/dashboard/owner/membership/edit/${m._id}`, { state: { membership: m } });
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this membership plan?')) return;
-        try {
-            await apiClient.delete(`/membership-plans/${id}`);
-            toast.success("Membership deleted");
-            fetchData();
-        } catch (error) {
-            toast.error("Failed to delete membership");
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Membership Plan',
+            message: 'Are you sure you want to delete this membership plan? This action cannot be undone.',
+            isDestructive: true,
+            confirmText: 'Delete Plan',
+            onConfirm: async () => {
+                try {
+                    await apiClient.delete(`/membership-plans/${id}`);
+                    toast.success("Membership deleted");
+                    fetchData();
+                } catch (error) {
+                    toast.error("Failed to delete membership");
+                }
+            }
+        });
     };
 
     const handleAddBonus = async (e) => {
@@ -166,33 +215,22 @@ function Memberships() {
     // Derived Data
     const getMembersByStatus = () => {
         return members.filter(member => {
-            if (activeTab === 'Assign') return !member.membershipPlan;
-            if (activeTab === 'Scheduled') return Boolean(member.scheduledMembership);
+            if (activeTab === 'Assign') return !member.membershipPlan && !member.activeMembership;
+            if (activeTab === 'Scheduled') return Boolean(member.scheduledMembership || member.scheduledGymMembership || member.scheduledPTMembership);
 
-            if (!member.planEndDate) return false;
-            const endDate = new Date(member.planEndDate);
-            const isExpired = endDate < today;
-            const isRenewingSoon = endDate >= today && endDate <= nextWeek;
+            const gymEnd = member.activeGymMembership?.endDate ? new Date(member.activeGymMembership.endDate) : null;
+            const ptEnd = member.activePTMembership?.endDate ? new Date(member.activePTMembership.endDate) : null;
+            const effectiveEnd = (gymEnd && gymEnd >= today) 
+                ? gymEnd 
+                : ((ptEnd && ptEnd >= today) ? ptEnd : (member.planEndDate ? new Date(member.planEndDate) : null));
 
-            if (activeTab === 'Active') return !isExpired && Boolean(member.activeMembership);
-            if (activeTab === 'Expired') return isExpired && !member.scheduledMembership;
-            if (activeTab === 'Renewals') return isRenewingSoon;
+            if (!effectiveEnd) return false;
+            const isExpired = effectiveEnd < today;
+
+            if (activeTab === 'Active') return !isExpired && Boolean(member.activeMembership || member.activeGymMembership || member.activePTMembership);
+            if (activeTab === 'Expired') return isExpired && !member.scheduledMembership && !member.scheduledGymMembership && !member.scheduledPTMembership;
             return false;
         });
-    };
-
-    const avatarStyles = [
-        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
-        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
-        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
-        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
-        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
-        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
-    ];
-
-    const getAvatarStyle = (name, index) => {
-        const charCode = (name || '').charCodeAt(0) || 0;
-        return avatarStyles[(charCode + index) % avatarStyles.length];
     };
 
     const filteredMemberships = memberships.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -212,6 +250,20 @@ function Memberships() {
     const totalMembersInTab = filteredMembers.length;
     const paginatedMembers = filteredMembers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+    const avatarStyles = [
+        { bg: 'bg-[#FFECEC]', text: 'text-[#E53935]' },
+        { bg: 'bg-[#FFF9C4]', text: 'text-[#F57F17]' },
+        { bg: 'bg-[#E8F5E9]', text: 'text-[#2E7D32]' },
+        { bg: 'bg-[#E3F2FD]', text: 'text-[#1976D2]' },
+        { bg: 'bg-[#F3E8FF]', text: 'text-[#7E22CE]' },
+        { bg: 'bg-[#FFEDD5]', text: 'text-[#EA580C]' },
+    ];
+
+    const getAvatarStyle = (name, index) => {
+        const charCode = (name || '').charCodeAt(0) || 0;
+        return avatarStyles[(charCode + index) % avatarStyles.length];
+    };
+
     // Column Definitions
     const planColumns = [
         { label: 'PLAN NAME', className: 'w-[28%] pl-4 pr-3' },
@@ -223,61 +275,61 @@ function Memberships() {
     ];
 
     const memberColumns = [
-        { label: 'MEMBER', className: 'w-[25%] pl-4 pr-3' },
-        { label: 'CONTACT', className: 'w-[15%] px-3' },
-        { label: 'PLAN DETAILS', className: 'w-[24%] px-3' },
-        { label: 'VALIDITY / STATUS', className: 'w-[14%] px-2 text-center' },
+        { label: 'MEMBER', className: 'w-[22%] pl-4 pr-3' },
+        { label: 'CONTACT', className: 'w-[14%] px-3' },
+        { label: 'PLAN DETAILS', className: 'w-[25%] px-3' },
+        { label: 'VALIDITY / STATUS', className: 'w-[12%] px-2 text-center' },
         { label: 'PAYMENT', className: 'w-[10%] px-2 text-center' },
-        { label: 'ACTIONS', className: 'w-[12%] pr-4 pl-1 text-center' }
+        { label: 'ACTIONS', className: 'w-[17%] pr-4 pl-1 text-center' }
     ];
 
     // Render Rows for Plans
     const renderPlanRow = (m, index) => {
         return (
             <tr key={m._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
-                <td className="py-2.5 pl-4 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                <td className="py-3.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-sm flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
                             {(m.name || 'P').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex flex-col items-start min-w-0">
                             <button
                                 onClick={() => handleEdit(m)}
-                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                                className="font-bold text-slate-900 text-[14.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
                             >
                                 {m.name}
                             </button>
-                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                            <p className="text-[12.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 {m.sessions > 0 ? `${m.sessions} Sessions` : 'Unlimited Access'}
                             </p>
                         </div>
                     </div>
                 </td>
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex flex-wrap gap-1">
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-wrap gap-1.5">
                         {(() => {
                             const rawTypes = Array.isArray(m.planType) ? m.planType : [m.planType || 'Gym Access'];
                             const flattened = rawTypes.flatMap(pt => typeof pt === 'string' ? pt.split('+').map(s => s.trim()) : [pt]);
                             return flattened.map((pt, i) => (
-                                <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
                                     {pt}
                                 </span>
                             ));
                         })()}
                     </div>
                 </td>
-                <td className="py-2.5 px-3 align-middle">
-                    <span className="font-bold text-slate-900 text-[13px]">
+                <td className="py-3.5 px-3 align-middle">
+                    <span className="font-bold text-slate-900 text-[13.5px]">
                         {m.duration} {m.durationUnit || 'Months'}
                     </span>
                 </td>
-                <td className="py-2.5 px-3 align-middle">
+                <td className="py-3.5 px-3 align-middle">
                     <div className="flex items-center gap-1 font-bold text-emerald-600 text-[14px]">
                         <span>₹</span>
                         <span>{Number(m.price || 0).toLocaleString()}</span>
                     </div>
                 </td>
-                <td className="py-2.5 px-2 text-center align-middle">
+                <td className="py-3.5 px-2 text-center align-middle">
                     <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${m.isActive
                             ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
                             : 'bg-rose-50 text-rose-700 border-rose-200'
@@ -285,7 +337,7 @@ function Memberships() {
                         {m.isActive ? 'Active' : 'Inactive'}
                     </span>
                 </td>
-                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                <td className="py-3.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
                         <button
                             onClick={() => handleEdit(m)}
@@ -309,134 +361,303 @@ function Memberships() {
 
     // Render Rows for Member Assignments
     const renderMemberRow = (m, index) => {
-        const isScheduledTab = activeTab === 'Scheduled' && m.scheduledMembership;
-        const currentMem = isScheduledTab ? m.scheduledMembership : m.activeMembership;
-        const planName = currentMem?.membershipPlanId?.name || currentMem?.planName || m.membershipPlan?.name;
-        const startDate = currentMem?.startDate ? new Date(currentMem.startDate) : (m.planStartDate ? new Date(m.planStartDate) : null);
-        const endDate = currentMem?.endDate ? new Date(currentMem.endDate) : (m.planEndDate ? new Date(m.planEndDate) : null);
-        const paidUntilDate = currentMem?.paidUntilDate ? new Date(currentMem.paidUntilDate) : null;
-        const paymentStat = currentMem?.paymentStatus || m.paymentStatus;
-        const isPartial = paymentStat === 'Partial';
+        const isScheduledTab = activeTab === 'Scheduled' && Boolean(m.scheduledMembership || m.scheduledGymMembership || m.scheduledPTMembership);
 
-        const isExpired = !isScheduledTab && endDate && endDate < today;
-        const isRenewingSoon = !isScheduledTab && endDate && endDate >= today && endDate <= nextWeek;
+        // Identify Gym and PT memberships
+        const gymMem = isScheduledTab
+            ? (m.scheduledGymMembership || (!isPTMembership(m.scheduledMembership) ? m.scheduledMembership : null))
+            : (m.activeGymMembership || (!isPTMembership(m.activeMembership) ? m.activeMembership : null));
+
+        const ptMem = isScheduledTab
+            ? (m.scheduledPTMembership || (isPTMembership(m.scheduledMembership) ? m.scheduledMembership : null))
+            : (m.activePTMembership || (isPTMembership(m.activeMembership) ? m.activeMembership : null));
+
+        const fallbackMem = isScheduledTab
+            ? m.scheduledMembership
+            : (m.activeMembership || (m.membershipPlan ? { planName: m.membershipPlan.name, startDate: m.planStartDate, endDate: m.planEndDate, paymentStatus: m.paymentStatus } : null));
+
+        const hasAnyPlan = Boolean(gymMem || ptMem || fallbackMem);
+
+        // Gym Details
+        const gymPlanName = gymMem?.membershipPlanId?.name || gymMem?.planName || (!ptMem ? (fallbackMem?.membershipPlanId?.name || fallbackMem?.planName) : null);
+        const gymStartDate = gymMem?.startDate ? new Date(gymMem.startDate) : (!ptMem && m.planStartDate ? new Date(m.planStartDate) : null);
+        const gymEndDate = gymMem?.endDate ? new Date(gymMem.endDate) : (!ptMem && m.planEndDate ? new Date(m.planEndDate) : null);
+        const gymPaidUntilDate = gymMem?.paidUntilDate ? new Date(gymMem.paidUntilDate) : (!ptMem && m.paidUntilDate ? new Date(m.paidUntilDate) : null);
+        const gymPaymentStat = gymMem?.paymentStatus || (!ptMem ? m.paymentStatus : 'Paid');
+        const gymIsPartial = gymPaymentStat === 'Partial';
+
+        // PT Details
+        const ptPlanName = ptMem?.membershipPlanId?.name || ptMem?.planName || 'Personal Training';
+        const ptStartDate = ptMem?.startDate ? new Date(ptMem.startDate) : null;
+        const ptEndDate = ptMem?.endDate ? new Date(ptMem.endDate) : null;
+        const ptPaidUntilDate = ptMem?.paidUntilDate ? new Date(ptMem.paidUntilDate) : null;
+        const ptTrainer = ptMem?.trainerId?.name || ptMem?.trainerName || ptMem?.assignedTrainer?.name || '';
+        const ptTotalSessions = ptMem?.totalSessions || ptMem?.membershipPlanId?.sessionCount || ptMem?.sessionCount || 0;
+        const ptUsedSessions = ptMem?.usedSessions ?? ptMem?.completedSessions ?? 0;
+        const ptPaymentStat = ptMem?.paymentStatus;
+        const ptIsPartial = ptPaymentStat === 'Partial';
+
+        // Effective date for row status (Active / Expiring Soon / Expired)
+        const validDates = [];
+        if (gymEndDate && !isNaN(gymEndDate.getTime())) validDates.push(gymEndDate.getTime());
+        if (ptEndDate && !isNaN(ptEndDate.getTime())) validDates.push(ptEndDate.getTime());
+
+        const unexpiredDates = validDates.filter(t => t >= today.getTime());
+        const effectiveEnd = unexpiredDates.length > 0
+            ? new Date(Math.max(...unexpiredDates))
+            : (validDates.length > 0 ? new Date(Math.max(...validDates)) : null);
+
+        const isExpired = !isScheduledTab && effectiveEnd && effectiveEnd < today;
+        const isRenewingSoon = !isScheduledTab && effectiveEnd && effectiveEnd >= today && effectiveEnd <= nextWeek;
+
+        // Overall payment status
+        let paymentStat = 'Paid';
+        const relevantStatuses = [gymMem?.paymentStatus, ptMem?.paymentStatus].filter(Boolean);
+        if (relevantStatuses.length === 0) {
+            paymentStat = m.paymentStatus || 'Pending';
+        } else if (relevantStatuses.includes('Pending')) {
+            paymentStat = relevantStatuses.includes('Paid') ? 'Partial' : 'Pending';
+        } else if (relevantStatuses.includes('Partial')) {
+            paymentStat = 'Partial';
+        } else {
+            paymentStat = 'Paid';
+        }
+
+        const hasDuePayment = (m.paymentStatus === 'Pending' || m.paymentStatus === 'Partial' || gymPaymentStat === 'Partial' || ptPaymentStat === 'Partial' || gymPaymentStat === 'Pending' || ptPaymentStat === 'Pending');
+
+        const avatar = getAvatarStyle(m.firstName || m.name, index);
 
         return (
             <tr key={m._id} className="bg-white hover:bg-slate-50/80 transition-colors duration-150 group border-b border-slate-100 last:border-b-0">
-                <td className="py-2.5 pl-4 pr-3 align-middle">
-                    <div className="flex items-center gap-2.5">
+                <td className="py-3.5 pl-4 pr-3 align-middle">
+                    <div className="flex items-center gap-3">
                         {m.profilePhoto ? (
-                            <img src={m.profilePhoto} alt={m.firstName} className="w-8 h-8 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
+                            <img src={m.profilePhoto} alt={m.firstName} className="w-9 h-9 rounded-full object-cover shadow-2xs border border-slate-200 shrink-0" />
                         ) : (
-                            <div className="w-8 h-8 rounded-full bg-rose-50 text-[#CA0410] border border-rose-200 font-bold text-xs flex items-center justify-center shrink-0 leading-none select-none shadow-2xs">
+                            <div className={`w-9 h-9 rounded-full ${avatar.bg} ${avatar.text} border border-slate-200/80 font-bold text-sm flex items-center justify-center shrink-0 leading-none select-none shadow-2xs`}>
                                 {(m.firstName || 'M').charAt(0).toUpperCase()}
                             </div>
                         )}
                         <div className="flex flex-col items-start min-w-0">
                             <button
                                 onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
-                                className="font-bold text-slate-900 text-[13.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
+                                className="font-bold text-slate-900 text-[14.5px] hover:text-[#CA0410] transition-colors text-left truncate leading-snug cursor-pointer"
                             >
                                 {m.firstName} {m.lastName}
                             </button>
-                            <p className="text-[11.5px] text-slate-500 font-normal mt-0.5 leading-tight">
+                            <p className="text-[12px] text-slate-500 font-normal mt-0.5 leading-tight">
                                 ID: <span className="font-bold text-slate-700">{m.memberId}</span> • {m.gender || 'Member'}
                             </p>
                         </div>
                     </div>
                 </td>
-                <td className="py-2.5 px-3 align-middle">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[12.5px] tracking-tight">
-                        <FiPhone className="text-slate-400 text-xs shrink-0" />
-                        <span>{m.contactNumber || '-'}</span>
+                <td className="py-3.5 px-3 align-middle">
+                    <div className="flex flex-col gap-0.5 text-[12.5px] leading-snug">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900 text-[14px] tracking-tight">
+                            <FiPhone className="text-slate-400 text-xs shrink-0" />
+                            <span>{m.contactNumber || '-'}</span>
+                        </div>
+                        {m.email && (
+                            <div className="flex items-center gap-1.5 text-slate-500 font-normal text-[11.5px]">
+                                <FiMail className="text-slate-400 text-[11px] shrink-0" />
+                                <span className="truncate max-w-[150px]" title={m.email}>{m.email}</span>
+                            </div>
+                        )}
                     </div>
                 </td>
-                <td className="py-2.5 px-3 align-middle">
-                    {planName ? (
-                        <div className="flex flex-col gap-0.5 text-[11.5px] leading-snug">
-                            <span className="font-semibold text-slate-800 text-[12.5px]">{planName}</span>
-                            <div className="flex items-center gap-1 flex-wrap">
-                                <span className="text-slate-500 font-normal text-[11.5px]">
-                                    {startDate ? formatDate(startDate) : ''} - {isPartial && paidUntilDate ? formatDate(paidUntilDate) : (endDate ? formatDate(endDate) : '')}
-                                </span>
-                                {currentMem?.bonusDays > 0 && (
-                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                        +{currentMem.bonusDays}d
-                                    </span>
-                                )}
-                            </div>
-                            {isPartial && paidUntilDate && (
-                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 w-max">
-                                    Paid till {formatDate(paidUntilDate)} (₹{currentMem?.paidAmount || 0} / ₹{currentMem?.finalPrice || 0})
-                                </span>
+                <td className="py-3.5 px-3 align-middle">
+                    {hasAnyPlan ? (
+                        <div className="flex flex-col gap-1.5 text-[12.5px] leading-snug">
+                            {/* Gym Plan Section */}
+                            {gymPlanName && (
+                                <div className="flex flex-col gap-0.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-slate-800 text-[13.5px]">{gymPlanName}</span>
+                                        {gymMem?.bonusDays > 0 && (
+                                             <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                                +{gymMem.bonusDays}d
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-slate-500 font-normal text-[12px]">
+                                            {gymStartDate ? formatDate(gymStartDate) : ''} - {gymIsPartial && gymPaidUntilDate ? formatDate(gymPaidUntilDate) : (gymEndDate ? formatDate(gymEndDate) : '')}
+                                        </span>
+                                    </div>
+                                    {gymIsPartial && gymPaidUntilDate && (
+                                        <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 w-max">
+                                            Paid till {formatDate(gymPaidUntilDate)} (₹{gymMem?.paidAmount || 0} / ₹{gymMem?.finalPrice || 0})
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* PT Package Section */}
+                            {ptMem && (
+                                <div className={`flex flex-col gap-1 ${gymPlanName ? 'pt-1.5 border-t border-dashed border-slate-200' : ''}`}>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
+                                            🟡 PT: {ptPlanName}
+                                        </span>
+                                        {ptTrainer && (
+                                            <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                Trainer: {ptTrainer}
+                                            </span>
+                                        )}
+                                        {ptTotalSessions > 0 && (
+                                            <span className="text-[10.5px] font-bold text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200">
+                                                {ptUsedSessions}/{ptTotalSessions} Sess
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 flex-wrap text-slate-500 font-normal text-[11.5px]">
+                                        <span>
+                                            {ptStartDate ? formatDate(ptStartDate) : ''} - {ptIsPartial && ptPaidUntilDate ? formatDate(ptPaidUntilDate) : (ptEndDate ? formatDate(ptEndDate) : '')}
+                                        </span>
+                                        {ptIsPartial && (
+                                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                                PT Paid: ₹{ptMem?.paidAmount || 0} / ₹{ptMem?.finalPrice || 0}
+                                            </span>
+                                        )}
+                                        {ptPaymentStat === 'Pending' && (
+                                            <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
+                                                PT Due: ₹{Math.max(0, (ptMem?.finalPrice || ptMem?.price || 0) - (ptMem?.paidAmount || 0))}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
                             )}
                         </div>
                     ) : (
                         <span className="text-slate-400 font-medium italic text-xs">No Active Plan</span>
                     )}
                 </td>
-                <td className="py-2.5 px-2 text-center align-middle">
+                <td className="py-3.5 px-2 text-center align-middle">
                     {isScheduledTab ? (
                         <span className="inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs bg-indigo-50 text-indigo-700 border-indigo-200">
                             Scheduled
                         </span>
-                    ) : endDate ? (
+                    ) : effectiveEnd ? (
                         <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${isExpired
-                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                ? 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]'
                                 : isRenewingSoon
-                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    ? 'bg-[#FEF3C7] text-[#B45309] border-[#FDE68A]'
+                                    : 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
                             }`}>
                             {isExpired ? 'Expired' : isRenewingSoon ? 'Expiring Soon' : 'Active'}
                         </span>
                     ) : '-'}
                 </td>
-                <td className="py-2.5 px-2 text-center align-middle">
-                    <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${paymentStat === 'Paid'
-                            ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
-                            : paymentStat === 'Partial'
-                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : 'bg-rose-50 text-rose-700 border-rose-200'
-                        }`}>
-                        {paymentStat || 'Pending'}
-                    </span>
+                <td className="py-3.5 px-2 text-center align-middle">
+                    <div className="flex flex-col items-center justify-center gap-0.5">
+                        <span className={`inline-flex items-center justify-center text-[12px] font-bold rounded-lg px-3 py-1 border leading-none shadow-2xs ${paymentStat === 'Paid'
+                                ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
+                                : paymentStat === 'Partial'
+                                    ? 'bg-[#FEF3C7] text-[#B45309] border-[#FDE68A]'
+                                    : 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]'
+                            }`}>
+                            {paymentStat}
+                        </span>
+                        {gymMem && ptMem && gymMem.paymentStatus && ptMem.paymentStatus && gymMem.paymentStatus !== ptMem.paymentStatus && (
+                            <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap mt-0.5">
+                                Gym: {gymMem.paymentStatus} • PT: {ptMem.paymentStatus}
+                            </span>
+                        )}
+                    </div>
                 </td>
-                <td className="py-2.5 pr-4 pl-1 text-center align-middle">
+                <td className="py-3.5 pr-4 pl-1 text-center align-middle">
                     <div className="flex items-center justify-center gap-1.5">
-                        {(m.paymentStatus === 'Pending' || m.paymentStatus === 'Partial') && m.membershipPlan && activeTab !== 'Assign' && (
+                        {/* 1. View Profile */}
+                        <button
+                            onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
+                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                            title="View Member Profile"
+                        >
+                            <FiEye size={15} />
+                        </button>
+
+                        {/* 2. Collect Fee */}
+                        <button
+                            onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: m } })}
+                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all shadow-2xs active:scale-95 ${
+                                !hasDuePayment || activeTab === 'Assign'
+                                    ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    : 'border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 cursor-pointer'
+                            }`}
+                            title={!hasDuePayment ? 'Fee Fully Paid' : 'Collect Fee'}
+                            disabled={!hasDuePayment || activeTab === 'Assign'}
+                        >
+                            <FiCreditCard size={14} />
+                        </button>
+
+                        {/* 3. Edit Plan */}
+                        {activeTab === 'Scheduled' && (m.scheduledGymMembership || m.scheduledMembership) && (
                             <button
-                                onClick={() => navigate('/dashboard/owner/finance/collect', { state: { autoOpenMember: m } })}
-                                className="w-8 h-8 rounded-lg border border-emerald-200 text-emerald-600 bg-white hover:border-emerald-400 hover:bg-emerald-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
-                                title="Collect Fee"
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, targetMembership: m.scheduledGymMembership || m.scheduledMembership, isEdit: true } })}
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                title="Edit Scheduled Plan"
                             >
-                                <FiCreditCard size={14} />
+                                <FiEdit2 size={13} />
                             </button>
                         )}
-                        {activeTab === 'Active' && m.activeMembership && (
+                        {activeTab === 'Scheduled' && m.scheduledPTMembership && (
                             <button
-                                onClick={() => setBonusModal({ open: true, membership: m.activeMembership, days: '', reason: '' })}
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, targetMembership: m.scheduledPTMembership, isEdit: true } })}
+                                className="w-8 h-8 rounded-lg border border-amber-300 text-amber-700 bg-amber-50 hover:border-amber-400 hover:bg-amber-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                title="Edit Scheduled PT Package"
+                            >
+                                <FiActivity size={13} />
+                            </button>
+                        )}
+                        {activeTab !== 'Scheduled' && gymMem && (
+                            <button
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, targetMembership: gymMem, isEdit: true } })}
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                title={ptMem ? "Edit Gym Membership" : "Edit Plan"}
+                            >
+                                <FiEdit2 size={13} />
+                            </button>
+                        )}
+                        {activeTab !== 'Scheduled' && ptMem && (
+                            <button
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, targetMembership: ptMem, isEdit: true } })}
+                                className="w-8 h-8 rounded-lg border border-amber-300 text-amber-700 bg-amber-50 hover:border-amber-400 hover:bg-amber-100 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                title="Edit PT Package"
+                            >
+                                <FiActivity size={13} />
+                            </button>
+                        )}
+                        {activeTab !== 'Scheduled' && !gymMem && !ptMem && m.activeMembership && (
+                            <button
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, targetMembership: m.activeMembership, isEdit: true } })}
+                                className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                title="Edit Active Plan"
+                            >
+                                <FiEdit2 size={13} />
+                            </button>
+                        )}
+
+                        {/* 4. Renew / Upgrade Plan */}
+                        {(activeTab === 'Active' || activeTab === 'Expired') && (
+                            <button
+                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, activeMembership: gymMem || m.activeMembership, isRenew: true } })}
                                 className="w-8 h-8 rounded-lg border border-indigo-200 text-indigo-600 bg-white hover:border-indigo-400 hover:bg-indigo-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
+                                title="Renew / Upgrade Plan"
+                            >
+                                <FiRefreshCw size={14} />
+                            </button>
+                        )}
+
+                        {/* 5. Add Bonus Days / Offer */}
+                        {activeTab === 'Active' && (gymMem || m.activeMembership) && (
+                            <button
+                                onClick={() => setBonusModal({ open: true, membership: gymMem || m.activeMembership, days: '', reason: '' })}
+                                className="w-8 h-8 rounded-lg border border-purple-200 text-purple-600 bg-white hover:border-purple-400 hover:bg-purple-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
                                 title="Add Bonus Days / Offer"
                             >
                                 <FiGift size={14} />
                             </button>
                         )}
-                        {(activeTab === 'Expired' || activeTab === 'Renewals') && (
-                            <button
-                                onClick={() => navigate(`/dashboard/owner/membership/assign`, { state: { member: m, activeMembership: m.activeMembership, isRenew: true } })}
-                                className="w-8 h-8 rounded-lg border border-blue-200 text-blue-600 bg-white hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
-                                title="Renew Plan"
-                            >
-                                <FiRefreshCw size={14} />
-                            </button>
-                        )}
-                        <button
-                            onClick={() => navigate(`/dashboard/owner/members/view/${m._id}`, { state: { member: m } })}
-                            className="w-8 h-8 rounded-lg border border-slate-200 text-slate-600 bg-white hover:border-slate-400 hover:text-slate-900 hover:bg-slate-50 flex items-center justify-center transition-all shadow-2xs cursor-pointer active:scale-95"
-                            title="View Profile"
-                        >
-                            <FiEye size={15} />
-                        </button>
                     </div>
                 </td>
             </tr>
@@ -477,7 +698,7 @@ function Memberships() {
             value: activeMembershipsCount,
             percentage: `${totalMembersCount > 0 ? Math.round((activeMembershipsCount / totalMembersCount) * 100) : 0}%`,
             percentageColor: 'text-emerald-600',
-            subtitle: 'Current running plans',
+            subtitle: scheduledMembershipsCount > 0 ? `${scheduledMembershipsCount} scheduled future` : 'Current running plans',
             icon: <FiCheckCircle />,
             bgClass: 'bg-[#E8F5E9]',
             iconColor: 'text-[#2E7D32]'
@@ -504,7 +725,7 @@ function Memberships() {
         }
     ];
 
-    const tabs = ['Plans', 'Assign', 'Active', 'Scheduled', 'Expired', 'Renewals'];
+    const tabs = ['Plans', 'Assign', 'Active', 'Scheduled', 'Expired'];
 
     return (
         <PageLayout>
@@ -658,6 +879,16 @@ function Memberships() {
                     </div>
                 </div>
             )}
+            {/* Confirm Modal */}
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText}
+                isDestructive={confirmModal.isDestructive}
+            />
         </PageLayout>
     );
 }
