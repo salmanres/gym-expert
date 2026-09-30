@@ -387,7 +387,9 @@ function Memberships() {
         const gymIsPartial = gymPaymentStat === 'Partial';
 
         // PT Details
-        const ptPlanName = ptMem?.membershipPlanId?.name || ptMem?.planName || 'Personal Training';
+        const rawPtPlanName = ptMem?.membershipPlanId?.name || ptMem?.planName || 'Personal Training';
+        const cleanPtPlanName = rawPtPlanName.replace(/^pt[\s:-]*/i, '').trim() || rawPtPlanName;
+        const ptPlanName = rawPtPlanName;
         const ptStartDate = ptMem?.startDate ? new Date(ptMem.startDate) : null;
         const ptEndDate = ptMem?.endDate ? new Date(ptMem.endDate) : null;
         const ptPaidUntilDate = ptMem?.paidUntilDate ? new Date(ptMem.paidUntilDate) : null;
@@ -467,64 +469,42 @@ function Memberships() {
                 </td>
                 <td className="py-3.5 px-3 align-middle">
                     {hasAnyPlan ? (
-                        <div className="flex flex-col gap-1.5 text-[12.5px] leading-snug">
-                            {/* Gym Plan Section */}
+                        <div className="flex flex-col gap-1 text-[13px] leading-snug">
+                            {/* Gym Plan */}
                             {gymPlanName && (
-                                <div className="flex flex-col gap-0.5">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="font-bold text-slate-800 text-[13.5px]">{gymPlanName}</span>
-                                        {gymMem?.bonusDays > 0 && (
-                                             <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                                +{gymMem.bonusDays}d
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-slate-500 font-normal text-[12px]">
-                                            {gymStartDate ? formatDate(gymStartDate) : ''} - {gymIsPartial && gymPaidUntilDate ? formatDate(gymPaidUntilDate) : (gymEndDate ? formatDate(gymEndDate) : '')}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-bold text-slate-900 text-[13.5px]">{gymPlanName}</span>
+                                    {gymMem?.bonusDays > 0 && (
+                                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                            +{gymMem.bonusDays}d
                                         </span>
-                                    </div>
-                                    {gymIsPartial && gymPaidUntilDate && (
-                                        <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 w-max">
-                                            Paid till {formatDate(gymPaidUntilDate)} (₹{gymMem?.paidAmount || 0} / ₹{gymMem?.finalPrice || 0})
+                                    )}
+                                    {(gymStartDate || gymEndDate) && (
+                                        <span className="text-slate-400 text-[11.5px] font-normal">
+                                            {gymStartDate ? formatDate(gymStartDate) : ''} – {gymEndDate ? formatDate(gymEndDate) : ''}
                                         </span>
                                     )}
                                 </div>
                             )}
 
-                            {/* PT Package Section */}
+                            {/* PT Package */}
                             {ptMem && (
-                                <div className={`flex flex-col gap-1 ${gymPlanName ? 'pt-1.5 border-t border-dashed border-slate-200' : ''}`}>
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
-                                            🟡 PT: {ptPlanName}
+                                <div className="flex items-center gap-1.5 flex-wrap text-[11.5px] text-slate-500">
+                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                        PT
+                                    </span>
+                                    <span className="font-semibold text-slate-800">{cleanPtPlanName}</span>
+                                    {ptTrainer && (
+                                        <span className="text-slate-500 font-normal">• {ptTrainer}</span>
+                                    )}
+                                    {ptTotalSessions > 0 && (
+                                        <span className="text-slate-400 font-normal">({ptUsedSessions}/{ptTotalSessions} sess)</span>
+                                    )}
+                                    {!gymPlanName && (ptStartDate || ptEndDate) && (
+                                        <span className="text-slate-400 text-[11.5px] font-normal">
+                                            ({ptStartDate ? formatDate(ptStartDate) : ''} – {ptEndDate ? formatDate(ptEndDate) : ''})
                                         </span>
-                                        {ptTrainer && (
-                                            <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                Trainer: {ptTrainer}
-                                            </span>
-                                        )}
-                                        {ptTotalSessions > 0 && (
-                                            <span className="text-[10.5px] font-bold text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200">
-                                                {ptUsedSessions}/{ptTotalSessions} Sess
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 flex-wrap text-slate-500 font-normal text-[11.5px]">
-                                        <span>
-                                            {ptStartDate ? formatDate(ptStartDate) : ''} - {ptIsPartial && ptPaidUntilDate ? formatDate(ptPaidUntilDate) : (ptEndDate ? formatDate(ptEndDate) : '')}
-                                        </span>
-                                        {ptIsPartial && (
-                                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                                                PT Paid: ₹{ptMem?.paidAmount || 0} / ₹{ptMem?.finalPrice || 0}
-                                            </span>
-                                        )}
-                                        {ptPaymentStat === 'Pending' && (
-                                            <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">
-                                                PT Due: ₹{Math.max(0, (ptMem?.finalPrice || ptMem?.price || 0) - (ptMem?.paidAmount || 0))}
-                                            </span>
-                                        )}
-                                    </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -533,20 +513,27 @@ function Memberships() {
                     )}
                 </td>
                 <td className="py-3.5 px-2 text-center align-middle">
-                    {isScheduledTab ? (
-                        <span className="inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs bg-indigo-50 text-indigo-700 border-indigo-200">
-                            Scheduled
-                        </span>
-                    ) : effectiveEnd ? (
-                        <span className={`inline-flex items-center justify-center text-[12.5px] font-bold rounded-lg px-3.5 py-1.5 border leading-none shadow-2xs ${isExpired
-                                ? 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]'
-                                : isRenewingSoon
-                                    ? 'bg-[#FEF3C7] text-[#B45309] border-[#FDE68A]'
-                                    : 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
-                            }`}>
-                            {isExpired ? 'Expired' : isRenewingSoon ? 'Expiring Soon' : 'Active'}
-                        </span>
-                    ) : '-'}
+                    <div className="flex flex-col items-center justify-center gap-1">
+                        {isScheduledTab ? (
+                            <span className="inline-flex items-center justify-center text-[11.5px] font-bold rounded-lg px-2.5 py-1 border leading-none shadow-2xs bg-indigo-50 text-indigo-700 border-indigo-200">
+                                Scheduled
+                            </span>
+                        ) : effectiveEnd ? (
+                            <span className={`inline-flex items-center justify-center text-[11.5px] font-bold rounded-lg px-2.5 py-1 border leading-none shadow-2xs ${isExpired
+                                    ? 'bg-[#FFE4E6] text-[#BE123C] border-[#FECDD3]'
+                                    : isRenewingSoon
+                                        ? 'bg-[#FEF3C7] text-[#B45309] border-[#FDE68A]'
+                                        : 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]'
+                                }`}>
+                                {isExpired ? 'Expired' : isRenewingSoon ? 'Expiring Soon' : 'Active'}
+                            </span>
+                        ) : '-'}
+                        {effectiveEnd && !isScheduledTab && (
+                            <span className="text-[11px] text-slate-500 font-medium">
+                                Till {formatDate(effectiveEnd)}
+                            </span>
+                        )}
+                    </div>
                 </td>
                 <td className="py-3.5 px-2 text-center align-middle">
                     <div className="flex flex-col items-center justify-center gap-0.5">
